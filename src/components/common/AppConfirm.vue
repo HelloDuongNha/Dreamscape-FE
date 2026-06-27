@@ -1,0 +1,183 @@
+<template>
+  <Teleport to="body">
+    <Transition name="confirm-fade">
+      <div
+        v-if="modelValue"
+        class="app-confirm-overlay"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="titleId"
+        :aria-describedby="messageId"
+        @click.self="handleCancel"
+      >
+        <div class="app-confirm">
+          <!-- Title -->
+          <h2 :id="titleId" class="app-confirm__title">{{ title }}</h2>
+
+          <!-- Message -->
+          <p :id="messageId" class="app-confirm__message">{{ message }}</p>
+
+          <!-- Actions -->
+          <div class="app-confirm__actions">
+            <button
+              :id="`${uid}-cancel`"
+              class="app-confirm__btn app-confirm__btn--cancel"
+              :disabled="loading"
+              @click="handleCancel"
+            >
+              {{ cancelLabel }}
+            </button>
+            <button
+              :id="`${uid}-confirm`"
+              class="app-confirm__btn"
+              :class="danger ? 'app-confirm__btn--danger' : 'app-confirm__btn--confirm'"
+              :disabled="loading"
+              @click="handleConfirm"
+            >
+              {{ loading ? 'Please wait…' : confirmLabel }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const props = withDefaults(defineProps<{
+  modelValue:   boolean          // v-model — controls visibility
+  title:        string
+  message:      string
+  confirmLabel?: string
+  cancelLabel?:  string
+  danger?:       boolean         // if true, confirm button is red
+  loading?:      boolean         // while async confirm action runs
+}>(), {
+  confirmLabel: 'Confirm',
+  cancelLabel:  'Cancel',
+  danger:       false,
+  loading:      false,
+})
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+  confirm: []
+  cancel:  []
+}>()
+
+const uid      = `app-confirm-${Math.random().toString(36).slice(2, 7)}`
+const titleId  = computed(() => `${uid}-title`)
+const messageId = computed(() => `${uid}-msg`)
+
+function handleConfirm() {
+  if (props.loading) return
+  emit('confirm')
+}
+
+function handleCancel() {
+  if (props.loading) return
+  emit('cancel')
+  emit('update:modelValue', false)
+}
+</script>
+
+<style scoped>
+/* ── Overlay ── */
+/* rgba(0,0,0,0.8) — no blur, as per PROJECT_SPEC flat design rules */
+.app-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+
+/* ── Modal panel ── */
+/* Strictly flat: #181818 bg, 1px solid #262626 border, NO shadow */
+.app-confirm {
+  width: min(400px, calc(100vw - 2rem));
+  background: #181818;
+  border: 1px solid #262626;
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: none;
+}
+
+.app-confirm__title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  line-height: var(--line-height-tight);
+}
+
+.app-confirm__message {
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+/* ── Action row ── */
+.app-confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.app-confirm__btn {
+  height: 36px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-family-base);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.app-confirm__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Cancel — muted flat */
+.app-confirm__btn--cancel {
+  background: #222222;
+  color: var(--color-text-secondary);
+  border-color: #333333;
+}
+.app-confirm__btn--cancel:hover:not(:disabled) {
+  background: #2a2a2a;
+  color: var(--color-text-primary);
+}
+
+/* Confirm — solid white (default action) */
+.app-confirm__btn--confirm {
+  background: #ffffff;
+  color: #101010;
+  border-color: #ffffff;
+}
+.app-confirm__btn--confirm:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+
+/* Danger confirm — solid red */
+.app-confirm__btn--danger {
+  background: #ed4956;
+  color: #ffffff;
+  border-color: #ed4956;
+}
+.app-confirm__btn--danger:hover:not(:disabled) {
+  background: #c73b47;
+}
+
+/* ── Transition ── */
+.confirm-fade-enter-active,
+.confirm-fade-leave-active { transition: opacity 0.15s ease; }
+.confirm-fade-enter-from,
+.confirm-fade-leave-to     { opacity: 0; }
+</style>

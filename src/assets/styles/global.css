@@ -1,0 +1,151 @@
+/* ================================================================
+   DreamScape — Global Styles (global.css)
+   Flat Dark Mode · No blur · No gradients · Maximum performance
+   ================================================================ */
+@import './variables.css';
+
+/* ── Google Fonts ──────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Box Model Reset ───────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Document Base ─────────────────────────────────────────────── */
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-base);
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* ── Root App Container ────────────────────────────────────────── */
+#app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Typography ────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-family-display);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text-primary);
+}
+
+h1 { font-size: var(--font-size-4xl); }
+h2 { font-size: var(--font-size-3xl); }
+h3 { font-size: var(--font-size-2xl); }
+h4 { font-size: var(--font-size-xl); }
+h5 { font-size: var(--font-size-lg); }
+h6 { font-size: var(--font-size-md); }
+
+p {
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+a:hover { color: var(--color-accent-hover); }
+
+code, pre {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Lists ─────────────────────────────────────────────────────── */
+ul, ol { list-style: none; }
+
+/* ── Media ─────────────────────────────────────────────────────── */
+img, video, svg {
+  display: block;
+  max-width: 100%;
+}
+
+/* ── Form Resets ───────────────────────────────────────────────── */
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+  border: none;
+  background: none;
+}
+button { cursor: pointer; }
+
+/* ── Scrollbar ─────────────────────────────────────────────────── */
+::-webkit-scrollbar        { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--color-border); border-radius: var(--radius-full); }
+::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+/* ── Selection ─────────────────────────────────────────────────── */
+::selection {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--color-text-primary);
+}
+
+/* ── Focus Visible ─────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Utility: Screen-reader only ──────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ── Utility: Flat divider ────────────────────────────────────── */
+.divider {
+  width: 100%;
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* ── Vue Transitions ───────────────────────────────────────────── */
+/* opacity-only — no transform, GPU-friendly */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity var(--transition-base);
+}
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* Slide up for route changes */
+.slide-up-enter-active, .slide-up-leave-active {
+  transition: opacity var(--transition-base), transform var(--transition-base);
+}
+.slide-up-enter-from  { opacity: 0; transform: translateY(8px); }
+.slide-up-leave-to    { opacity: 0; transform: translateY(-4px); }
