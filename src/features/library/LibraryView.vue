@@ -223,8 +223,8 @@
                 <p class="step-desc">Chọn hình thức tài liệu bạn muốn đóng góp:</p>
                 <div class="wizard-options">
                   <button class="wizard-option" @click="selectType('doi')">
-                    <span class="wizard-option__title">DOI (Mã định danh số)</span>
-                    <span class="wizard-option__desc">Dùng cho bài báo khoa học chính thức.</span>
+                    <span class="wizard-option__title">DOI hoặc PMCID</span>
+                    <span class="wizard-option__desc">Dùng cho bài báo khoa học (mã DOI hoặc PMC ID).</span>
                   </button>
                   <button class="wizard-option" @click="selectType('url')">
                     <span class="wizard-option__title">Liên kết bài viết (URL)</span>
@@ -249,8 +249,8 @@
                     v-if="contribType === 'doi'"
                     id="input-doi"
                     v-model="doi"
-                    label="DOI"
-                    placeholder="Ví dụ: 10.3389/fpsyg.2016.00332"
+                    :label="/^PMC\d+$/i.test(doi.trim()) ? 'PMCID' : 'DOI'"
+                    :placeholder="/^PMC\d+$/i.test(doi.trim()) ? 'Ví dụ: PMC11911046' : 'Ví dụ: 10.3389/fpsyg.2016.00332'"
                     :error="doiError"
                     maxlength="100"
                     required
@@ -775,7 +775,7 @@ const previewData = ref<any>(null)
 const stepTitle = computed(() => {
   if (step.value === 1) return 'Đóng góp nguồn học thuật'
   if (step.value === 2) {
-    if (contribType.value === 'doi') return 'Nhập thông tin DOI'
+    if (contribType.value === 'doi') return 'Nhập thông tin DOI hoặc PMCID'
     if (contribType.value === 'url') return 'Nhập liên kết nguồn'
     if (contribType.value === 'pdf') return 'Tải lên tài liệu PDF'
     if (contribType.value === 'isbn') return 'Nhập mã ISBN'
@@ -783,13 +783,16 @@ const stepTitle = computed(() => {
   return 'Xác nhận thông tin tài liệu'
 })
 
-// DOI validation
+// DOI & PMCID validation
 const doiError = computed(() => {
   const d = doi.value.trim()
   if (step.value === 2 && contribType.value === 'doi') {
-    if (!d) return 'Vui lòng điền mã DOI.'
-    if (d.length > 100) return 'Mã DOI không được vượt quá 100 ký tự.'
-    if (!d.startsWith('10.')) return 'Mã DOI phải bắt đầu bằng "10."'
+    if (!d) return 'Vui lòng điền mã DOI hoặc PMCID.'
+    if (d.length > 100) return 'Mã không được vượt quá 100 ký tự.'
+    if (/^PMC\d+$/i.test(d)) {
+      return ''
+    }
+    if (!d.startsWith('10.')) return 'Mã DOI phải bắt đầu bằng "10." hoặc sử dụng mã PMCID (Ví dụ: PMC11911046).'
     if (!d.includes('/')) return 'Mã DOI phải chứa ký tự phân tách "/"'
   }
   return ''
@@ -984,8 +987,11 @@ async function fetchPreview() {
   isFetchingPreview.value = true
   
   try {
+    const val = doi.value.trim();
+    const isPmc = /^PMC\d+$/i.test(val);
     const payload = {
-      doi: contribType.value === 'doi' ? doi.value.trim() : undefined,
+      doi: (contribType.value === 'doi' && !isPmc) ? val : undefined,
+      pmcid: (contribType.value === 'doi' && isPmc) ? val : undefined,
       url: contribType.value === 'url' ? url.value.trim() : undefined,
       isbn: contribType.value === 'isbn' ? normalizeIsbn(isbn.value) : undefined
     }
@@ -1052,6 +1058,7 @@ async function submitContribution() {
     } else {
       const payload = {
         doi: previewData.value.doi || undefined,
+        pmcid: previewData.value.pmcid || undefined,
         url: previewData.value.url || undefined,
         isbn: previewData.value.isbn || undefined,
         submittedNote: submittedNote.value.trim() || undefined,

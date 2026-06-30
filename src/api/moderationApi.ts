@@ -147,3 +147,23 @@ export const reimportFullText = async (
   return data
 }
 
+/**
+ * Fetches the preview data for a source contribution.
+ */
+export const getSourcePreview = async (
+  id: string
+): Promise<{
+  success: boolean
+  data?: {
+    source: any
+    fullText: any
+    sections: any[]
+  }
+}> => {
+  const { data } = await apiClient.get<{
+    success: boolean
+    data?: any
+  }>(`/moderation/sources/${id}/preview`)
+  return data
+}
+

@@ -274,7 +274,7 @@ const likedDreams = computed(() => {
  * Falls back to a stub if userId is a raw string (unlikely after populate).
  */
 function getDreamAuthor(dream: ApiDream): User {
-  if (typeof dream.userId === 'object') {
+  if (typeof dream.userId === 'object' && dream.userId !== null) {
     const u = dream.userId as ApiUser
     return {
       _id:            u._id,

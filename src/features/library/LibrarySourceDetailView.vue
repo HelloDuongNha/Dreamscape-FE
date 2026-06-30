@@ -292,6 +292,7 @@
                     <div 
                       v-for="(block, bIdx) in readerPages[currentPageIndex].blocks" 
                       :key="bIdx"
+                      v-show="(block.sectionType || block.type) !== 'title'"
                       :class="[
                         'reader-block',
                         `reader-block--${block.sectionType || block.type}`
@@ -308,9 +309,9 @@
                       
                       <!-- list_item -->
                       <div v-else-if="block.sectionType === 'list_item'" class="reader-list-item">
-                        <span class="list-marker">{{ extractListMarker(block.text).marker }}</span>
+                        <span class="list-marker">{{ block.marker || extractListMarker(block.text).marker }}</span>
                         <span v-if="block.html" class="list-text" v-html="getInnerHtml(block.html)"></span>
-                        <span v-else class="list-text">{{ extractListMarker(block.text).restText }}</span>
+                        <span v-else class="list-text">{{ block.text }}</span>
                       </div>
                       
                       <!-- reference_item / reference -->
@@ -318,8 +319,11 @@
                         v-else-if="block.type === 'reference' || block.sectionType === 'reference_item'" 
                         class="reader-reference-card"
                       >
-                        <p v-if="block.html" class="reference-card-text" v-html="getInnerHtml(block.html)"></p>
-                        <p v-else class="reference-card-text">{{ block.text }}</p>
+                        <p class="reference-card-text">
+                          <span class="reference-number" v-if="block.refNumber">[{{ block.refNumber }}] </span>
+                          <span v-if="block.html" v-html="getInnerHtml(block.html)"></span>
+                          <span v-else>{{ block.text }}</span>
+                        </p>
                         
                         <div v-if="block.actions && block.actions.length > 0" class="reference-actions-row">
                           <a 
@@ -361,23 +365,23 @@
                         <span v-else>{{ block.text }}</span>
                       </h1>
 
-                      <!-- figure / table placeholder -->
-                      <div v-else-if="block.type === 'figure' || block.type === 'table'" class="reader-placeholder-card">
-                        <div class="placeholder-header">
-                          <span class="placeholder-icon">
-                            <svg v-if="block.type === 'figure'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                            <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line></svg>
-                          </span>
-                          <span class="placeholder-label">
-                            {{ block.type === 'figure' ? 'Hình ảnh / Biểu đồ' : 'Bảng số liệu' }}
-                          </span>
-                        </div>
-                        <p v-if="block.html" class="placeholder-caption" v-html="getInnerHtml(block.html)"></p>
-                        <p v-else-if="block.text" class="placeholder-caption">{{ block.text }}</p>
-                        <div v-if="block.style?.doiUrl" class="placeholder-link-wrapper">
-                          <a :href="block.style.doiUrl" target="_blank" rel="noopener noreferrer" class="placeholder-link">
-                            Xem chi tiết gốc (DOI) ↗
-                          </a>
+                      <!-- figure / table block -->
+                      <div v-else-if="block.type === 'figure' || block.type === 'table'">
+                        <div v-if="block.html" class="reader-rich-block" v-html="block.html"></div>
+                        <div v-else class="reader-placeholder-card">
+                          <div v-if="block.type === 'figure'" class="figure-fallback">
+                            <p class="placeholder-error"><em>[Figure image unavailable]</em></p>
+                            <p class="placeholder-caption">{{ block.text }}</p>
+                          </div>
+                          <div v-else class="table-fallback">
+                            <p class="placeholder-caption">{{ block.text }}</p>
+                            <p class="placeholder-error"><em>[Table data unavailable]</em></p>
+                          </div>
+                          <div v-if="block.style?.doiUrl" class="placeholder-link-wrapper">
+                            <a :href="block.style.doiUrl" target="_blank" rel="noopener noreferrer" class="placeholder-link">
+                              Xem chi tiết gốc (DOI) ↗
+                            </a>
+                          </div>
                         </div>
                       </div>
 
@@ -1365,39 +1369,42 @@ function paginateBlocks(blocks: any[]) {
 }
 
 function processReaderContent(sections: any[], quality = 'low', engine: string) {
+  void quality;
+  void engine;
   let rawNormalBlocks: any[] = []
   let metadataBlocks: any[] = []
   let metadata: string[] = []
 
-  if (quality === 'high' || quality === 'medium' || ['html', 'xml', 'jats_xml', 'publisher_html', 'sanitized_html'].includes(engine)) {
-    sections.forEach(block => {
-      let text = (block.text || '').replace(/\s+/g, ' ').trim()
-      if (!text) return
-      let type = 'paragraph'
-      if (block.sectionType === 'heading') type = 'heading'
-      else if (block.sectionType === 'reference_item' || block.sectionType === 'reference') type = 'reference'
-      else if (block.sectionType === 'figure') type = 'figure'
-      else if (block.sectionType === 'table') type = 'table'
-      else if (block.sectionType === 'page_break') type = 'page_break'
-      else if (block.sectionType === 'metadata') type = 'metadata'
-      
-      let mappedBlock = {
-        type,
-        sectionType: block.sectionType || 'paragraph',
-        text,
-        html: block.html || undefined,
-        sectionIndex: block.sectionIndex,
-        headingLevel: block.sectionType === 'heading' ? getHeadingLevel(text) : undefined,
-        style: block.style || undefined
-      }
+  sections.forEach(block => {
+    let text = (block.text || '').replace(/\s+/g, ' ').trim()
+    if (!text) return
+    let type = 'paragraph'
+    if (block.sectionType === 'heading') type = 'heading'
+    else if (block.sectionType === 'reference_item' || block.sectionType === 'reference') type = 'reference'
+    else if (block.sectionType === 'figure') type = 'figure'
+    else if (block.sectionType === 'table') type = 'table'
+    else if (block.sectionType === 'page_break') type = 'page_break'
+    else if (block.sectionType === 'metadata') type = 'metadata'
+    
+    let mappedBlock = {
+      type,
+      sectionType: block.sectionType || 'paragraph',
+      text,
+      html: block.html || undefined,
+      marker: block.marker || undefined,
+      sectionIndex: block.sectionIndex,
+      headingLevel: block.sectionType === 'heading' ? getHeadingLevel(text) : undefined,
+      style: block.style || undefined
+    }
 
-      if (type === 'metadata') {
-        metadataBlocks.push(mappedBlock)
-      } else {
-        rawNormalBlocks.push(mappedBlock)
-      }
-    })
-  } else {
+    if (type === 'metadata') {
+      metadataBlocks.push(mappedBlock)
+    } else {
+      rawNormalBlocks.push(mappedBlock)
+    }
+  })
+
+  if (rawNormalBlocks.length === 0 && sections.length > 0) {
     let textList = sections.map(e => e.text || '')
     let parsed = parseSectionsIntoMetadataAndClean(cleanRepeatedLines(textList))
     metadata = parsed.metadata
@@ -1572,6 +1579,17 @@ function processReaderContent(sections: any[], quality = 'low', engine: string) 
   })
 
   flushCurrentSupItem()
+
+  let refCounter = 1
+  finalNormalBlocks.forEach(block => {
+    if (block.type === 'reference' || block.sectionType === 'reference_item') {
+      const textVal = block.text || ''
+      const startsWithNum = /^\s*\[\s*\d+\s*\]/i.test(textVal) || /^\s*\d+\s*[\.\:]/i.test(textVal)
+      if (!startsWithNum) {
+        block.refNumber = refCounter++
+      }
+    }
+  })
 
   return {
     metadata,
@@ -2158,6 +2176,8 @@ function getInnerHtml(html: string): string {
   return startIdx !== -1 && endIdx !== -1 && endIdx > startIdx ? html.substring(startIdx + 1, endIdx) : html
 }
 
+
+
 async function fetchAllReaderData() {
   if (!source.value) return
   isLoadingReader.value = true
@@ -2274,7 +2294,7 @@ async function copyDoi() {
 }
 
 const isModeratorUser = computed(() => {
-  const moderators = '6a0f43ab4891b428d4bb7729'.split(',')
+  const moderators = '6a0fc84bd37aacb66092be0e'.split(',')
   const currentUserId = authStore.user?._id
   return !!(currentUserId && moderators.map(e => e.trim().toLowerCase()).includes(currentUserId.toLowerCase()))
 })
@@ -2776,7 +2796,9 @@ onMounted(() => {
   font-weight: var(--font-weight-bold, 700);
   line-height: var(--line-height-tight, 1.25);
   color: var(--color-text-primary, #ffffff);
-  margin-bottom: var(--space-3);
+  text-align: center;
+  text-transform: uppercase;
+  margin-bottom: var(--space-6, 1.5rem);
 }
 
 .reader-source-badge-wrap {
@@ -3052,7 +3074,8 @@ onMounted(() => {
   font-weight: var(--font-weight-bold, 700);
   color: var(--color-text-primary, #ffffff);
   text-align: center;
-  margin-bottom: var(--space-6);
+  text-transform: uppercase;
+  margin-bottom: var(--space-8, 2rem);
 }
 
 .reader-placeholder-card {
@@ -3108,6 +3131,113 @@ onMounted(() => {
 .placeholder-link:hover {
   color: #3b82f6;
   text-decoration: none;
+}
+
+.reader-rich-block {
+  margin: var(--space-6, 1.5rem) 0;
+  width: 100%;
+}
+
+:deep(.figure-block) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: var(--space-6, 1.5rem) 0;
+  gap: var(--space-3, 0.75rem);
+  text-align: center;
+  width: 100%;
+}
+
+:deep(.figure-block .figure-img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md, 6px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: block;
+  margin: 0 auto;
+}
+
+:deep(.figure-block .caption),
+:deep(.table-block .caption) {
+  font-size: var(--font-size-sm, 14px);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--color-text-secondary, #aeaeb2);
+  margin: var(--space-2, 0.5rem) 0 0 0;
+  line-height: 1.4;
+  text-align: center;
+}
+
+:deep(.figure-block .legend) {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--color-text-muted, #8e8e93);
+  margin: 0;
+  max-width: 800px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+:deep(.table-block) {
+  margin: var(--space-6, 1.5rem) 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+:deep(.table-wrapper) {
+  overflow-x: auto;
+  width: 100%;
+  max-width: 100%;
+  background: var(--color-bg-base, #101010);
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  :deep(.table-wrapper) {
+    width: calc(100% + 40px);
+    max-width: calc(100% + 40px);
+    margin-left: -20px;
+    margin-right: -20px;
+  }
+}
+
+:deep(.table-wrapper table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm, 14px);
+  color: var(--color-text-secondary, #aeaeb2);
+  text-align: left;
+  border: 1px solid var(--color-border-input, #3a3a3a);
+}
+
+:deep(.table-wrapper th),
+:deep(.table-wrapper td) {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-input, #3a3a3a);
+  line-height: 1.45;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+:deep(.table-wrapper th) {
+  background: var(--color-bg-surface, #1e1e1e);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--color-text-primary, #ffffff);
+  border-bottom: 2px solid var(--color-border-input, #3a3a3a);
+}
+
+:deep(.placeholder-error) {
+  color: var(--color-error, #ef4444);
+  font-size: var(--font-size-sm, 14px);
+  margin: 0;
+}
+
+.reference-number {
+  font-weight: 700;
+  color: var(--color-primary, #60a5fa);
+  margin-right: 6px;
+  user-select: none;
 }
 
 .reader-page-break {

@@ -246,7 +246,7 @@ const avatarBg  = computed(() => getAvatarBg(props.user._id))
 const timestamp = computed(() => timeAgo(props.dream.created_at))
 
 const isOwner = computed(() => {
-  const userId = typeof props.dream.userId === 'object'
+  const userId = typeof props.dream.userId === 'object' && props.dream.userId !== null
     ? (props.dream.userId as { _id: string })._id
     : props.dream.userId
   return userId === authStore.myId

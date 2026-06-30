@@ -184,6 +184,13 @@
 
           <!-- Actions Footer (pending only) -->
           <div v-if="source.reviewStatus === 'pending'" class="source-card__actions">
+            <RouterLink
+              :to="`/moderation/sources/${source._id}/preview`"
+              class="app-btn app-btn--secondary app-btn--sm"
+              style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center;"
+            >
+              Xem trước
+            </RouterLink>
             <AppButton
               variant="danger-outline"
               size="sm"

@@ -238,7 +238,7 @@ const bodyRef      = ref<HTMLElement | null>(null)
 
 const isOwner = computed(() => {
   if (!postStore.focusedDream) return false
-  const userId = typeof postStore.focusedDream.userId === 'object'
+  const userId = typeof postStore.focusedDream.userId === 'object' && postStore.focusedDream.userId !== null
     ? (postStore.focusedDream.userId as { _id: string })._id
     : postStore.focusedDream.userId
   return userId === authStore.myId

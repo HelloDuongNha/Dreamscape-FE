@@ -30,7 +30,7 @@ export const usePostStore = defineStore('post', () => {
   const focusedUser = computed(() => {
     const d = focusedDream.value
     if (!d) return null
-    if (typeof d.userId === 'object') return d.userId
+    if (typeof d.userId === 'object' && d.userId !== null) return d.userId
     return null
   })
 
