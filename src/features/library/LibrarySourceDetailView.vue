@@ -179,10 +179,20 @@
                     </svg>
                   </div>
                   <h3>Không thể hiển thị PDF trực tiếp trong hệ thống.</h3>
-                  <p>Bạn có thể tải PDF hoặc mở PDF trong tab mới từ bảng thông tin bên phải.</p>
+                  <p>DreamScape không thể hiển thị trực tiếp tài liệu do giới hạn bảo mật của nhà xuất bản. Bạn có thể mở liên kết gốc trực tiếp trong trình duyệt.</p>
                   <div v-if="originalDocState.error || originalDocState.reason" style="font-size: 0.8rem; color: #ed4956; background: rgba(237, 73, 86, 0.1); border: 1px solid rgba(237, 73, 86, 0.2); padding: 8px 12px; border-radius: var(--radius-sm); max-width: 400px; word-break: break-word; margin-top: var(--space-2);">
                     Chi tiết: {{ originalDocState.error || originalDocState.reason }}
                   </div>
+                  <a 
+                    v-if="originalLink"
+                    :href="originalLink"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="sidebar-action-btn sidebar-action-btn--primary"
+                    style="text-align: center; display: block; width: 100%; max-width: 400px; text-decoration: none; margin-top: var(--space-3);"
+                  >
+                    Mở liên kết tài liệu gốc ↗
+                  </a>
                 </div>
               </div>
 
@@ -542,18 +552,9 @@
                   <span class="state-icon"></span>
                   <div class="state-message-wrap">
                     <p class="state-message">
-                      Có bản đọc hợp pháp, chờ nhập vào DreamScape.
+                      Có bản đọc hợp pháp, chờ nhập vào DreamScape. Bạn có thể sử dụng nút "Nhập bản đọc thông minh" ở thanh bên để nạp toàn văn tài liệu.
                     </p>
                     <div class="state-actions-row">
-                      <AppButton
-                        v-if="isModeratorUser && isEligibleForImport"
-                        variant="primary"
-                        size="sm"
-                        :loading="isImporting"
-                        @click="handleImport"
-                      >
-                        Nhập bản đọc vào DreamScape
-                      </AppButton>
                       <a v-if="originalLink" :href="originalLink" target="_blank" rel="noopener noreferrer" class="link-btn">
                         Xem tài liệu gốc ↗
                       </a>
@@ -566,19 +567,10 @@
                   <span class="state-icon"></span>
                   <div class="state-message-wrap">
                     <p class="state-message">
-                      Quá trình nhập bản đọc tự động thất bại.
+                      Quá trình nhập bản đọc tự động thất bại. Bạn có thể thử lại bằng cách bấm "Nhập bản đọc thông minh" ở thanh bên.
                       <span v-if="source.fullTextImportError" class="import-error-msg"><br/>Chi tiết: {{ source.fullTextImportError }}</span>
                     </p>
                     <div class="state-actions-row">
-                      <AppButton
-                        v-if="isModeratorUser && isEligibleForImport"
-                        variant="primary"
-                        size="sm"
-                        :loading="isImporting"
-                        @click="handleImport"
-                      >
-                        Thử nhập lại
-                      </AppButton>
                       <a v-if="originalLink" :href="originalLink" target="_blank" rel="noopener noreferrer" class="link-btn">
                         Xem tài liệu gốc ↗
                       </a>
@@ -591,7 +583,7 @@
                   <span class="state-icon"></span>
                   <div class="state-message-wrap">
                     <p class="state-message">
-                      Tài liệu này hiện chỉ có thông tin trích dẫn. Hệ thống không lưu hoặc hiển thị nguyên văn vì chưa có bản đọc hợp pháp.
+                      Tài liệu này hiện chỉ có thông tin trích dẫn. Nếu bạn là quản trị viên, hãy nhấp vào "Nhập bản đọc thông minh" ở thanh bên để thử tải tự động hoặc tải lên PDF thủ công.
                     </p>
                   </div>
                 </div>
@@ -644,8 +636,8 @@
           </div>
 
           <!-- Moderator RAG and Re-import actions -->
-          <div v-if="isModeratorUser && source.readableInApp" class="sidebar-moderation-row" style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border, #262626);">
-            <div class="moderation-tech-info" style="margin-bottom: var(--space-3); font-size: 0.85rem; line-height: 1.4;">
+          <div v-if="isModeratorUser" class="sidebar-moderation-row" style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border, #262626);">
+            <div v-if="source.readableInApp" class="moderation-tech-info" style="margin-bottom: var(--space-3); font-size: 0.85rem; line-height: 1.4;">
               <div class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
                 <span style="color: var(--color-text-muted);">Trạng thái RAG:</span>
                 <span :style="statusStyle" style="font-weight: 500;">{{ statusLabel }}</span>
@@ -687,15 +679,15 @@
             </AppButton>
 
             <AppButton
-              v-if="isModeratorUser && source.readableInApp && source.fullTextStatus === 'imported'"
-              variant="danger"
+              v-if="isModeratorUser"
+              :variant="source.readableInApp ? 'danger' : 'primary'"
               size="sm"
               block
-              :loading="isCurrentlyReimporting"
-              @click="promptReimport"
+              :loading="source.readableInApp ? isCurrentlyReimporting : isImporting"
+              @click="source.readableInApp ? promptReimport() : handleImport()"
               style="margin-bottom: 8px;"
             >
-              Nhập lại bản đọc
+              {{ source.readableInApp ? 'Nhập lại bản đọc' : 'Nhập bản đọc thông minh' }}
             </AppButton>
 
             <div v-if="hasApprovedRules" class="tech-row" style="margin-top: var(--space-2); color: #10b981; font-size: 0.85rem; font-weight: 500;">
@@ -1583,11 +1575,19 @@ function processReaderContent(sections: any[], quality = 'low', engine: string) 
   let refCounter = 1
   finalNormalBlocks.forEach(block => {
     if (block.type === 'reference' || block.sectionType === 'reference_item') {
-      const textVal = block.text || ''
-      const startsWithNum = /^\s*\[\s*\d+\s*\]/i.test(textVal) || /^\s*\d+\s*[\.\:]/i.test(textVal)
-      if (!startsWithNum) {
-        block.refNumber = refCounter++
+      // Strip leading numeric prefix from text to prevent double-numbering
+      // Patterns: "1SchacterDL...", "1. Schacter...", "[1] Schacter...", "(1) Schacter...", "1 Schacter..."
+      if (block.text) {
+        block.text = block.text.replace(/^\s*(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d+\s*[\.\:\)]\s*|\d+(?=[A-Z]))\s*/, '')
       }
+      if (block.html) {
+        // Strip from innerHTML too — match the same patterns at the start of visible text
+        block.html = block.html.replace(/(>)\s*(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d+\s*[\.\:\)]\s*|\d+(?=[A-Z]))\s*/g, (_match: string, prefix: string) => {
+          // Only strip at the very beginning of inner content
+          return prefix
+        })
+      }
+      block.refNumber = refCounter++
     }
   })
 
@@ -2313,18 +2313,43 @@ const isEligibleForImport = computed(() => {
 })
 
 async function handleImport() {
-  if (source.value && (isEligibleForImport.value || (isModeratorUser.value && source.value.readableInApp))) {
+  if (source.value && (isEligibleForImport.value || isModeratorUser.value)) {
     isImporting.value = true
     try {
-      const res = await importFullText(source.value._id)
+      const res = (await importFullText(source.value._id)) as any
       if (res.success) {
-        settingsStore.showToast(res.message || 'Nhập bản đọc thành công!', 'success')
+        if (res.warnings && res.warnings.length > 0) {
+          settingsStore.showToast(`Nhập bản đọc thành công với cảnh báo: ${res.warnings.join(', ')}`, 'success')
+        } else {
+          settingsStore.showToast('Nhập bản đọc thành công!', 'success')
+        }
       } else {
-        settingsStore.showToast(res.message || 'Nhập bản đọc thất bại.', 'error')
+        const importErr = res.error || res.message || ''
+        let friendly = 'Không thể kết nối đến máy chủ nhập bản đọc.'
+        if (importErr.includes('403') || importErr.includes('publisher_blocked')) {
+          friendly = 'Máy chủ tài liệu trả về 403 (Publisher blocked). Hãy upload PDF thủ công hoặc mở link gốc.'
+        } else if (importErr.includes('SSRF')) {
+          friendly = 'URL bị chặn bởi kiểm tra an toàn SSRF. Không tắt bảo vệ này.'
+        } else if (importErr.includes('Tài liệu không có tệp') || importErr.includes('không hỗ trợ bản đọc')) {
+          friendly = 'Nguồn này chỉ có metadata, chưa có toàn văn để nhập.'
+        } else if (importErr) {
+          friendly = importErr
+        }
+        settingsStore.showToast(`Nhập bản đọc thất bại: ${friendly}`, 'error')
       }
     } catch (err: any) {
-      const errorMsg = err.response?.data?.error || err.response?.data?.message || err.message || 'Lỗi khi nhập bản đọc.'
-      settingsStore.showToast(errorMsg, 'error')
+      console.error('Import source error:', err)
+      const errData = err.response?.data
+      const importErr = errData?.error || errData?.message || err.message || ''
+      let friendly = 'Không thể kết nối đến máy chủ nhập bản đọc.'
+      if (importErr.includes('403') || importErr.includes('publisher_blocked') || importErr.includes('candidate_fetch_failed')) {
+        friendly = 'Nhà xuất bản chặn tải tự động. Hãy upload PDF thủ công hoặc mở link gốc để đọc.'
+      } else if (importErr.includes('SSRF')) {
+        friendly = 'URL bị chặn bởi kiểm tra an toàn SSRF.'
+      } else if (importErr) {
+        friendly = importErr
+      }
+      settingsStore.showToast(`Nhập bản đọc thất bại: ${friendly}`, 'error')
     } finally {
       await fetchSource()
       isImporting.value = false
@@ -2404,8 +2429,17 @@ async function handleReimportConfirm() {
       }
     } catch (err: any) {
       console.error('Reimport source error:', err)
-      const errorMsg = err.response?.data?.message || err.message || 'Không thể nhập lại tài liệu.'
-      settingsStore.showToast(errorMsg, 'error')
+      const errData = err.response?.data
+      const importErr = errData?.error || errData?.message || err.message || ''
+      let friendly = 'Không thể nhập lại tài liệu.'
+      if (importErr.includes('403') || importErr.includes('publisher_blocked') || importErr.includes('candidate_fetch_failed')) {
+        friendly = 'Nhà xuất bản chặn tải tự động. Hãy upload PDF thủ công hoặc mở link gốc để đọc.'
+      } else if (importErr.includes('SSRF')) {
+        friendly = 'URL bị chặn bởi kiểm tra an toàn SSRF.'
+      } else if (importErr) {
+        friendly = importErr
+      }
+      settingsStore.showToast(`Nhập lại bản đọc thất bại: ${friendly}`, 'error')
     } finally {
       isCurrentlyReimporting.value = false
     }
@@ -2479,6 +2513,11 @@ async function fetchSource() {
 
 const originalLink = computed(() => {
   if (!source.value) return ''
+  if (source.value.pmcid) {
+    const cleanPmc = source.value.pmcid.trim().toUpperCase()
+    const pmcid = cleanPmc.startsWith('PMC') ? cleanPmc : `PMC${cleanPmc}`
+    return `https://pmc.ncbi.nlm.nih.gov/articles/${pmcid}/`
+  }
   return source.value.url || source.value.fullTextUrl || ''
 })
 
@@ -3193,7 +3232,16 @@ onMounted(() => {
   box-sizing: border-box;
 }
 
-@media (min-width: 640px) {
+@media (min-width: 1024px) {
+  :deep(.table-wrapper) {
+    width: calc(100% + 120px);
+    max-width: calc(100% + 120px);
+    margin-left: -60px;
+    margin-right: -60px;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
   :deep(.table-wrapper) {
     width: calc(100% + 40px);
     max-width: calc(100% + 40px);
@@ -3203,7 +3251,9 @@ onMounted(() => {
 }
 
 :deep(.table-wrapper table) {
-  width: 100%;
+  width: auto;
+  min-width: 100%;
+  table-layout: auto;
   border-collapse: collapse;
   font-size: var(--font-size-sm, 14px);
   color: var(--color-text-secondary, #aeaeb2);
@@ -3213,12 +3263,21 @@ onMounted(() => {
 
 :deep(.table-wrapper th),
 :deep(.table-wrapper td) {
-  padding: 8px 10px;
+  padding: 10px 14px;
   border: 1px solid var(--color-border-input, #3a3a3a);
   line-height: 1.45;
   word-break: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   vertical-align: top;
+}
+
+:deep(.table-wrapper th:first-child),
+:deep(.table-wrapper td:first-child) {
+  min-width: 200px;
+}
+
+:deep(.table-wrapper td:not(:first-child)) {
+  min-width: 80px;
 }
 
 :deep(.table-wrapper th) {
