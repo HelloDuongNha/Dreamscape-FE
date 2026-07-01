@@ -2415,6 +2415,7 @@ onMounted(() => {
   text-align: justify;
   margin: 0;
   color: var(--color-text-primary, #ffffff);
+  text-indent: 0.7cm;
 }
 
 .reader-heading-text {
