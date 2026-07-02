@@ -10,7 +10,17 @@
         :aria-describedby="messageId"
         @click.self="handleCancel"
       >
-        <div class="app-confirm">
+        <div class="app-confirm" style="position: relative;">
+          <!-- Close X button -->
+          <button
+            type="button"
+            class="app-confirm__close-btn"
+            aria-label="Đóng"
+            :disabled="loading"
+            @click="handleCancel"
+          >
+            ×
+          </button>
           <!-- Title -->
           <h2 :id="titleId" class="app-confirm__title">{{ title }}</h2>
 
@@ -108,6 +118,32 @@ function handleCancel() {
   flex-direction: column;
   gap: var(--space-4);
   box-shadow: none;
+}
+
+.app-confirm__close-btn {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #737373);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.app-confirm__close-btn:hover:not(:disabled) {
+  color: var(--color-text-primary, #ffffff);
+  background: rgba(255, 255, 255, 0.05);
+}
+.app-confirm__close-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .app-confirm__title {

@@ -61,7 +61,53 @@
             <!-- Case A: Source is readable or has PDF -> Show reader/PDF directly in the main column -->
             <template v-if="source.readableInApp || !!getOriginalPdfUrl(source)">
               <!-- Mode A: Original View -->
-              <div v-if="activeTab === 'original' || !source.readableInApp" class="original-view-container">
+              <div v-if="activeTab === 'original' || !source.readableInApp" class="original-view-container" style="position: relative;">
+                <!-- Full-size loading panel overlay during upload, cache, delete or render resolving state -->
+                <div v-if="originalPdfBusyMessage" 
+                     style="position: absolute; inset: 0; background: rgba(0, 0, 0, 0.7); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 16px; z-index: 100; border-radius: var(--radius-md); backdrop-filter: blur(2px);">
+                  <span class="spinner" style="width: 40px; height: 40px; border-width: 3px;"></span>
+                  <div style="font-weight: 500; font-size: 1.05rem; color: #ffffff;">
+                    <span>{{ originalPdfBusyMessage }}</span>
+                  </div>
+                </div>
+
+                <!-- Online Update Failed Warning Banner (if PDF is still kept but update failed) -->
+                <div v-if="showOnlineUpdateWarning && attemptedCandidates && attemptedCandidates.length > 0" class="correction-notice-card" style="position: relative; margin: var(--space-3); background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); padding: var(--space-3); border-radius: var(--radius-md);">
+                  <!-- Close X button -->
+                  <button
+                    type="button"
+                    class="app-confirm__close-btn"
+                    style="top: var(--space-2); right: var(--space-2); font-size: 1.25rem; padding: 2px;"
+                    aria-label="Ẩn thông báo"
+                    @click="showOnlineUpdateWarning = false"
+                  >
+                    ×
+                  </button>
+                  <div style="color: #ef4444; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding-right: 20px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    Không thể lấy PDF online mới. PDF đang lưu trên Cloudinary vẫn được giữ nguyên.
+                  </div>
+                  <div style="font-size: 0.8rem; color: var(--color-text-secondary);">
+                    <div @click="showAttemptedDetails = !showAttemptedDetails" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: var(--color-text-muted);">
+                      <span>Chi tiết các nguồn đã thử ({{ attemptedCandidates.length }})</span>
+                      <span>{{ showAttemptedDetails ? '▲' : '▼' }}</span>
+                    </div>
+                    <div v-if="showAttemptedDetails" style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow-y: auto;">
+                      <div v-for="(cand, idx) in attemptedCandidates" :key="idx" style="padding-bottom: 6px; border-bottom: 1px dashed var(--color-border, #262626); word-break: break-all;">
+                        <div style="font-weight: 500; color: var(--color-text-secondary, #d4d4d4);">{{ getDisplaySourceLink(cand.url) }}</div>
+                        <div style="font-size: 0.75rem; color: #a3a3a3; margin-top: 2px;">
+                          Trạng thái: 
+                          <span v-if="cand.reason === 'recaptcha_challenge_page'" style="color: #f59e0b;">reCAPTCHA / Cần xác minh</span>
+                          <span v-else-if="cand.reason === 'publisher_blocked'" style="color: #ef4444;">403 / Bị chặn bởi nhà xuất bản</span>
+                          <span v-else-if="cand.reason === 'preparing_download_page'" style="color: #f59e0b;">Trang chờ tải</span>
+                          <span v-else-if="cand.reason === 'html_not_pdf'" style="color: #ef4444;">Không phải tệp PDF</span>
+                          <span v-else style="color: #ef4444;">{{ cand.reason || 'Lỗi tải tệp' }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- Cloudinary Cache Status Header (Librarian/Moderator actions) -->
                 <div v-if="source" class="pdf-cache-status-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: var(--color-background-alt, #1c1c1c); border-bottom: 1px solid var(--color-border, #262626); font-size: 0.85rem; color: var(--color-text-secondary, #a3a3a3);">
                   <div style="display: flex; align-items: center; gap: 8px;">
@@ -90,7 +136,7 @@
                       :disabled="isCachingPdf" 
                       @click="handleCacheOriginalPdf"
                     >
-                      {{ isCachingPdf ? 'Đang lưu...' : 'Lưu PDF gốc vào Cloudinary' }}
+                      {{ isCachingPdf ? 'Đang lưu PDF từ nguồn online...' : 'Lưu PDF gốc vào Cloudinary' }}
                     </button>
                     <button 
                       v-else
@@ -99,7 +145,7 @@
                       :disabled="isCachingPdf" 
                       @click="handleCacheOriginalPdf"
                     >
-                      {{ isCachingPdf ? 'Đang lưu...' : 'Thử lại lưu PDF' }}
+                      {{ isCachingPdf ? 'Đang lưu PDF từ nguồn online...' : 'Thử lại lưu PDF' }}
                     </button>
                   </div>
                 </div>
@@ -107,8 +153,8 @@
                 <!-- State: Resolving / loading -->
                 <div v-if="originalDocState.status === 'resolving'" class="original-loading">
                   <div class="skeleton-shimmer"></div>
-                  <span class="spinner"></span>
-                  <p>Đang tải tài liệu gốc...</p>
+                  <span v-if="!originalPdfBusyMessage" class="spinner"></span>
+                  <p v-if="!originalPdfBusyMessage">Đang tải tài liệu gốc...</p>
                 </div>
                 
                 <!-- State: pdf_inline_ready (Full height viewer) -->
@@ -219,8 +265,25 @@
                         Mở trang nguồn ↗
                       </a>
                       
-                      <!-- Manual Upload placeholder -->
-                      <button class="sidebar-action-btn sidebar-action-btn--secondary" disabled style="width: 100%; justify-content: center; opacity: 0.5; cursor: not-allowed; margin-top: var(--space-2);">
+                      <!-- Manual Upload action button -->
+                      <button 
+                        v-if="isModeratorUser"
+                        class="sidebar-action-btn sidebar-action-btn--primary" 
+                        style="width: 100%; justify-content: center; margin-top: var(--space-2);"
+                        :disabled="isUploadingPdf || isCachingPdf || isDeletingOriginalPdf"
+                        @click="triggerManualUpload"
+                      >
+                        {{ isUploadingPdf ? 'Đang tải PDF lên Cloudinary...' : 
+                           isCachingPdf ? 'Đang lấy PDF từ nguồn online...' :
+                           (hasValidOriginalFilePdf(source) ? 'Cập nhật PDF' : 'Tải PDF thủ công lên DreamScape') 
+                        }}
+                      </button>
+                      <button 
+                        v-else
+                        class="sidebar-action-btn sidebar-action-btn--secondary" 
+                        disabled 
+                        style="width: 100%; justify-content: center; opacity: 0.5; cursor: not-allowed; margin-top: var(--space-2);"
+                      >
                         Upload PDF thủ công — sắp hỗ trợ
                       </button>
                     </div>
@@ -880,6 +943,32 @@
               </p>
             </template>
             
+            <!-- Moderator Manual Upload Button inside Sidebar Card -->
+            <div v-if="isModeratorUser" style="border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-3); margin-top: var(--space-1); width: 100%;">
+              <button 
+                class="sidebar-action-btn sidebar-action-btn--secondary" 
+                style="font-size: 0.8rem; width: 100%; justify-content: center; margin: 0;"
+                :disabled="isUploadingPdf || isCachingPdf || isDeletingOriginalPdf"
+                @click="triggerManualUpload"
+              >
+                {{ isUploadingPdf ? 'Đang tải PDF lên Cloudinary...' : 
+                   isCachingPdf ? 'Đang lấy PDF từ nguồn online...' :
+                   (hasValidOriginalFilePdf(source) ? 'Cập nhật PDF' : 'Tải PDF thủ công lên DreamScape') 
+                }}
+              </button>
+              
+              <!-- Delete Cloudinary PDF Button -->
+              <button 
+                v-if="hasValidOriginalFilePdf(source)"
+                class="sidebar-action-btn" 
+                style="font-size: 0.78rem; width: 100%; justify-content: center; margin: 0; margin-top: var(--space-1); color: #ef4444; border-color: rgba(239, 68, 68, 0.3); background: transparent;"
+                :disabled="isUploadingPdf || isCachingPdf || isDeletingOriginalPdf"
+                @click="showDeletePdfConfirm = true"
+              >
+                {{ isDeletingOriginalPdf ? 'Đang xóa PDF...' : 'Xóa PDF đã lưu trên Cloudinary' }}
+              </button>
+            </div>
+
             <!-- Metadata Source Label Info -->
             <div v-if="originalDocState.sourceLabel" class="source-link-row" style="font-size: 0.75rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-2); margin-top: 2px;">
               <span>Nguồn tài liệu: </span>
@@ -903,14 +992,109 @@
         @confirm="handleReimportConfirm"
         @cancel="showReimportConfirm = false"
       />
+
+      <!-- Manual PDF Upload replacement confirmation -->
+      <AppConfirm
+        v-model="showUploadConfirm"
+        title="Thay thế PDF gốc"
+        message="Bạn muốn thay thế PDF đã lưu trên Cloudinary bằng file mới? Bản đọc thông minh sẽ không bị ảnh hưởng."
+        confirm-label="Tiếp tục"
+        cancel-label="Hủy"
+        @confirm="handleConfirmUpload"
+        @cancel="showUploadConfirm = false"
+      />
+
+      <!-- Delete Original PDF confirmation -->
+      <AppConfirm
+        v-model="showDeletePdfConfirm"
+        title="Xóa PDF đã lưu?"
+        message="Bạn có chắc muốn xóa PDF đã lưu trên Cloudinary? Bản đọc thông minh, nội dung, hình ảnh, bảng và tài liệu nguồn sẽ không bị xóa."
+        confirm-label="Xóa PDF"
+        cancel-label="Hủy"
+        :danger="true"
+        :loading="isDeletingOriginalPdf"
+        @confirm="handleDeleteOriginalPdf"
+        @cancel="showDeletePdfConfirm = false"
+      />
+
+      <!-- Update PDF Choice Dialog -->
+      <Teleport to="body">
+        <Transition name="confirm-fade">
+          <div
+            v-if="showUpdateChoiceDialog"
+            class="app-confirm-overlay"
+            role="dialog"
+            aria-modal="true"
+            @click.self="showUpdateChoiceDialog = false"
+          >
+            <div class="app-confirm" style="position: relative;">
+              <!-- Close X button -->
+              <button
+                type="button"
+                class="app-confirm__close-btn"
+                aria-label="Đóng"
+                @click="showUpdateChoiceDialog = false"
+              >
+                ×
+              </button>
+              <h2 class="app-confirm__title">Cập nhật PDF gốc</h2>
+              <p class="app-confirm__message">Chọn cách cập nhật PDF gốc. Bản đọc thông minh sẽ không bị ảnh hưởng.</p>
+              <div class="app-confirm__actions" style="display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); width: 100%;">
+                <button
+                  class="app-confirm__btn app-confirm__btn--confirm"
+                  style="width: 100%; text-align: center; margin: 0;"
+                  @click="handleChoiceUpload"
+                >
+                  Upload PDF thủ công
+                </button>
+                <button
+                  class="app-confirm__btn app-confirm__btn--confirm"
+                  style="width: 100%; text-align: center; margin: 0;"
+                  @click="handleChoiceOnline"
+                >
+                  Lấy PDF online
+                </button>
+                <button
+                  class="app-confirm__btn app-confirm__btn--cancel"
+                  style="width: 100%; text-align: center; margin: 0;"
+                  @click="showUpdateChoiceDialog = false"
+                >
+                  Hủy
+                </button>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
+
+      <!-- Online PDF update confirmation -->
+      <AppConfirm
+        v-model="showOnlineConfirm"
+        title="Lấy lại PDF từ nguồn online"
+        message="DreamScape sẽ thử tải lại PDF từ các nguồn hợp pháp và lưu lên Cloudinary. Nếu thất bại, PDF cũ vẫn được giữ nguyên."
+        confirm-label="Tiếp tục"
+        cancel-label="Hủy"
+        :loading="isCachingPdf"
+        @confirm="handleOnlineCacheConfirm"
+        @cancel="showOnlineConfirm = false"
+      />
+
+      <!-- Hidden file input for PDF selection -->
+      <input 
+        type="file" 
+        ref="fileInputRef" 
+        style="display: none;" 
+        accept=".pdf,application/pdf" 
+        @change="handleFileSelected" 
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getApprovedSourceById, getApprovedSourceRead, getApprovedSourceOriginalDocument, getApprovedSourcePdfInline, cacheOriginalPdf } from '@/api/sourceApi'
+import { getApprovedSourceById, getApprovedSourceRead, getApprovedSourceOriginalDocument, getApprovedSourcePdfInline, cacheOriginalPdf, uploadApprovedSourcePdf, deleteApprovedSourceOriginalPdf } from '@/api/sourceApi'
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
@@ -1745,6 +1929,15 @@ const cacheStatus = ref<'idle' | 'success' | 'failed'>('idle')
 const cacheMessage = ref('')
 const attemptedCandidates = ref<any[]>([])
 const showAttemptedDetails = ref(false)
+const isUploadingPdf = ref(false)
+const showUploadConfirm = ref(false)
+const showUpdateChoiceDialog = ref(false)
+const showOnlineConfirm = ref(false)
+const onlineUpdateFailed = ref(false)
+const showOnlineUpdateWarning = ref(false)
+const isDeletingOriginalPdf = ref(false)
+const showDeletePdfConfirm = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 const extractionStore = useExtractionStore()
 
 // Source Type and dynamic helpers
@@ -1755,6 +1948,14 @@ const hasPdfCandidate = computed(() => {
   if (!source.value) return false
   const pdfUrl = getOriginalPdfUrl(source.value)
   return !!(pdfUrl && pdfUrl.trim().startsWith('http') && !hasValidOriginalFilePdf(source.value))
+})
+
+const originalPdfBusyMessage = computed(() => {
+  if (isUploadingPdf.value) return 'Đang tải PDF lên Cloudinary...'
+  if (isCachingPdf.value) return 'Đang lấy PDF từ nguồn online...'
+  if (isDeletingOriginalPdf.value) return 'Đang xóa PDF trên Cloudinary...'
+  if (originalDocState.value.status === 'resolving') return 'Đang mở PDF trong DreamScape...'
+  return ''
 })
 
 const originalDocStatusLabel = computed(() => {
@@ -2135,6 +2336,8 @@ async function handleSwitchToOriginal() {
 async function handleCacheOriginalPdf() {
   if (!source.value) return
   isCachingPdf.value = true
+  onlineUpdateFailed.value = false
+  showOnlineUpdateWarning.value = false
   cacheStatus.value = 'idle'
   cacheMessage.value = ''
   attemptedCandidates.value = []
@@ -2169,6 +2372,215 @@ async function handleCacheOriginalPdf() {
     settingsStore.showToast(cacheMessage.value, 'error')
   } finally {
     isCachingPdf.value = false
+  }
+}
+
+function triggerManualUpload() {
+  if (hasValidOriginalFilePdf(source.value)) {
+    showUpdateChoiceDialog.value = true
+  } else {
+    openFilePicker()
+  }
+}
+
+function handleChoiceUpload() {
+  showUpdateChoiceDialog.value = false
+  showUploadConfirm.value = true
+}
+
+function handleConfirmUpload() {
+  showUploadConfirm.value = false
+  nextTick(() => {
+    openFilePicker()
+  })
+}
+
+function handleChoiceOnline() {
+  showUpdateChoiceDialog.value = false
+  showOnlineConfirm.value = true
+}
+
+async function handleOnlineCacheConfirm() {
+  if (!source.value) return
+  showOnlineConfirm.value = false
+  isCachingPdf.value = true
+  onlineUpdateFailed.value = false
+  showOnlineUpdateWarning.value = false
+  cacheMessage.value = ''
+  attemptedCandidates.value = []
+  showAttemptedDetails.value = false
+  
+  try {
+    const res = await cacheOriginalPdf(source.value._id, { force: true })
+    attemptedCandidates.value = res.attemptedCandidates || []
+    
+    if (res.success && (res.status === 'recached' || res.status === 'cached')) {
+      settingsStore.showToast('Đã lấy và cập nhật PDF online.', 'success')
+      showOnlineUpdateWarning.value = false
+      
+      const id = route.params.id as string
+      source.value = res.source || res.data || (await getApprovedSourceById(id))
+      initOriginalDocState()
+      
+      if (hasValidOriginalFilePdf(source.value)) {
+        await loadInlinePdf()
+      }
+    } else if (res.success && res.status === 'already_cached') {
+      settingsStore.showToast('Backend chưa xử lý force:true đúng cách.', 'error')
+    } else {
+      onlineUpdateFailed.value = true
+      showOnlineUpdateWarning.value = true
+      cacheStatus.value = 'failed'
+      cacheMessage.value = res.message || 'Không thể lấy PDF online mới. PDF đang lưu trên Cloudinary vẫn được giữ nguyên.'
+      settingsStore.showToast(cacheMessage.value, 'error')
+    }
+  } catch (err: any) {
+    console.error('Error updates PDF from online:', err)
+    onlineUpdateFailed.value = true
+    showOnlineUpdateWarning.value = true
+    cacheStatus.value = 'failed'
+    cacheMessage.value = err.response?.data?.message || err.message || 'Không thể lấy PDF online mới. PDF đang lưu trên Cloudinary vẫn được giữ nguyên.'
+    if (err.response?.data?.attemptedCandidates) {
+      attemptedCandidates.value = err.response.data.attemptedCandidates
+    }
+    settingsStore.showToast(cacheMessage.value, 'error')
+  } finally {
+    isCachingPdf.value = false
+  }
+}
+
+function openFilePicker() {
+  fileInputRef.value?.click()
+}
+
+function handleFileSelected(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  // Client-side quick validations
+  const isPdfExt = file.name.toLowerCase().endsWith('.pdf')
+  const isPdfMime = file.type === 'application/pdf' || file.type === ''
+  const isPdfSize = file.size <= 25 * 1024 * 1024 // 25MB
+
+  if (!isPdfExt || !isPdfMime) {
+    settingsStore.showToast('Tệp tải lên không phải là định dạng PDF hợp lệ.', 'error')
+    if (fileInputRef.value) fileInputRef.value.value = ''
+    return
+  }
+
+  if (!isPdfSize) {
+    settingsStore.showToast('Kích thước tệp vượt quá giới hạn cho phép (25MB).', 'error')
+    if (fileInputRef.value) fileInputRef.value.value = ''
+    return
+  }
+
+  uploadOriginalPdfFile(file)
+}
+
+async function uploadOriginalPdfFile(file: File) {
+  if (!source.value) return
+  isUploadingPdf.value = true
+  onlineUpdateFailed.value = false
+  showOnlineUpdateWarning.value = false
+  try {
+    const res = await uploadApprovedSourcePdf(source.value._id, file)
+    if (res.success) {
+      settingsStore.showToast(res.message || 'Tải lên tài liệu PDF gốc thành công.', 'success')
+      source.value.originalFile = res.originalFile || res.source?.originalFile
+      initOriginalDocState()
+      
+      // Immediately render PDF
+      if (hasValidOriginalFilePdf(source.value)) {
+        await loadInlinePdf()
+      }
+    } else {
+      settingsStore.showToast(res.message || 'Lỗi khi tải lên tệp PDF.', 'error')
+    }
+  } catch (err: any) {
+    console.error('Error uploading original PDF:', err)
+    const errMsg = err.response?.data?.message || err.message || 'Lỗi hệ thống khi tải lên tệp PDF.'
+    settingsStore.showToast(errMsg, 'error')
+  } finally {
+    isUploadingPdf.value = false
+    if (fileInputRef.value) fileInputRef.value.value = ''
+  }
+}
+
+async function handleDeleteOriginalPdf() {
+  if (!source.value) return
+  isDeletingOriginalPdf.value = true
+  onlineUpdateFailed.value = false
+  showOnlineUpdateWarning.value = false
+  try {
+    const res = await deleteApprovedSourceOriginalPdf(source.value._id)
+    if (res.success) {
+      settingsStore.showToast(res.message || 'Đã xóa PDF lưu trên Cloudinary.', 'success')
+      
+      // Update source data from response
+      if (res.source) {
+        source.value = res.source
+      } else {
+        source.value.originalFile = undefined
+      }
+      
+      // Revoke any active blob URL
+      if (activeBlobUrl) {
+        URL.revokeObjectURL(activeBlobUrl)
+        activeBlobUrl = ''
+      }
+      
+      // Clear stale inline PDF state
+      originalDocState.value.pdfViewUrl = undefined
+      
+      // Re-initialize doc state to fall back to external links
+      initOriginalDocState()
+      
+      // After delete, the source no longer has a Cloudinary PDF.
+      // initOriginalDocState may set status='pdf_ready' if source.pdfUrl exists (external link),
+      // but those external links are typically paywalled/blocked — we must NOT show "PDF gốc đã sẵn sàng".
+      // Instead, force the state to reflect what the user should actually see:
+      if (!hasValidOriginalFilePdf(source.value)) {
+        // Preserve failed cache context — do NOT reset cacheStatus to 'idle'
+        // If we previously had a failed cache attempt, keep that state visible.
+        // If cacheStatus was 'idle' but attemptedCandidates exist, set it to 'failed'
+        if (cacheStatus.value !== 'failed' && attemptedCandidates.value.length > 0) {
+          cacheStatus.value = 'failed'
+        }
+        
+        // Override the doc state: external pdfUrl alone should NOT be treated as 'pdf_ready'
+        const pmcId = getNormalizedPmcId(source.value)
+        const articleUrl = pmcId
+          ? `https://pmc.ncbi.nlm.nih.gov/articles/${pmcId}/`
+          : (source.value?.url || source.value?.htmlUrl || source.value?.fullTextUrl || 
+             (source.value?.doi ? `https://doi.org/${source.value.doi.replace(/^(doi|DOI):\s*/, '').trim()}` : ''))
+        
+        if (articleUrl && articleUrl.trim().startsWith('http')) {
+          originalDocState.value = {
+            status: 'article_only',
+            hasPdf: false,
+            canInlinePdf: false,
+            sourceArticleUrl: articleUrl.trim(),
+            sourceLabel: pmcId ? 'pmc.ncbi.nlm.nih.gov' : getDisplaySourceLink(articleUrl)
+          }
+        } else {
+          originalDocState.value = {
+            status: 'metadata_only',
+            hasPdf: false,
+            canInlinePdf: false
+          }
+        }
+      }
+    } else {
+      settingsStore.showToast(res.message || 'Lỗi khi xóa PDF.', 'error')
+    }
+  } catch (err: any) {
+    console.error('Error deleting original PDF:', err)
+    const errMsg = err.response?.data?.message || err.message || 'Lỗi hệ thống khi xóa PDF.'
+    settingsStore.showToast(errMsg, 'error')
+  } finally {
+    isDeletingOriginalPdf.value = false
+    showDeletePdfConfirm.value = false
   }
 }
 
@@ -2774,8 +3186,8 @@ async function handleReimportConfirm() {
             friendly = 'Máy chủ tài liệu trả về 403. Hãy upload PDF thủ công hoặc dùng link PDF công khai khác.'
           } else if (importErr.includes('SSRF')) {
             friendly = 'URL bị chặn bởi kiểm tra an toàn SSRF. Không tắt bảo vệ này.'
-          } else if (importErr.includes('Tài liệu không có tệp') || importErr.includes('không hỗ trợ bản đọc')) {
-            friendly = 'Nguồn này chỉ có metadata, chưa có toàn văn để nhập.'
+          } else if (importErr.includes('Tài liệu không có tệp') || importErr.includes('không hỗ trợ bản đọc') || importErr.includes('metadata_only') || importErr.includes('metadata-only')) {
+            friendly = 'Nguồn này chỉ có thông tin mô tả (Metadata), không tìm thấy nội dung toàn văn để nhập bản đọc.'
           } else if (importErr) {
             friendly = importErr
           }
@@ -2793,6 +3205,8 @@ async function handleReimportConfirm() {
         friendly = 'Nhà xuất bản chặn tải tự động. Hãy upload PDF thủ công hoặc mở link gốc để đọc.'
       } else if (importErr.includes('SSRF')) {
         friendly = 'URL bị chặn bởi kiểm tra an toàn SSRF.'
+      } else if (importErr.includes('metadata_only') || importErr.includes('metadata-only')) {
+        friendly = 'Nguồn này chỉ có thông tin mô tả (Metadata), không tìm thấy nội dung toàn văn để nhập bản đọc.'
       } else if (importErr) {
         friendly = importErr
       }
@@ -3583,58 +3997,56 @@ onMounted(() => {
 
 :deep(.table-wrapper) {
   overflow-x: auto;
+  overflow-y: hidden;
   width: 100%;
   max-width: 100%;
   background: var(--color-bg-base, #101010);
   box-sizing: border-box;
-}
-
-@media (min-width: 1024px) {
-  :deep(.table-wrapper) {
-    width: calc(100% + 120px);
-    max-width: calc(100% + 120px);
-    margin-left: -60px;
-    margin-right: -60px;
-  }
-}
-
-@media (min-width: 640px) and (max-width: 1023px) {
-  :deep(.table-wrapper) {
-    width: calc(100% + 40px);
-    max-width: calc(100% + 40px);
-    margin-left: -20px;
-    margin-right: -20px;
-  }
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--color-border, #262626);
+  border-radius: var(--radius-md, 6px);
 }
 
 :deep(.table-wrapper table) {
-  width: auto;
-  min-width: 100%;
+  width: 100%;
+  max-width: 100%;
   table-layout: auto;
   border-collapse: collapse;
-  font-size: var(--font-size-sm, 14px);
+  font-size: 0.9rem;
   color: var(--color-text-secondary, #aeaeb2);
   text-align: left;
-  border: 1px solid var(--color-border-input, #3a3a3a);
+  border: none;
 }
 
 :deep(.table-wrapper th),
 :deep(.table-wrapper td) {
-  padding: 10px 14px;
+  padding: 6px 10px;
   border: 1px solid var(--color-border-input, #3a3a3a);
-  line-height: 1.45;
+  line-height: 1.35;
   word-break: normal;
   overflow-wrap: break-word;
+  white-space: normal;
   vertical-align: top;
+}
+
+:deep(.table-wrapper th p),
+:deep(.table-wrapper td p) {
+  margin: 0;
+  line-height: inherit;
+}
+:deep(.table-wrapper th p + p),
+:deep(.table-wrapper td p + p) {
+  margin-top: 4px;
 }
 
 :deep(.table-wrapper th:first-child),
 :deep(.table-wrapper td:first-child) {
-  min-width: 200px;
+  min-width: 80px;
 }
 
-:deep(.table-wrapper td:not(:first-child)) {
-  min-width: 80px;
+:deep(.table-wrapper td:not(:first-child)),
+:deep(.table-wrapper th:not(:first-child)) {
+  min-width: 40px;
 }
 
 :deep(.table-wrapper th) {
@@ -4425,4 +4837,108 @@ onMounted(() => {
   line-height: 1.5;
   text-align: justify;
 }
+
+/* ── Choice Modal Styles ── */
+.app-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+
+.app-confirm {
+  width: min(400px, calc(100vw - 2rem));
+  background: #181818;
+  border: 1px solid #262626;
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: none;
+}
+
+.app-confirm__close-btn {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted, #737373);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.app-confirm__close-btn:hover:not(:disabled) {
+  color: var(--color-text-primary, #ffffff);
+  background: rgba(255, 255, 255, 0.05);
+}
+.app-confirm__close-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.app-confirm__title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  line-height: var(--line-height-tight);
+}
+
+.app-confirm__message {
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+.app-confirm__actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.app-confirm__btn {
+  height: 36px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-family-base);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.app-confirm__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.app-confirm__btn--cancel {
+  background: #222222;
+  color: var(--color-text-secondary);
+  border-color: #333333;
+}
+.app-confirm__btn--cancel:hover:not(:disabled) {
+  background: #2a2a2a;
+  color: var(--color-text-primary);
+}
+
+.app-confirm__btn--confirm {
+  background: #ffffff;
+  color: #101010;
+  border-color: #ffffff;
+}
+.app-confirm__btn--confirm:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+
+.confirm-fade-enter-active,
+.confirm-fade-leave-active { transition: opacity 0.15s ease; }
+.confirm-fade-enter-from,
+.confirm-fade-leave-to     { opacity: 0; }
 </style>

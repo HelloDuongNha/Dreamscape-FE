@@ -159,8 +159,27 @@ export const getApprovedSourcePdfInline = async (id: string): Promise<Blob> => {
   return data
 }
 
-export const cacheOriginalPdf = async (id: string): Promise<any> => {
-  const { data } = await apiClient.post<any>(`/sources/approved/${id}/cache-original-pdf`)
+export const cacheOriginalPdf = async (id: string, options?: { force?: boolean }): Promise<any> => {
+  const { data } = await apiClient.post<any>(`/sources/approved/${id}/cache-original-pdf`, options)
   return data
 }
 
+export const uploadApprovedSourcePdf = async (id: string, file: File): Promise<any> => {
+  const formData = new FormData()
+  formData.append('pdfFile', file)
+  const { data } = await apiClient.post<any>(
+    `/sources/approved/${id}/upload-pdf`,
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }
+  )
+  return data
+}
+
+export const deleteApprovedSourceOriginalPdf = async (id: string): Promise<any> => {
+  const { data } = await apiClient.delete<any>(`/sources/approved/${id}/original-pdf`)
+  return data
+}
