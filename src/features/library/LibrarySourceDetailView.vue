@@ -3292,8 +3292,57 @@ const originalLink = computed(() => {
   return source.value.url || source.value.fullTextUrl || ''
 })
 
+function updateTableSizingClasses() {
+  nextTick(() => {
+    const wrappers = document.querySelectorAll('.reading-page-content .table-wrapper')
+    wrappers.forEach((wrapper: any) => {
+      const table = wrapper.querySelector('table')
+      if (!table) return
+
+      const origStyle = table.style.width
+      table.style.width = 'max-content'
+      const naturalWidth = table.offsetWidth || table.scrollWidth
+      table.style.width = origStyle
+
+      const block = wrapper.closest('.reader-block')
+      if (!block) return
+
+      block.classList.remove('table-size-compact', 'table-size-normal', 'table-size-wide', 'table-size-scroll')
+
+      const maxAvailableWidth = wrapper.parentElement?.clientWidth || 720
+
+      if (naturalWidth <= 520) {
+        block.classList.add('table-size-compact')
+      } else if (naturalWidth <= 720) {
+        block.classList.add('table-size-normal')
+      } else if (naturalWidth <= maxAvailableWidth && naturalWidth <= 1080) {
+        block.classList.add('table-size-wide')
+      } else {
+        block.classList.add('table-size-scroll')
+      }
+    })
+  })
+}
+
+watch([currentPageIndex, readerPages, activeTab, fontSize], () => {
+  if (activeTab.value === 'smart') {
+    updateTableSizingClasses()
+  }
+}, { immediate: true })
+
+function handleResize() {
+  if (activeTab.value === 'smart') {
+    updateTableSizingClasses()
+  }
+}
+
 onMounted(() => {
   fetchSource()
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 
@@ -3791,6 +3840,74 @@ onMounted(() => {
   margin-bottom: var(--space-5);
   line-height: var(--line-height-relaxed, 1.6);
   font-size: var(--reader-font-size, 17px);
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.reader-block--table {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+  transition: max-width 0.2s ease;
+}
+
+.reader-block--table.table-size-compact {
+  max-width: 720px;
+}
+.reader-block--table.table-size-compact :deep(.table-wrapper) {
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
+}
+.reader-block--table.table-size-compact :deep(.table-wrapper table) {
+  width: auto;
+}
+
+.reader-block--table.table-size-normal {
+  max-width: 720px;
+}
+.reader-block--table.table-size-normal :deep(.table-wrapper) {
+  width: 100%;
+  max-width: 100%;
+}
+.reader-block--table.table-size-normal :deep(.table-wrapper table) {
+  width: 100%;
+}
+
+.reader-block--table.table-size-wide {
+  max-width: min(100%, 1080px);
+}
+.reader-block--table.table-size-wide :deep(.table-wrapper) {
+  width: 100%;
+  max-width: 100%;
+}
+.reader-block--table.table-size-wide :deep(.table-wrapper table) {
+  width: 100%;
+}
+
+.reader-block--table.table-size-scroll {
+  max-width: min(100%, 1080px);
+}
+.reader-block--table.table-size-scroll :deep(.table-wrapper) {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.reader-block--table.table-size-scroll :deep(.table-wrapper table) {
+  width: max-content;
+  min-width: 100%;
+}
+
+.reader-block--table.table-size-wide :deep(.table-wrapper table),
+.reader-block--table.table-size-scroll :deep(.table-wrapper table) {
+  font-size: 0.84em;
+}
+
+.reader-block--table.table-size-wide :deep(.table-wrapper th),
+.reader-block--table.table-size-wide :deep(.table-wrapper td),
+.reader-block--table.table-size-scroll :deep(.table-wrapper th),
+.reader-block--table.table-size-scroll :deep(.table-wrapper td) {
+  padding: 5px 6px;
 }
 
 .reader-paragraph-text {
@@ -4012,7 +4129,7 @@ onMounted(() => {
   max-width: 100%;
   table-layout: auto;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.88em;
   color: var(--color-text-secondary, #aeaeb2);
   text-align: left;
   border: none;
@@ -4020,11 +4137,11 @@ onMounted(() => {
 
 :deep(.table-wrapper th),
 :deep(.table-wrapper td) {
-  padding: 6px 10px;
+  padding: 6px 8px;
   border: 1px solid var(--color-border-input, #3a3a3a);
-  line-height: 1.35;
+  line-height: 1.3;
   word-break: normal;
-  overflow-wrap: break-word;
+  overflow-wrap: normal;
   white-space: normal;
   vertical-align: top;
 }
@@ -4210,7 +4327,7 @@ onMounted(() => {
 
 /* Article content constraints */
 .reading-page-content {
-  max-width: 720px;
+  max-width: 100%;
   margin: 0 auto;
   width: 100%;
 }
