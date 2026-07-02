@@ -167,3 +167,46 @@ export const getSourcePreview = async (
   return data
 }
 
+export const getModerationSourcePdfInline = async (id: string): Promise<Blob> => {
+  const { data } = await apiClient.get<Blob>(
+    `/moderation/sources/${id}/pdf-inline`,
+    { responseType: 'blob' }
+  )
+  return data
+}
+
+/**
+ * Triggers online PDF caching for moderation sources.
+ */
+export const cacheModerationSourceOriginalPdf = async (id: string, options?: { force?: boolean }): Promise<any> => {
+  const { data } = await apiClient.post<any>(`/moderation/sources/${id}/cache-original-pdf`, options)
+  return data
+}
+
+/**
+ * Uploads a raw PDF file for moderation sources.
+ */
+export const uploadModerationSourcePdf = async (id: string, file: File): Promise<any> => {
+  const formData = new FormData()
+  formData.append('pdfFile', file)
+  formData.append('sourceContributionId', id)
+  const { data } = await apiClient.post<any>(
+    '/moderation/sources/upload-pdf',
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }
+  )
+  return data
+}
+
+/**
+ * Deletes cached original PDF for moderation sources.
+ */
+export const deleteModerationSourceOriginalPdf = async (id: string): Promise<any> => {
+  const { data } = await apiClient.delete<any>(`/moderation/sources/${id}/original-pdf`)
+  return data
+}
+

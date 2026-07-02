@@ -320,13 +320,18 @@ onUnmounted(() => {
 const FULL_BLEED_ROUTES = ['/messages']
 
 const isFullBleed = computed(() => {
-  return FULL_BLEED_ROUTES.includes(route.path) || route.path.startsWith('/library/sources/')
+  return FULL_BLEED_ROUTES.includes(route.path) || 
+         route.path.startsWith('/library/sources/') ||
+         (route.path.startsWith('/moderation/sources/') && route.path.endsWith('/preview'))
 })
 
 
 const pageTitle = computed(() => {
   if (route.path.startsWith('/library/sources/')) {
     return 'Chi tiết tài liệu'
+  }
+  if (route.path.startsWith('/moderation/sources/') && route.path.endsWith('/preview')) {
+    return 'Xem trước tài liệu'
   }
   const map: Record<string, string> = {
     '/':          'Home',

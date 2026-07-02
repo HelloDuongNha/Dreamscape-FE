@@ -96,6 +96,12 @@ const router = createRouter({
           meta: { title: 'Duyệt nguồn — DreamScape' },
         },
         {
+          path: 'moderation/sources/:id/preview',
+          name: 'moderation-source-preview',
+          component: () => import('@/features/moderation/ModerationSourcePreviewView.vue'),
+          meta: { title: 'Xem trước tài liệu — DreamScape' },
+        },
+        {
           path: 'moderation/rule-candidates',
           name: 'moderation-rule-candidates',
           component: () => import('@/features/moderation/RuleCandidatesView.vue'),
