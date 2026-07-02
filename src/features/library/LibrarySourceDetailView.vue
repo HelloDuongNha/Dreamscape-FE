@@ -784,79 +784,109 @@
         <div class="attributes-card" style="margin-top: var(--space-4);">
           <h3 class="card-title">Tài liệu gốc</h3>
           
-          <!-- If PDF exists -->
-          <div v-if="originalDocState.hasPdf" class="sidebar-pdf-section" style="display: flex; flex-direction: column; gap: var(--space-3); width: 100%;">
+          <div class="sidebar-pdf-section" style="display: flex; flex-direction: column; gap: var(--space-3); width: 100%;">
+            <!-- Status Row -->
             <div class="status-row" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
               <span style="color: var(--color-text-muted);">Trạng thái:</span>
-              <span style="color: #10b981; font-weight: 600;">Có PDF gốc</span>
-            </div>
-            
-            <button 
-              @click="downloadPdf"
-              :disabled="originalDocState.status === 'resolving'"
-              class="sidebar-action-btn sidebar-action-btn--primary"
-            >
-              Tải PDF
-            </button>
-            
-            <button 
-              @click="openPdfInNewTab"
-              :disabled="originalDocState.status === 'resolving'"
-              class="sidebar-action-btn sidebar-action-btn--text"
-            >
-              Mở PDF trong tab mới ↗
-            </button>
-
-            <!-- Original Filename Metadata -->
-            <div v-if="source.originalFile?.originalFileName" class="source-link-row" style="font-size: 0.75rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-2); margin-top: 2px;">
-              <span>Tên tệp gốc: </span>
-              <span style="color: var(--color-text-secondary); word-break: break-all;">
-                {{ source.originalFile.originalFileName }}
+              <span 
+                :style="{
+                  color: originalDocStatusLabel === 'Đã lưu PDF trên Cloudinary' ? '#10b981' : 
+                         (originalDocStatusLabel === 'Không thể lưu tự động' || originalDocStatusLabel === 'Không có tài liệu gốc') ? '#ef4444' : '#eab308',
+                  fontWeight: '600'
+                }"
+              >
+                {{ originalDocStatusLabel }}
               </span>
             </div>
             
+            <!-- Case 1: Valid Cloudinary PDF (Already Cached/Uploaded) -->
+            <template v-if="hasValidOriginalFilePdf(source)">
+              <button 
+                @click="downloadPdf"
+                class="sidebar-action-btn sidebar-action-btn--primary"
+              >
+                Tải PDF
+              </button>
+              
+              <button 
+                @click="openPdfInNewTab"
+                class="sidebar-action-btn sidebar-action-btn--text"
+              >
+                Mở PDF trong tab mới ↗
+              </button>
+              
+              <div v-if="source.originalFile?.originalFileName" class="source-link-row" style="font-size: 0.75rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-2); margin-top: 2px;">
+                <span>Tên tệp gốc: </span>
+                <span style="color: var(--color-text-secondary); word-break: break-all;">
+                  {{ source.originalFile.originalFileName }}
+                </span>
+              </div>
+            </template>
+            
+            <!-- Case 2: External PDF Link or PMC PDF download (not cached yet) -->
+            <template v-else-if="originalDocStatusLabel === 'Có link PDF ngoài' || originalDocStatusLabel === 'Không thể lưu tự động'">
+              <a 
+                v-if="externalPdfUrl"
+                :href="externalPdfUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="sidebar-action-btn sidebar-action-btn--primary"
+                style="text-align: center; display: block; text-decoration: none;"
+              >
+                Mở PDF ngoài ↗
+              </a>
+              
+              <a 
+                v-if="pmcArticleUrl"
+                :href="pmcArticleUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="sidebar-action-btn sidebar-action-btn--secondary"
+                style="text-align: center; display: block; text-decoration: none;"
+              >
+                Mở bài viết trên PMC ↗
+              </a>
+              
+              <a 
+                v-if="wileyEpdfUrl"
+                :href="wileyEpdfUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="sidebar-action-btn sidebar-action-btn--primary"
+                style="text-align: center; display: block; text-decoration: none;"
+              >
+                Mở Wiley ePDF ↗
+              </a>
+            </template>
+            
+            <!-- Case 3: External Article Source Page only -->
+            <template v-else-if="originalDocStatusLabel === 'Có trang nguồn'">
+              <a 
+                v-if="externalArticleUrl"
+                :href="externalArticleUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="sidebar-action-btn sidebar-action-btn--primary"
+                style="text-align: center; display: block; text-decoration: none;"
+              >
+                Mở trang nguồn ↗
+              </a>
+            </template>
+            
+            <!-- Case 4: No document links available -->
+            <template v-else>
+              <p style="font-size: 0.75rem; color: var(--color-text-muted); margin: 0; line-height: 1.4; text-align: left;">
+                {{ isIsbnSource ? 'Hãy bổ sung bản đọc PDF cho sách này hoặc dùng nguồn công khai khác.' : 'Hãy upload PDF hoặc dùng nguồn công khai khác.' }}
+              </p>
+            </template>
+            
+            <!-- Metadata Source Label Info -->
             <div v-if="originalDocState.sourceLabel" class="source-link-row" style="font-size: 0.75rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-2); margin-top: 2px;">
-              <span>Nguồn PDF: </span>
+              <span>Nguồn tài liệu: </span>
               <span style="color: var(--color-text-secondary); word-break: break-all;">
                 {{ originalDocState.sourceLabel }}
               </span>
             </div>
-          </div>
-          
-          <!-- If no PDF exists but DOI/sourceUrl exists -->
-          <div v-else-if="originalDocState.sourceArticleUrl && !isIsbnSource" class="sidebar-pdf-section" style="display: flex; flex-direction: column; gap: var(--space-3); width: 100%;">
-            <div class="status-row" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
-              <span style="color: var(--color-text-muted);">Trạng thái:</span>
-              <span style="color: #e6a817; font-weight: 600;">Không có PDF</span>
-            </div>
-            
-            <a 
-              :href="originalDocState.sourceArticleUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="sidebar-action-btn sidebar-action-btn--primary"
-              style="text-align: center; display: block;"
-            >
-              Mở trang nguồn ↗
-            </a>
-            
-            <div v-if="originalDocState.sourceLabel" class="source-link-row" style="font-size: 0.75rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-2); margin-top: 2px;">
-              <span>Nguồn bài viết: </span>
-              <span style="color: var(--color-text-secondary); word-break: break-all;">
-                {{ originalDocState.sourceLabel }}
-              </span>
-            </div>
-          </div>
-          
-          <!-- If metadata-only / ISBN without PDF -->
-          <div v-else class="sidebar-pdf-section" style="display: flex; flex-direction: column; gap: var(--space-2); width: 100%;">
-            <div class="status-row" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
-              <span style="color: var(--color-text-muted);">Trạng thái:</span>
-              <span style="color: #ed4956; font-weight: 600;">Không có tài liệu gốc</span>
-            </div>
-            <p style="font-size: 0.75rem; color: var(--color-text-muted); margin: 0; line-height: 1.4; text-align: left;">
-              {{ isIsbnSource ? 'Hãy bổ sung bản đọc PDF cho sách này hoặc dùng nguồn công khai khác.' : 'Hãy upload PDF hoặc dùng nguồn công khai khác.' }}
-            </p>
           </div>
         </div>
       </div>
@@ -1725,6 +1755,30 @@ const hasPdfCandidate = computed(() => {
   if (!source.value) return false
   const pdfUrl = getOriginalPdfUrl(source.value)
   return !!(pdfUrl && pdfUrl.trim().startsWith('http') && !hasValidOriginalFilePdf(source.value))
+})
+
+const originalDocStatusLabel = computed(() => {
+  if (!source.value) return 'Không có tài liệu gốc'
+  
+  if (hasValidOriginalFilePdf(source.value)) {
+    return 'Đã lưu PDF trên Cloudinary'
+  }
+  
+  if (cacheStatus.value === 'failed') {
+    return 'Không thể lưu tự động'
+  }
+  
+  const pdfUrl = getOriginalPdfUrl(source.value)
+  if (pdfUrl && pdfUrl.trim().startsWith('http')) {
+    return 'Có link PDF ngoài'
+  }
+  
+  const articleUrl = source.value.url || source.value.htmlUrl || originalDocState.value.sourceArticleUrl
+  if (articleUrl && articleUrl.trim().startsWith('http')) {
+    return 'Có trang nguồn'
+  }
+  
+  return 'Không có tài liệu gốc'
 })
 
 const pmcArticleUrl = computed(() => {
