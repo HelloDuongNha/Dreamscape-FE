@@ -159,3 +159,8 @@ export const getApprovedSourcePdfInline = async (id: string): Promise<Blob> => {
   return data
 }
 
+export const cacheOriginalPdf = async (id: string): Promise<any> => {
+  const { data } = await apiClient.post<any>(`/sources/approved/${id}/cache-original-pdf`)
+  return data
+}
+

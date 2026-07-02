@@ -62,6 +62,48 @@
             <template v-if="source.readableInApp || !!getOriginalPdfUrl(source)">
               <!-- Mode A: Original View -->
               <div v-if="activeTab === 'original' || !source.readableInApp" class="original-view-container">
+                <!-- Cloudinary Cache Status Header (Librarian/Moderator actions) -->
+                <div v-if="source" class="pdf-cache-status-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: var(--color-background-alt, #1c1c1c); border-bottom: 1px solid var(--color-border, #262626); font-size: 0.85rem; color: var(--color-text-secondary, #a3a3a3);">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span v-if="hasValidOriginalFilePdf(source)" style="display: inline-flex; align-items: center; gap: 4px; color: #10b981;">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                      Đã lưu PDF trên Cloudinary
+                    </span>
+                    <span v-else-if="cacheStatus === 'failed'" style="display: inline-flex; align-items: center; gap: 4px; color: #ef4444;">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                      Không thể lưu tự động
+                    </span>
+                    <span v-else-if="hasPdfCandidate" style="display: inline-flex; align-items: center; gap: 4px; color: #eab308;">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                      Chưa lưu PDF vào Cloudinary
+                    </span>
+                    <span v-else style="display: inline-flex; align-items: center; gap: 4px; color: #a3a3a3;">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                      Chưa lưu PDF vào Cloudinary
+                    </span>
+                  </div>
+                  <div v-if="isModeratorUser && !hasValidOriginalFilePdf(source) && hasPdfCandidate" style="display: flex; gap: 8px;">
+                    <button 
+                      v-if="cacheStatus !== 'failed'"
+                      class="sidebar-action-btn sidebar-action-btn--primary" 
+                      style="font-size: 0.8rem; padding: 4px 10px; margin: 0; width: auto;" 
+                      :disabled="isCachingPdf" 
+                      @click="handleCacheOriginalPdf"
+                    >
+                      {{ isCachingPdf ? 'Đang lưu...' : 'Lưu PDF gốc vào Cloudinary' }}
+                    </button>
+                    <button 
+                      v-else
+                      class="sidebar-action-btn sidebar-action-btn--secondary" 
+                      style="font-size: 0.8rem; padding: 4px 10px; margin: 0; width: auto;" 
+                      :disabled="isCachingPdf" 
+                      @click="handleCacheOriginalPdf"
+                    >
+                      {{ isCachingPdf ? 'Đang lưu...' : 'Thử lại lưu PDF' }}
+                    </button>
+                  </div>
+                </div>
+
                 <!-- State: Resolving / loading -->
                 <div v-if="originalDocState.status === 'resolving'" class="original-loading">
                   <div class="skeleton-shimmer"></div>
@@ -143,8 +185,8 @@
                   <p>Dùng bảng thông tin bên phải để xem, tải hoặc mở PDF.</p>
                 </div>
                 
-                <!-- State: article_only -->
-                <div v-else-if="originalDocState.status === 'article_only'" class="fallback-card">
+                <!-- State: article_only / metadata_only with failed caching -->
+                <div v-else-if="originalDocState.status === 'article_only' || originalDocState.status === 'metadata_only' || cacheStatus === 'failed'" class="fallback-card">
                   <div class="fallback-icon">
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                       <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
@@ -152,21 +194,63 @@
                       <line x1="12" y1="17" x2="12" y2="21"></line>
                     </svg>
                   </div>
-                  <h3>Tài liệu này không có PDF gốc trong hệ thống.</h3>
-                  <p>Bạn có thể mở trang nguồn từ bảng thông tin bên phải.</p>
-                </div>
-                
-                <!-- State: metadata_only -->
-                <div v-else-if="originalDocState.status === 'metadata_only'" class="fallback-card">
-                  <div class="fallback-icon">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <polyline points="14 2 14 8 20 8"></polyline>
-                      <line x1="9" y1="15" x2="15" y2="15"></line>
-                    </svg>
-                  </div>
-                  <h3>Không có file gốc để hiển thị.</h3>
-                  <p>Hãy upload PDF hoặc dùng nguồn công khai khác.</p>
+                  
+                  <template v-if="cacheStatus === 'failed' || originalDocState.status === 'article_only'">
+                    <h3>Không thể lưu PDF tự động</h3>
+                    <p style="color: var(--color-text-secondary, #a3a3a3); font-size: 0.9rem; margin-top: 8px; max-width: 550px; line-height: 1.5; text-align: center;">
+                      DreamScape đã thử các nguồn PDF hợp pháp nhưng máy chủ nguồn không trả về file PDF trực tiếp hoặc yêu cầu xác minh. Bạn vẫn có thể mở tài liệu bên ngoài, hoặc sau này upload PDF thủ công để lưu vào Cloudinary.
+                    </p>
+                    
+                    <!-- Action Buttons -->
+                    <div style="display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-4); width: 100%; max-width: 400px; align-items: center;">
+                      <a v-if="pmcArticleUrl" :href="pmcArticleUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--primary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
+                        Mở bài viết trên PMC ↗
+                      </a>
+                      <a v-if="pmcPdfUrl" :href="pmcPdfUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--secondary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
+                        Mở trang tải PDF trên PMC ↗
+                      </a>
+                      <a v-if="wileyEpdfUrl" :href="wileyEpdfUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--primary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
+                        Mở Wiley ePDF ↗
+                      </a>
+                      <a v-if="externalPdfUrl && !wileyEpdfUrl && externalPdfUrl !== pmcPdfUrl" :href="externalPdfUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--primary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
+                        Mở link PDF gốc ↗
+                      </a>
+                      <a v-if="externalArticleUrl && externalArticleUrl !== pmcArticleUrl" :href="externalArticleUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--secondary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
+                        Mở trang nguồn ↗
+                      </a>
+                      
+                      <!-- Manual Upload placeholder -->
+                      <button class="sidebar-action-btn sidebar-action-btn--secondary" disabled style="width: 100%; justify-content: center; opacity: 0.5; cursor: not-allowed; margin-top: var(--space-2);">
+                        Upload PDF thủ công — sắp hỗ trợ
+                      </button>
+                    </div>
+
+                    <!-- Expandable Attempt Details -->
+                    <div v-if="attemptedCandidates && attemptedCandidates.length > 0" style="margin-top: var(--space-4); width: 100%; max-width: 400px; text-align: left; background: var(--color-background-alt, #1c1c1c); border: 1px solid var(--color-border, #262626); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 0.8rem;">
+                      <div @click="showAttemptedDetails = !showAttemptedDetails" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: var(--color-text-secondary, #a3a3a3);">
+                        <span>Chi tiết các nguồn đã thử ({{ attemptedCandidates.length }})</span>
+                        <span>{{ showAttemptedDetails ? '▲' : '▼' }}</span>
+                      </div>
+                      <div v-if="showAttemptedDetails" style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto;">
+                        <div v-for="(cand, idx) in attemptedCandidates" :key="idx" style="padding-bottom: 6px; border-bottom: 1px dashed var(--color-border, #262626); word-break: break-all;">
+                          <div style="font-weight: 500; color: var(--color-text-secondary, #d4d4d4);">{{ getDisplaySourceLink(cand.url) }}</div>
+                          <div style="font-size: 0.75rem; color: #a3a3a3; margin-top: 2px;">
+                            Trạng thái: 
+                            <span v-if="cand.reason === 'recaptcha_challenge_page'" style="color: #f59e0b;">reCAPTCHA / Cần xác minh</span>
+                            <span v-else-if="cand.reason === 'publisher_blocked'" style="color: #ef4444;">403 / Bị chặn bởi nhà xuất bản</span>
+                            <span v-else-if="cand.reason === 'preparing_download_page'" style="color: #f59e0b;">Trang chờ tải</span>
+                            <span v-else-if="cand.reason === 'html_not_pdf'" style="color: #ef4444;">Không phải tệp PDF</span>
+                            <span v-else style="color: #ef4444;">{{ cand.reason || 'Lỗi tải tệp' }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                  
+                  <template v-else>
+                    <h3>Tài liệu này không có PDF gốc trong hệ thống.</h3>
+                    <p>Bạn có thể mở trang nguồn từ bảng thông tin bên phải.</p>
+                  </template>
                 </div>
                 
                 <!-- State: blocked / failed -->
@@ -376,10 +460,10 @@
                       </h1>
 
                       <!-- figure / table block -->
-                      <div v-else-if="block.type === 'figure' || block.type === 'table'">
+                      <div v-else-if="block.type === 'figure' || block.sectionType === 'figure' || block.blockType === 'figure' || block.type === 'table' || block.sectionType === 'table' || block.blockType === 'table'">
                         <div v-if="block.html" class="reader-rich-block" v-html="block.html"></div>
                         <div v-else class="reader-placeholder-card">
-                          <div v-if="block.type === 'figure'" class="figure-fallback">
+                          <div v-if="block.type === 'figure' || block.sectionType === 'figure' || block.blockType === 'figure'" class="figure-fallback">
                             <p class="placeholder-error"><em>[Figure image unavailable]</em></p>
                             <p class="placeholder-caption">{{ block.text }}</p>
                           </div>
@@ -796,7 +880,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getApprovedSourceById, getApprovedSourceRead, getApprovedSourceOriginalDocument, getApprovedSourcePdfInline } from '@/api/sourceApi'
+import { getApprovedSourceById, getApprovedSourceRead, getApprovedSourceOriginalDocument, getApprovedSourcePdfInline, cacheOriginalPdf } from '@/api/sourceApi'
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
@@ -1369,23 +1453,25 @@ function processReaderContent(sections: any[], quality = 'low', engine: string) 
 
   sections.forEach(block => {
     let text = (block.text || '').replace(/\s+/g, ' ').trim()
-    if (!text) return
+    if (!text && !block.html) return
+    
+    const rawType = block.type || block.sectionType || block.blockType
     let type = 'paragraph'
-    if (block.sectionType === 'heading') type = 'heading'
-    else if (block.sectionType === 'reference_item' || block.sectionType === 'reference') type = 'reference'
-    else if (block.sectionType === 'figure') type = 'figure'
-    else if (block.sectionType === 'table') type = 'table'
-    else if (block.sectionType === 'page_break') type = 'page_break'
-    else if (block.sectionType === 'metadata') type = 'metadata'
+    if (rawType === 'heading') type = 'heading'
+    else if (rawType === 'reference_item' || rawType === 'reference') type = 'reference'
+    else if (rawType === 'figure') type = 'figure'
+    else if (rawType === 'table') type = 'table'
+    else if (rawType === 'page_break') type = 'page_break'
+    else if (rawType === 'metadata') type = 'metadata'
     
     let mappedBlock = {
       type,
-      sectionType: block.sectionType || 'paragraph',
+      sectionType: block.sectionType || block.blockType || 'paragraph',
       text,
       html: block.html || undefined,
       marker: block.marker || undefined,
       sectionIndex: block.sectionIndex,
-      headingLevel: block.sectionType === 'heading' ? getHeadingLevel(text) : undefined,
+      headingLevel: (block.sectionType === 'heading' || block.type === 'heading') ? getHeadingLevel(text) : undefined,
       style: block.style || undefined
     }
 
@@ -1575,17 +1661,11 @@ function processReaderContent(sections: any[], quality = 'low', engine: string) 
   let refCounter = 1
   finalNormalBlocks.forEach(block => {
     if (block.type === 'reference' || block.sectionType === 'reference_item') {
-      // Strip leading numeric prefix from text to prevent double-numbering
-      // Patterns: "1SchacterDL...", "1. Schacter...", "[1] Schacter...", "(1) Schacter...", "1 Schacter..."
       if (block.text) {
-        block.text = block.text.replace(/^\s*(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d+\s*[\.\:\)]\s*|\d+(?=[A-Z]))\s*/, '')
+        block.text = stripLeadingReferenceNumber(block.text)
       }
       if (block.html) {
-        // Strip from innerHTML too — match the same patterns at the start of visible text
-        block.html = block.html.replace(/(>)\s*(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d+\s*[\.\:\)]\s*|\d+(?=[A-Z]))\s*/g, (_match: string, prefix: string) => {
-          // Only strip at the very beginning of inner content
-          return prefix
-        })
+        block.html = stripLeadingReferenceNumberHtml(block.html)
       }
       block.refNumber = refCounter++
     }
@@ -1598,6 +1678,29 @@ function processReaderContent(sections: any[], quality = 'low', engine: string) 
   }
 }
 
+function stripLeadingReferenceNumber(text: string): string {
+  if (!text) return ''
+  // Handle leading HTML tag wrapping before number recursively
+  const tagMatch = text.match(/^(<[^>]+>)\s*/)
+  if (tagMatch) {
+    const prefix = tagMatch[0]
+    const rest = text.substring(prefix.length)
+    return prefix + stripLeadingReferenceNumber(rest)
+  }
+  return text.replace(/^\s*(?:\[\s*\d{1,3}\s*\]|\(\s*\d{1,3}\s*\)|\d{1,3}\s*[\.\:\)]\s*|\d{1,3}\s+(?=[A-Za-z])|\d{1,3}(?=[A-Z])|\d{1,3}\.\s*(?=[A-Z]))\s*/, '')
+}
+
+function stripLeadingReferenceNumberHtml(html: string): string {
+  if (!html) return ''
+  const tagMatch = html.match(/^(<[^>]+>)\s*/)
+  if (tagMatch) {
+    const prefix = tagMatch[0]
+    const rest = html.substring(prefix.length)
+    return prefix + stripLeadingReferenceNumber(rest)
+  }
+  return stripLeadingReferenceNumber(html)
+}
+
 const route = useRoute()
 const router = useRouter()
 const settingsStore = useSettingsStore()
@@ -1607,12 +1710,52 @@ const source = ref<any>(null)
 const isLoading = ref(true)
 const hasError = ref(false)
 const isImporting = ref(false)
+const isCachingPdf = ref(false)
+const cacheStatus = ref<'idle' | 'success' | 'failed'>('idle')
+const cacheMessage = ref('')
+const attemptedCandidates = ref<any[]>([])
+const showAttemptedDetails = ref(false)
 const extractionStore = useExtractionStore()
 
 // Source Type and dynamic helpers
 const sourceType = computed(() => resolveSourceType(source.value))
 const isIsbnSource = computed(() => sourceType.value === 'isbn')
 const isWebUrlSource = computed(() => sourceType.value === 'web_url')
+const hasPdfCandidate = computed(() => {
+  if (!source.value) return false
+  const pdfUrl = getOriginalPdfUrl(source.value)
+  return !!(pdfUrl && pdfUrl.trim().startsWith('http') && !hasValidOriginalFilePdf(source.value))
+})
+
+const pmcArticleUrl = computed(() => {
+  const pmcId = getNormalizedPmcId(source.value)
+  return pmcId ? `https://pmc.ncbi.nlm.nih.gov/articles/${pmcId}/` : ''
+})
+
+const pmcPdfUrl = computed(() => {
+  const pmcId = getNormalizedPmcId(source.value)
+  return pmcId ? `https://pmc.ncbi.nlm.nih.gov/articles/${pmcId}/pdf/` : ''
+})
+
+const wileyEpdfUrl = computed(() => {
+  const doi = source.value?.doi
+  if (doi && doi.trim().startsWith('10.1111/')) {
+    return `https://onlinelibrary.wiley.com/doi/epdf/${doi.trim()}`
+  }
+  return ''
+})
+
+const externalPdfUrl = computed(() => {
+  const pdfUrl = getOriginalPdfUrl(source.value)
+  if (pdfUrl && pdfUrl.trim().startsWith('http') && !hasValidOriginalFilePdf(source.value)) {
+    return pdfUrl
+  }
+  return ''
+})
+
+const externalArticleUrl = computed(() => {
+  return source.value?.url || source.value?.htmlUrl || ''
+})
 
 const iframeUrl = computed(() => {
   const url = originalDocState.value.pdfViewUrl
@@ -1654,13 +1797,26 @@ function cleanActiveBlobUrl() {
 
 
 function getOriginalPdfUrl(source: any) {
-  // Priority 1: Explicit pdfUrl field
+  // Priority 1: Uploaded PDF via Cloudinary
+  const orig = source?.originalFile
+  const cloudUrl = orig?.cloudinarySecureUrl || orig?.secureUrl || orig?.url
+  if (cloudUrl) {
+    const mime = orig.mimeType || ''
+    const name = orig.originalFileName || ''
+    const format = orig.cloudinaryFormat || ''
+    if (
+      mime === 'application/pdf' ||
+      name.toLowerCase().endsWith('.pdf') ||
+      format.toLowerCase() === 'pdf'
+    ) {
+      return cloudUrl
+    }
+  }
+
+  // Priority 2: Explicit pdfUrl field
   if (source?.pdfUrl && source.pdfUrl.trim().startsWith('http')) {
     return source.pdfUrl
   }
-  // Priority 2: Uploaded PDF via Cloudinary
-  const cloudUrl = source?.originalFile?.cloudinarySecureUrl || source?.originalFile?.secureUrl || source?.originalFile?.url
-  if (cloudUrl) return cloudUrl
   // Priority 3: fullTextUrl only if it looks like a PDF
   if (source?.fullTextUrl && source.fullTextUrl.trim().startsWith('http')) {
     const lower = source.fullTextUrl.toLowerCase()
@@ -1674,6 +1830,74 @@ function getOriginalPdfUrl(source: any) {
     return metaPdf
   }
   return ''
+}
+
+function hasValidOriginalFilePdf(source: any): boolean {
+  const orig = source?.originalFile
+  const cloudUrl = orig?.cloudinarySecureUrl || orig?.secureUrl || orig?.url
+  if (!cloudUrl) return false
+  const mime = orig.mimeType || ''
+  const name = orig.originalFileName || ''
+  const format = orig.cloudinaryFormat || ''
+  return (
+    mime === 'application/pdf' ||
+    name.toLowerCase().endsWith('.pdf') ||
+    format.toLowerCase() === 'pdf'
+  )
+}
+
+function isPaywalledOrBlockedUrl(url: string): boolean {
+  if (!url) return true
+  const lower = url.toLowerCase()
+  return (
+    lower.includes('wiley.com') ||
+    lower.includes('elsevier.com') ||
+    lower.includes('sciencedirect.com') ||
+    lower.includes('springer.com') ||
+    lower.includes('nature.com') ||
+    lower.includes('europepmc.org')
+  )
+}
+
+function getNormalizedPmcId(source: any): string | null {
+  if (!source) return null
+  
+  // 1. Check explicit fields
+  const fields = [
+    source.pmcid,
+    source.normalizedPmcid,
+    source.metadata?.pmcid,
+    source.metadata?.pmcId
+  ]
+  for (const val of fields) {
+    if (val && typeof val === 'string') {
+      const clean = val.trim().toUpperCase()
+      if (/^PMC\d+$/.test(clean)) return clean
+      if (/^\d+$/.test(clean)) return `PMC${clean}`
+    }
+  }
+
+  // 2. Check URL fields
+  const urlFields = [
+    source.url,
+    source.htmlUrl,
+    source.pdfUrl,
+    source.originalDocumentUrl,
+    source.sourceArticleUrl,
+    source.metadata?.url,
+    source.metadata?.htmlUrl,
+    source.metadata?.pdfUrl
+  ]
+  for (const urlVal of urlFields) {
+    if (urlVal && typeof urlVal === 'string' && urlVal.trim().startsWith('http')) {
+      const match = urlVal.match(/PMC\d+/i)
+      if (match) {
+        return match[0].toUpperCase()
+      }
+    }
+  }
+
+  return null
 }
 
 function getDisplaySourceLink(url: string): string {
@@ -1694,8 +1918,13 @@ function initOriginalDocState() {
   
   const pdfUrl = getOriginalPdfUrl(source.value)
   const hasPdf = !!pdfUrl
-  const sourceLabel = getDisplaySourceLink(pdfUrl || source.value.url || source.value.sourceUrl || '')
+  const pmcId = getNormalizedPmcId(source.value)
   
+  const defaultArticleUrl = pmcId 
+    ? `https://pmc.ncbi.nlm.nih.gov/articles/${pmcId}/`
+    : (source.value.url || source.value.sourceUrl || source.value.fullTextUrl || (source.value.doi ? `https://doi.org/${source.value.doi.replace(/^(doi|DOI):\s*/, '').trim()}` : ''))
+  const defaultArticleLabel = pmcId ? 'pmc.ncbi.nlm.nih.gov' : getDisplaySourceLink(pdfUrl || source.value.url || source.value.sourceUrl || '')
+
   if (hasPdf) {
     originalDocState.value = {
       status: 'pdf_ready',
@@ -1703,18 +1932,20 @@ function initOriginalDocState() {
       canInlinePdf: true,
       pdfDownloadUrl: pdfUrl,
       pdfViewUrl: originalDocState.value.pdfViewUrl || pdfUrl,
-      sourceArticleUrl: source.value.url || source.value.sourceUrl || source.value.fullTextUrl || (source.value.doi ? `https://doi.org/${source.value.doi.replace(/^(doi|DOI):\s*/, '').trim()}` : ''),
-      sourceLabel
+      sourceArticleUrl: defaultArticleUrl,
+      sourceLabel: defaultArticleLabel
     }
   } else {
-    const articleUrl = source.value.fullTextUrl || source.value.url || source.value.landingPageUrl || (source.value.doi ? `https://doi.org/${source.value.doi.replace(/^(doi|DOI):\s*/, '').trim()}` : '')
+    const articleUrl = pmcId 
+      ? `https://pmc.ncbi.nlm.nih.gov/articles/${pmcId}/`
+      : (source.value.fullTextUrl || source.value.url || source.value.landingPageUrl || (source.value.doi ? `https://doi.org/${source.value.doi.replace(/^(doi|DOI):\s*/, '').trim()}` : ''))
     if (articleUrl && articleUrl.trim().startsWith('http')) {
       originalDocState.value = {
         status: 'article_only',
         hasPdf: false,
         canInlinePdf: false,
         sourceArticleUrl: articleUrl.trim(),
-        sourceLabel: getDisplaySourceLink(articleUrl)
+        sourceLabel: pmcId ? 'pmc.ncbi.nlm.nih.gov' : getDisplaySourceLink(articleUrl)
       }
     } else {
       originalDocState.value = {
@@ -1728,6 +1959,22 @@ function initOriginalDocState() {
 
 async function loadInlinePdf() {
   if (!source.value) return
+  
+  const hasCloudinary = hasValidOriginalFilePdf(source.value)
+  const pmcId = getNormalizedPmcId(source.value)
+  const pdfUrl = getOriginalPdfUrl(source.value)
+  
+  if (pmcId && !hasCloudinary && (!pdfUrl || isPaywalledOrBlockedUrl(pdfUrl))) {
+    originalDocState.value = {
+      status: 'article_only',
+      hasPdf: false,
+      canInlinePdf: false,
+      sourceArticleUrl: `https://pmc.ncbi.nlm.nih.gov/articles/${pmcId}/`,
+      sourceLabel: 'pmc.ncbi.nlm.nih.gov'
+    }
+    return
+  }
+
   originalDocState.value.status = 'resolving'
   originalDocState.value.error = undefined
   originalDocState.value.reason = undefined
@@ -1810,8 +2057,64 @@ async function loadInlinePdf() {
 
 async function handleSwitchToOriginal() {
   activeTab.value = 'original'
-  if (originalDocState.value.status !== 'pdf_inline_ready') {
+  
+  const hasCloudinary = hasValidOriginalFilePdf(source.value)
+  const pmcId = getNormalizedPmcId(source.value)
+  const pdfUrl = getOriginalPdfUrl(source.value)
+  
+  if (pmcId && !hasCloudinary && (!pdfUrl || isPaywalledOrBlockedUrl(pdfUrl))) {
+    originalDocState.value = {
+      status: 'article_only',
+      hasPdf: false,
+      canInlinePdf: false,
+      sourceArticleUrl: `https://pmc.ncbi.nlm.nih.gov/articles/${pmcId}/`,
+      sourceLabel: 'pmc.ncbi.nlm.nih.gov'
+    }
+    return
+  }
+
+  if (originalDocState.value.status !== 'pdf_inline_ready' && originalDocState.value.status !== 'article_only') {
     await loadInlinePdf()
+  }
+}
+
+async function handleCacheOriginalPdf() {
+  if (!source.value) return
+  isCachingPdf.value = true
+  cacheStatus.value = 'idle'
+  cacheMessage.value = ''
+  attemptedCandidates.value = []
+  showAttemptedDetails.value = false
+  try {
+    const res = await cacheOriginalPdf(source.value._id)
+    attemptedCandidates.value = res.attemptedCandidates || []
+    if (res.success && (res.status === 'cached' || res.status === 'already_cached')) {
+      settingsStore.showToast('Lưu PDF gốc vào Cloudinary thành công.', 'success')
+      cacheStatus.value = 'success'
+      // Refresh source details
+      const id = route.params.id as string
+      source.value = await getApprovedSourceById(id)
+      initOriginalDocState()
+      
+      // Load PDF inline immediately
+      if (hasValidOriginalFilePdf(source.value)) {
+        await loadInlinePdf()
+      }
+    } else {
+      cacheStatus.value = 'failed'
+      cacheMessage.value = res.message || 'Không thể lưu PDF tự động.'
+      settingsStore.showToast(cacheMessage.value, 'error')
+    }
+  } catch (err: any) {
+    console.error('Error caching original PDF:', err)
+    cacheStatus.value = 'failed'
+    cacheMessage.value = err.response?.data?.message || err.message || 'Lỗi hệ thống khi lưu PDF.'
+    if (err.response?.data?.attemptedCandidates) {
+      attemptedCandidates.value = err.response.data.attemptedCandidates
+    }
+    settingsStore.showToast(cacheMessage.value, 'error')
+  } finally {
+    isCachingPdf.value = false
   }
 }
 
