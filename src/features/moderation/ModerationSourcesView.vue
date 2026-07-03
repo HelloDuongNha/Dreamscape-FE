@@ -85,44 +85,83 @@
               <span class="grid-label">Tạp chí / Nhà XB:</span>
               <span class="grid-value">{{ source.metadata?.journal || source.metadata?.publisher }}</span>
             </div>
-            <div class="grid-item">
-              <span class="grid-label">Người gửi:</span>
-              <span class="grid-value user-info-row">
-                <span
-                  v-if="source.submittedBy?.avatar"
-                  class="user-avatar-mini"
-                  :style="{ backgroundImage: `url(${source.submittedBy.avatar})` }"
-                ></span>
-                <span class="user-display-name">
-                  {{ source.submittedBy?.display_name || source.submittedBy?.username || 'Ẩn danh' }}
-                </span>
-                <span v-if="source.submittedBy?.email" class="user-email-text">
-                  ({{ source.submittedBy.email }})
-                </span>
-              </span>
-            </div>
+            
             <div v-if="source.submittedNote" class="grid-item grid-item--full">
               <span class="grid-label">Ghi chú đóng góp:</span>
               <p class="grid-value note-box">{{ source.submittedNote }}</p>
             </div>
+
+            <!-- Bản đọc thông minh row -->
             <div class="grid-item">
-              <span class="grid-label">Quyền sử dụng:</span>
-              <div class="grid-value">
-                <AppStatusBadge :status="source.reviewStatus === 'pending' ? 'pending_allowed_use' : (source.allowedUse || 'metadata_only')" kind="allowedUse" :is-uploaded-pdf="!!source.originalFile" />
+              <span class="grid-label">Bản đọc thông minh:</span>
+              <div class="grid-value inline-flex-center">
+                <template v-if="sourceProgressStore.contributionId === source._id && sourceProgressStore.status === 'pending'">
+                  <span class="spinner spinner-xs" style="margin-right: var(--space-2);"></span>
+                  <span class="processing-status-text">Đang nhập...</span>
+                </template>
+                <template v-else-if="source.readableInApp || (source.smartReaderStats && source.smartReaderStats.pageCount > 0)">
+                  <span>Có</span>
+                </template>
+                <template v-else-if="source.fullTextStatus === 'failed'">
+                  <span>Lỗi</span>
+                </template>
+                <template v-else>
+                  <span>Chưa có</span>
+                </template>
               </div>
             </div>
+
+            <!-- PDF gốc / PDF online row -->
             <div class="grid-item">
-              <span class="grid-label">Trạng thái bản quyền:</span>
-              <div class="grid-value">
-                <AppStatusBadge :status="source.reviewStatus === 'pending' ? 'pending_copyright' : (source.copyrightStatus || 'paywalled')" kind="copyright" :is-uploaded-pdf="!!source.originalFile" />
+              <span class="grid-label">PDF gốc / PDF online:</span>
+              <div class="grid-value inline-flex-center">
+                <template v-if="sourceProgressStore.contributionId === source._id && sourceProgressStore.status === 'pending'">
+                  <span class="spinner spinner-xs" style="margin-right: var(--space-2);"></span>
+                  <span class="processing-status-text">Đang kiểm tra...</span>
+                </template>
+                <template v-else-if="source.originalFile">
+                  <span>Đã lưu Cloudinary</span>
+                </template>
+                <template v-else-if="source.pdfUrl">
+                  <span>Có link online</span>
+                </template>
+                <template v-else-if="source.fullTextStatus === 'failed' && source.submittedNote?.toLowerCase().includes('pdf')">
+                  <span>Bị chặn / Lỗi tải</span>
+                </template>
+                <template v-else>
+                  <span>Chưa có</span>
+                </template>
               </div>
             </div>
-            <div class="grid-item">
-              <span class="grid-label">Xác thực:</span>
-              <div class="grid-value">
-                <AppStatusBadge :status="source.reviewStatus === 'pending' ? 'pending_verification' : (source.verificationStatus || 'unverified')" kind="verification" :is-uploaded-pdf="!!source.originalFile" />
+
+            <!-- Stats rows (Only shown when preprocessing is finished and readableInApp is true) -->
+            <template v-if="!(sourceProgressStore.contributionId === source._id && sourceProgressStore.status === 'pending') && (source.readableInApp || (source.smartReaderStats && source.smartReaderStats.pageCount > 0))">
+              <div class="grid-item">
+                <span class="grid-label">Số trang:</span>
+                <span class="grid-value">
+                  {{ source.smartReaderStats?.pageCount || 'Đang cập nhật' }}
+                </span>
               </div>
-            </div>
+              <div class="grid-item">
+                <span class="grid-label">Figure:</span>
+                <span class="grid-value">
+                  {{ source.smartReaderStats?.figureCount ?? 0 }}
+                </span>
+              </div>
+              <div class="grid-item">
+                <span class="grid-label">Table:</span>
+                <span class="grid-value">
+                  {{ source.smartReaderStats?.tableCount ?? 0 }}
+                </span>
+              </div>
+              <div class="grid-item">
+                <span class="grid-label">Tài liệu tham khảo:</span>
+                <span class="grid-value">
+                  {{ source.smartReaderStats?.referenceCount ?? 0 }}
+                </span>
+              </div>
+            </template>
+
             <div v-if="source.originalFile" class="grid-item grid-item--full">
               <span class="grid-label">Tài liệu đã tải lên (PDF):</span>
               <div class="pdf-info-box">
@@ -311,14 +350,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { getModerationSources, reviewSource, type SourceContribution } from '@/api/moderationApi'
+import { useSourceProgressStore } from '@/store/useSourceProgressStore'
 import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
 import AppStatusBadge from '@/components/common/AppStatusBadge.vue'
 
 const settingsStore = useSettingsStore()
+const sourceProgressStore = useSourceProgressStore()
+
+watch(() => sourceProgressStore.status, (newStatus) => {
+  if (newStatus === 'success' && activeStatus.value === 'pending') {
+    fetchSources()
+  }
+})
 
 function formatBytes(bytes?: number, decimals = 2) {
   if (!bytes) return '0 Bytes'
@@ -1060,5 +1107,46 @@ onMounted(() => {
 .pdf-action-btn--secondary:hover {
   background-color: var(--color-bg-hover, #333333);
   color: var(--color-text-primary, #ffffff);
+}
+
+.spinner-xs {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
+.processing-summary-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-1);
+}
+
+.processing-summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.inline-flex-center {
+  display: inline-flex;
+  align-items: center;
+}
+
+.stats-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.processing-status-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-primary, #60a5fa);
+  font-weight: var(--font-weight-medium);
 }
 </style>

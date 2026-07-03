@@ -422,99 +422,24 @@
                     <span class="preview-label">ISBN:</span>
                     <span class="preview-value code-font">{{ previewData.isbn }}</span>
                   </div>
-                  <div v-if="previewData.url" class="preview-row">
-                    <span class="preview-label">Liên kết URL:</span>
-                    <a :href="previewData.url" target="_blank" rel="noopener noreferrer" class="preview-value preview-link">{{ previewData.url }}</a>
-                  </div>
-                  <div v-if="previewData.fileName" class="preview-row">
+                  <div v-if="contribType === 'pdf' && previewData.fileName" class="preview-row">
                     <span class="preview-label">Tên tệp:</span>
                     <span class="preview-value">{{ previewData.fileName }}</span>
                   </div>
-                  <div v-if="previewData.fileSize" class="preview-row">
+                  <div v-if="contribType === 'pdf' && previewData.fileSize" class="preview-row">
                     <span class="preview-label">Dung lượng:</span>
                     <span class="preview-value">{{ formatBytes(previewData.fileSize) }}</span>
                   </div>
-                  <div class="preview-row">
-                    <span class="preview-label">Nguồn dữ liệu:</span>
-                    <span class="preview-value tag-value">
-                      {{ 
-                        previewData.sourceProvider === 'pdf_upload'
-                          ? 'Tải lên PDF trực tiếp'
-                          : previewData.metadataProvider === 'crossref'
-                          ? 'Crossref API'
-                          : previewData.metadataProvider === 'open_library'
-                          ? 'Open Library (ISBN)'
-                          : previewData.metadataProvider === 'google_books'
-                          ? 'Google Books (ISBN)'
-                          : 'Phân tích liên kết trực tiếp'
-                      }}
+                  <div v-if="contribType !== 'pdf'" class="preview-row">
+                    <span class="preview-label">Bản đọc thông minh:</span>
+                    <span class="preview-value" :class="previewData.fullTextAvailable ? 'badge-status badge-status--verified' : 'badge-status badge-status--unverified'">
+                      {{ previewData.fullTextAvailable ? 'Có thể nhập tự động' : 'Chưa xác định — sẽ kiểm tra sau khi gửi' }}
                     </span>
                   </div>
-                  <div class="preview-row">
-                    <span class="preview-label">Trạng thái xác thực:</span>
-                    <span v-if="contribType === 'pdf'" class="preview-value badge-status badge-status--unverified">
-                      Chờ kiểm tra thủ công
-                    </span>
-                    <span v-else :class="['preview-value', 'badge-status', previewData.verificationStatus === 'verified_doi' ? 'badge-status--verified' : 'badge-status--unverified']">
-                      {{ 
-                        previewData.verificationStatus === 'verified_doi' 
-                          ? 'Đã xác thực DOI' 
-                          : 'Chưa xác thực' 
-                      }}
-                    </span>
+                  <div v-if="contribType !== 'pdf'" class="preview-row">
+                    <span class="preview-label">PDF online:</span>
+                    <span class="preview-value badge-status badge-status--unverified">Sẽ kiểm tra sau khi gửi</span>
                   </div>
-                  <div class="preview-row">
-                    <span class="preview-label">Trạng thái Open Access:</span>
-                    <span v-if="contribType === 'pdf'" class="preview-value">Chờ duyệt</span>
-                    <span v-else class="preview-value code-font">{{ previewData.oaStatus || 'closed' }}</span>
-                  </div>
-                  <div class="preview-row">
-                    <span class="preview-label">Giấy phép bản quyền:</span>
-                    <span v-if="contribType === 'pdf'" class="preview-value">Chưa xác minh</span>
-                    <span v-else class="preview-value code-font">{{ previewData.license || 'all-rights-reserved' }}</span>
-                  </div>
-                  <div class="preview-row">
-                    <span class="preview-label">Quyền sử dụng:</span>
-                    <span v-if="contribType === 'pdf'" class="preview-value">Chờ duyệt / chỉ metadata tạm thời</span>
-                    <span v-else class="preview-value">
-                      <AppStatusBadge :status="previewData.allowedUse || 'metadata_only'" kind="allowedUse" :source-type="resolveSourceType(previewData)" :full-text-source-type="previewData.fullTextSourceType" />
-                    </span>
-                  </div>
-                  <div class="preview-row">
-                    <span class="preview-label">Trạng thái bản quyền:</span>
-                    <span v-if="contribType === 'pdf'" class="preview-value">Cần moderator kiểm tra</span>
-                    <span v-else class="preview-value">
-                      <AppStatusBadge :status="previewData.copyrightStatus || 'paywalled'" kind="copyright" :source-type="resolveSourceType(previewData)" :full-text-source-type="previewData.fullTextSourceType" />
-                    </span>
-                  </div>
-                  <div class="preview-row">
-                    <span class="preview-label">Trạng thái bản đọc:</span>
-                    <span v-if="contribType === 'pdf'" class="preview-value">PDF người dùng cung cấp — chờ kiểm tra quyền sử dụng</span>
-                    <span v-else class="preview-value">
-                      <AppStatusBadge :status="previewData.fullTextStatus || 'none'" kind="fullTextStatus" :source-type="resolveSourceType(previewData)" :full-text-source-type="previewData.fullTextSourceType" />
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Vietnamese User-Facing Warnings alert boxes -->
-                <div v-if="previewData.allowedUse === 'metadata_only' && contribType !== 'pdf'" class="preview-warning-alert preview-warning-alert--info">
-                  * Nguồn này chỉ có metadata, chưa có toàn văn để nhập.
-                </div>
-
-                <div v-if="hasSsrfWarning" class="preview-warning-alert preview-warning-alert--danger">
-                  * URL bị chặn bởi kiểm tra an toàn SSRF. Không tắt bảo vệ này.
-                </div>
-
-                <div v-if="has403Warning" class="preview-warning-alert preview-warning-alert--warning">
-                  * Máy chủ tài liệu trả về 403. Hãy upload PDF thủ công nếu bạn có quyền sử dụng.
-                </div>
-
-                <div v-if="contribType === 'isbn'" class="preview-warning-alert preview-warning-alert--info">
-                  * ISBN chỉ cung cấp metadata sách, không tự động lấy toàn văn.
-                </div>
-
-                <div v-if="contribType === 'pdf'" class="preview-warning-alert preview-warning-alert--warning">
-                  * PDF sẽ được tải lên khi bạn xác nhận gửi nguồn. Metadata và quyền sử dụng có thể cần kiểm tra thủ công.
                 </div>
 
                 <!-- Upload progress bar -->
@@ -526,11 +451,6 @@
                     <span>Đang tải tệp lên...</span>
                     <span>{{ uploadProgress }}%</span>
                   </div>
-                </div>
-
-                <!-- Open Access available notice -->
-                <div v-if="previewData.fullTextStatus === 'available' && contribType !== 'pdf'" class="preview-warning-alert">
-                  * Tài liệu này có bản đọc mở, tuy nhiên hệ thống sẽ chờ quản trị viên duyệt trước khi có thể đọc trực tiếp.
                 </div>
 
                 <!-- Duplicate DOI alert with direct redirect link -->
@@ -595,6 +515,7 @@ import { useRouter } from 'vue-router'
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
+import { useSourceProgressStore } from '@/store/useSourceProgressStore'
 import { previewSource, contributeSource, contributePdfSource, getApprovedSources } from '@/api/sourceApi'
 import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
@@ -850,22 +771,6 @@ const isInputValid = computed(() => {
   return false
 })
 
-// Vietnamese warning computations for Step 3
-const hasSsrfWarning = computed(() => {
-  if (!previewData.value || !previewData.value.warnings) return false
-  return previewData.value.warnings.some((w: string) => 
-    w.toLowerCase().includes('ssrf') || 
-    w.toLowerCase().includes('bị chặn')
-  )
-})
-
-const has403Warning = computed(() => {
-  if (!previewData.value || !previewData.value.warnings) return false
-  return previewData.value.warnings.some((w: string) => 
-    w.toLowerCase().includes('403')
-  )
-})
-
 function onFileChange(event: any) {
   const file = event.target.files?.[0]
   if (!file) {
@@ -1054,6 +959,14 @@ async function submitContribution() {
         settingsStore.showToast('PDF đã được tải lên, đang chờ duyệt nguồn.', 'success')
         closeWizard()
         await fetchApprovedSources()
+        
+        if (isModeratorUser.value) {
+          const contributionId = res.data?._id || res.data?.data?._id
+          if (contributionId) {
+            const sourceProgressStore = useSourceProgressStore()
+            sourceProgressStore.startPipeline(contributionId, previewData.value?.title || 'Tài liệu học thuật')
+          }
+        }
       }
     } else {
       const payload = {
@@ -1070,6 +983,14 @@ async function submitContribution() {
         settingsStore.showToast('Nguồn đã được gửi và đang chờ duyệt. Bạn sẽ nhận điểm đóng góp nếu nguồn được duyệt.', 'success')
         closeWizard()
         await fetchApprovedSources()
+        
+        if (isModeratorUser.value) {
+          const contributionId = res.data?._id || res.data?.data?._id
+          if (contributionId) {
+            const sourceProgressStore = useSourceProgressStore()
+            sourceProgressStore.startPipeline(contributionId, previewData.value?.title || 'Tài liệu học thuật')
+          }
+        }
       }
     }
   } catch (err: any) {

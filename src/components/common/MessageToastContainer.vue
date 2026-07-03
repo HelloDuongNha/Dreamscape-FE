@@ -54,6 +54,33 @@
       </div>
     </div>
 
+    <!-- Dedicated pinned lane for Source Pipeline notifications (Top 3) -->
+    <div
+      v-if="sourceProgressStore.isPinnedVisible && sourceProgressStore.contributionId"
+      class="source-pinned-toast"
+      @click="handleSourcePinnedClick"
+    >
+      <div class="source-pinned-toast__header">
+        <span class="source-pinned-toast__title">Nguồn: {{ sourceTitle }}</span>
+        <button
+          class="source-pinned-toast__close"
+          aria-label="Dismiss notification"
+          @click.stop="sourceProgressStore.stopTracking()"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <p class="source-pinned-toast__body" style="white-space: pre-line;">{{ sourceMessage }}</p>
+      
+      <!-- Progress Bar (only shown when pending) -->
+      <div v-if="sourceProgressStore.status === 'pending'" class="source-pinned-toast__progress-bar-bg">
+        <div class="source-pinned-toast__progress-bar-fill" :style="{ width: `${sourceProgressStore.progress}%` }"></div>
+      </div>
+    </div>
+
     <TransitionGroup name="stack-list" tag="div" class="stack-list-wrapper">
       <div
         v-for="stack in toastStore.activeStacks"
@@ -85,6 +112,7 @@ import { useChatStore }         from '@/store/useChatStore'
 import { useOracleStore }       from '@/store/useOracleStore'
 import { usePostStore }         from '@/store/usePostStore'
 import { useExtractionStore }   from '@/store/useExtractionStore'
+import { useSourceProgressStore } from '@/store/useSourceProgressStore'
 import MessageToast             from './MessageToast.vue'
 
 const toastStore = useMessageToastStore()
@@ -93,6 +121,42 @@ const router     = useRouter()
 const oracleStore = useOracleStore()
 const postStore  = usePostStore()
 const extractionStore = useExtractionStore()
+const sourceProgressStore = useSourceProgressStore()
+
+const sourceTitle = computed(() => {
+  if (sourceProgressStore.status === 'success') return 'Hoàn thành'
+  if (sourceProgressStore.status === 'failed') return 'Thất bại'
+  return 'Đang tiền xử lý...'
+})
+
+const sourceMessage = computed(() => {
+  if (sourceProgressStore.status === 'success') {
+    let readerMsg = sourceProgressStore.smartReaderResult === 'success'
+      ? 'Thành công'
+      : (sourceProgressStore.smartReaderResult === 'failed' ? 'Không nhập được' : 'Bị giới hạn nguồn')
+    
+    const pdfMap: Record<string, string> = {
+      success: 'Đã lưu Cloudinary',
+      blocked: 'Bị chặn bởi nguồn',
+      external_only: 'Có link ngoài — không lưu tự động',
+      no_candidate: 'Không có PDF online',
+      failed: 'Không lưu được',
+      none: 'Không có PDF online'
+    }
+    let pdfMsg = pdfMap[sourceProgressStore.pdfResult] || 'Không xác định'
+    
+    return `Nguồn đã được gửi vào hàng chờ duyệt.\n• Bản đọc thông minh: ${readerMsg}\n• PDF gốc online: ${pdfMsg}`
+  }
+  return `${sourceProgressStore.stepText} (${sourceProgressStore.progress}%)`
+})
+
+function handleSourcePinnedClick() {
+  if (sourceProgressStore.status === 'success' || sourceProgressStore.status === 'failed') {
+    sourceProgressStore.stopTracking()
+  } else {
+    sourceProgressStore.openDialog()
+  }
+}
 
 const oracleTitle = computed(() => {
   if (oracleStore.completedDream) return 'Hoàn thành'
@@ -417,5 +481,82 @@ async function handleToastClick(conversationId: string) {
 .card-pile-leave-to {
   opacity: 0;
   transform: scale(0.9);
+}
+/* Pinned Source toast styling */
+.source-pinned-toast {
+  width: 100%;
+  background: #181818;
+  border: 1px solid #262626;
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  pointer-events: auto;
+  box-sizing: border-box;
+  box-shadow: none;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.source-pinned-toast:hover {
+  border-color: #3e3e3e;
+  background: var(--color-bg-hover);
+}
+
+.source-pinned-toast__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.source-pinned-toast__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #10b981;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.source-pinned-toast__body {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin: 0;
+  line-height: var(--line-height-normal);
+}
+
+.source-pinned-toast__progress-bar-bg {
+  width: 100%;
+  height: 4px;
+  background: #262626;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.source-pinned-toast__progress-bar-fill {
+  height: 100%;
+  background: #10b981;
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+.source-pinned-toast__close {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.5;
+  transition: opacity var(--transition-fast);
+}
+
+.source-pinned-toast__close:hover {
+  opacity: 1;
+  color: var(--color-text-primary);
 }
 </style>

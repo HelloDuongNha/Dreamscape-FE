@@ -32,6 +32,16 @@ export interface SourceContribution {
   reviewedAt?: string
   reviewNote?: string
   metadata?: Record<string, any>
+  smartReaderStats?: {
+    pageCount: number
+    figureCount: number
+    tableCount: number
+    referenceCount: number
+    updatedAt?: string
+  }
+  readableInApp?: boolean
+  fullTextStatus?: 'none' | 'importing' | 'imported' | 'failed' | 'available'
+  pdfUrl?: string
   license?: string
   allowedUse?: 'metadata_only' | 'abstract_only' | 'open_access_fulltext'
   verificationStatus?: 'unverified' | 'verified_doi' | 'manual'

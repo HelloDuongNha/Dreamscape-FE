@@ -194,6 +194,7 @@
     <PostDetailModal />
     <OraclePendingModal />
     <ExtractionPendingModal />
+    <SourceProgressModal />
   </div>
 </template>
 
@@ -204,6 +205,7 @@ import AppSidebar from './AppSidebar.vue'
 import PostDetailModal from '@/features/home/PostDetailModal.vue'
 import OraclePendingModal from '@/components/common/OraclePendingModal.vue'
 import ExtractionPendingModal from '@/components/common/ExtractionPendingModal.vue'
+import SourceProgressModal from '@/components/common/SourceProgressModal.vue'
 import { useDreamStore } from '@/store/useDreamStore'
 import { useNotificationStore } from '@/store/useNotificationStore'
 import { useAuthStore } from '@/store/useAuthStore'
