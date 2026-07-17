@@ -30,6 +30,7 @@
           <!-- Actions -->
           <div class="app-confirm__actions">
             <button
+              type="button"
               :id="`${uid}-cancel`"
               class="app-confirm__btn app-confirm__btn--cancel"
               :disabled="loading"
@@ -38,6 +39,7 @@
               {{ cancelLabel }}
             </button>
             <button
+              type="button"
               :id="`${uid}-confirm`"
               class="app-confirm__btn"
               :class="danger ? 'app-confirm__btn--danger' : 'app-confirm__btn--confirm'"

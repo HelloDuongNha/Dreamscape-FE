@@ -20,7 +20,7 @@
         </button>
       </div>
       <p class="oracle-pinned-toast__body">{{ oracleMessage }}</p>
-      
+
       <!-- Progress Bar (only shown when pending) -->
       <div v-if="oracleStore.trackedDream.ai_status === 'pending' && !oracleStore.completedDream && !oracleStore.failedDream" class="oracle-pinned-toast__progress-bar-bg">
         <div class="oracle-pinned-toast__progress-bar-fill" :style="{ width: `${oracleStore.progress}%` }"></div>
@@ -47,7 +47,7 @@
         </button>
       </div>
       <p class="extraction-pinned-toast__body">{{ extractionMessage }}</p>
-      
+
       <!-- Progress Bar (only shown when pending) -->
       <div v-if="extractionStore.status === 'pending'" class="extraction-pinned-toast__progress-bar-bg">
         <div class="extraction-pinned-toast__progress-bar-fill" :style="{ width: `${extractionStore.progress}%` }"></div>
@@ -74,7 +74,7 @@
         </button>
       </div>
       <p class="source-pinned-toast__body" style="white-space: pre-line;">{{ sourceMessage }}</p>
-      
+
       <!-- Progress Bar (only shown when pending) -->
       <div v-if="sourceProgressStore.status === 'pending'" class="source-pinned-toast__progress-bar-bg">
         <div class="source-pinned-toast__progress-bar-fill" :style="{ width: `${sourceProgressStore.progress}%` }"></div>
@@ -130,7 +130,74 @@ const sourceTitle = computed(() => {
 })
 
 const sourceMessage = computed(() => {
+  if (sourceProgressStore.status === 'pending') {
+    return `${sourceProgressStore.stepText} (${sourceProgressStore.progress}%)`
+  }
+
+  if (sourceProgressStore.pipelineKind === 'structured') {
+    if (sourceProgressStore.status === 'success') {
+      const sourceMap: Record<string, string> = {
+        jats: 'JATS/XML',
+        html: 'HTML',
+        pdf_text: 'PDF',
+        docling_pdf: 'Docling PDF',
+        none: 'Nguồn có cấu trúc'
+      }
+      const sourceMsg = sourceMap[sourceProgressStore.selectedSource] || 'Nguồn có cấu trúc'
+      return `Nhập lại bản đọc hoàn tất.\n• Bản đọc thông minh: Thành công\n• Nguồn bản đọc: ${sourceMsg}`
+    }
+
+    if (sourceProgressStore.status === 'failed') {
+      return `Nhập lại bản đọc thất bại.\n• Bản đọc thông minh: Không tạo được\n• Chi tiết: ${sourceProgressStore.stepText}`
+    }
+  }
+
+  if (
+    sourceProgressStore.pipelineKind === 'pdf' &&
+    sourceProgressStore.status === 'failed' &&
+    sourceProgressStore.pdfResult === 'success'
+  ) {
+    if (sourceProgressStore.smartReaderResult === 'ocr_needed') {
+      return `Xử lý tài liệu PDF hoàn tất.\n• PDF gốc: Đã lưu\n• Bản đọc thông minh: Cần OCR`
+    }
+    return `Xử lý tài liệu PDF hoàn tất.\n• PDF gốc: Đã lưu\n• Bản đọc thông minh: Không tạo được\n• Chi tiết: ${sourceProgressStore.stepText}`
+  }
+
   if (sourceProgressStore.status === 'success') {
+    if (
+      sourceProgressStore.pipelineKind === 'pdf' &&
+      sourceProgressStore.selectedSource &&
+      sourceProgressStore.selectedSource !== 'none'
+    ) {
+      let readerMsg = 'Thành công'
+      if (sourceProgressStore.smartReaderResult === 'ocr_needed') {
+        readerMsg = 'Cần OCR'
+      } else if (sourceProgressStore.smartReaderResult === 'failed') {
+        readerMsg = 'Không tạo được'
+      }
+
+      const sourceMap: Record<string, string> = {
+        jats: 'JATS/XML',
+        html: 'HTML',
+        pdf_text: 'PDF parser',
+        docling_pdf: 'Docling PDF',
+        none: 'Không có'
+      }
+      let sourceMsg = sourceMap[sourceProgressStore.selectedSource] || 'Không xác định'
+
+      let idMsg = ''
+      const ids = (sourceProgressStore.detectedIdentifiers as any) || {}
+      if (ids.doi || ids.isbn || ids.pmcid) {
+        const found = []
+        if (ids.doi) found.push(`DOI: ${ids.doi}`)
+        if (ids.isbn) found.push(`ISBN: ${ids.isbn}`)
+        if (ids.pmcid) found.push(`PMCID: ${ids.pmcid}`)
+        idMsg = `\n• Định danh: ${found.join(', ')}`
+      }
+
+      return `Xử lý tài liệu PDF hoàn tất.\n• PDF gốc: Đã lưu\n• Bản đọc thông minh: ${readerMsg}\n• Nguồn bản đọc: ${sourceMsg}${idMsg}`
+    }
+
     let readerMsg = sourceProgressStore.smartReaderResult === 'success'
       ? 'Thành công'
       : (sourceProgressStore.smartReaderResult === 'failed' ? 'Không nhập được' : 'Bị giới hạn nguồn')

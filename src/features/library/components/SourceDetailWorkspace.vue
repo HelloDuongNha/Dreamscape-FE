@@ -834,56 +834,54 @@
               >
                 Duyệt
               </AppButton>
+            </template>
+
+            <AppButton
+              variant="secondary"
+              size="sm"
+              block
+              suffix-icon="⌄"
+              @click="showDebugActions = !showDebugActions"
+              style="margin-bottom: 8px;"
+            >
+              Công cụ kiểm thử
+            </AppButton>
+
+            <div v-if="showDebugActions" class="reader-debug-actions">
+              <AppButton
+                variant="secondary"
+                size="sm"
+                block
+                :class="{ 'reader-debug-action--active': isStructuredReaderActive }"
+                :loading="source.readableInApp ? isCurrentlyReimporting : isImporting"
+                @click="source.readableInApp ? promptReimport() : handleImport()"
+              >
+                {{ source.readableInApp ? 'Nhập lại từ DOI / HTML / XML' : 'Nhập từ DOI / HTML / XML' }}
+              </AppButton>
 
               <AppButton
-                v-if="isModeratorUser && source.readableInApp && source.fullTextStatus === 'imported'"
+                v-if="hasValidOriginalFilePdf(source)"
+                variant="secondary"
+                size="sm"
+                block
+                :class="{ 'reader-debug-action--active': isPdfReaderActive }"
+                :loading="isCurrentlyProcessingPdf"
+                @click="triggerPdfIngestionFlow(false)"
+              >
+                {{ source.readableInApp ? 'Tạo lại từ PDF (Docling)' : 'Tạo từ PDF (Docling)' }}
+              </AppButton>
+
+              <AppButton
+                v-if="source.readableInApp && source.fullTextStatus === 'imported'"
                 variant="secondary"
                 size="sm"
                 block
                 :loading="isCurrentlyExtracting"
                 @click="handleExtractCandidates"
-                style="margin-bottom: 8px;"
               >
                 Phân tích để lấy luật
               </AppButton>
-
-              <AppButton
-                v-if="isModeratorUser"
-                :variant="source.readableInApp ? 'danger' : 'primary'"
-                size="sm"
-                block
-                :loading="source.readableInApp ? isCurrentlyReimporting : isImporting"
-                @click="source.readableInApp ? promptReimport() : handleImport()"
-                style="margin-bottom: 8px;"
-              >
-                {{ source.readableInApp ? 'Nhập lại bản đọc' : 'Nhập bản đọc thông minh' }}
-              </AppButton>
-            </template>
-            <template v-else>
-              <AppButton
-                v-if="isModeratorUser && source.readableInApp && source.fullTextStatus === 'imported'"
-                variant="secondary"
-                size="sm"
-                block
-                :loading="isCurrentlyExtracting"
-                @click="handleExtractCandidates"
-                style="margin-bottom: 8px;"
-              >
-                Phân tích để lấy luật
-              </AppButton>
-
-              <AppButton
-                v-if="isModeratorUser"
-                :variant="source.readableInApp ? 'danger' : 'primary'"
-                size="sm"
-                block
-                :loading="source.readableInApp ? isCurrentlyReimporting : isImporting"
-                @click="source.readableInApp ? promptReimport() : handleImport()"
-                style="margin-bottom: 8px;"
-              >
-                {{ source.readableInApp ? 'Nhập lại bản đọc' : 'Nhập bản đọc thông minh' }}
-              </AppButton>
-            </template>
+            </div>
 
             <div v-if="hasApprovedRules" class="tech-row" style="margin-top: var(--space-2); color: #10b981; font-size: 0.85rem; font-weight: 500;">
               Tài liệu này đã đóng góp các quy luật được phê duyệt.
@@ -1028,14 +1026,26 @@
         </div>
       </div>
 
+      <!-- PDF Regeneration confirmation dialog -->
+      <AppConfirm
+        v-model="showPdfRegenConfirm"
+        title="Dựng lại bản đọc từ PDF"
+        :message="pdfRegenConfirmMessage"
+        confirm-label="Tiếp tục dựng"
+        cancel-label="Hủy"
+        :danger="source.extractionMethod === 'jats' || source.extractionMethod === 'html'"
+        :loading="isCurrentlyProcessingPdf"
+        @confirm="handlePdfRegenConfirm"
+        @cancel="showPdfRegenConfirm = false"
+      />
+
       <!-- Re-import confirmation dialog -->
       <AppConfirm
         v-model="showReimportConfirm"
-        title="Thiết lập lại & Nhập lại bản đọc"
-        message="Thao tác này sẽ xóa vĩnh viễn toàn bộ bản đọc hiện tại, các phân đoạn (sections), chunks, các đề xuất luật (candidates) và bằng chứng liên kết đã trích xuất. Đặc biệt: Nếu quá trình nhập bản đọc mới gặp lỗi thất bại, toàn bộ bản đọc cũ của tài liệu này vẫn sẽ bị mất. Bạn có chắc chắn muốn tiếp tục?"
-        confirm-label="Nhập lại"
+        title="Dựng lại bản đọc từ DOI / HTML / XML"
+        message="Thao tác này sẽ lấy lại nội dung có cấu trúc và ghi đè bản đọc hiện tại. Nếu nguồn mới không nhập được, bản đọc đang có sẽ được giữ nguyên. Bạn có chắc chắn muốn tiếp tục?"
+        confirm-label="Tiếp tục dựng"
         cancel-label="Hủy"
-        :danger="true"
         :loading="isCurrentlyReimporting"
         @confirm="handleReimportConfirm"
         @cancel="showReimportConfirm = false"
@@ -1146,9 +1156,10 @@ import { getApprovedSourceById, getApprovedSourceRead, getApprovedSourceOriginal
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
-import { importFullText, reimportFullText, getSourcePreview, reviewSource, getModerationSourcePdfInline, cacheModerationSourceOriginalPdf, uploadModerationSourcePdf, deleteModerationSourceOriginalPdf } from '@/api/moderationApi'
+import { getSourcePreview, reviewSource, getModerationSourcePdfInline, cacheModerationSourceOriginalPdf, uploadModerationSourcePdf, deleteModerationSourceOriginalPdf } from '@/api/moderationApi'
 import { getRuleCandidates } from '@/api/ruleCandidateApi'
 import { useExtractionStore } from '@/store/useExtractionStore'
+import { useSourceProgressStore } from '@/store/useSourceProgressStore'
 import AppButton from '@/components/common/AppButton.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 
@@ -1180,8 +1191,11 @@ function classifyHeading(text: string): string {
   const clean = text.toLowerCase()
     .replace(/[0-9\.\-\:\(\)\*•\s]+/g, ' ')
     .trim();
-  
-  if (/(^| )(references|bibliography|tài liệu tham khảo|literatures? cited)(s?|$)/.test(clean)) {
+
+  // Section state must only change for a canonical References heading. A body
+  // heading such as "dreams with and without direct references to the
+  // pandemic" must not turn every following paragraph/table into a reference.
+  if (/^(references?|bibliography|tài liệu tham khảo|literatures? cited)$/.test(clean)) {
     return 'references';
   }
   if (/(^| )(supporting information|supplementary|additional files?|appendices|appendix)(s?|$)/.test(clean)) {
@@ -1217,7 +1231,10 @@ function isNewSupplementaryItemStart(text: string): boolean {
   if (/^appendix\s+[a-z0-9]+/i.test(lower)) {
     return true;
   }
-  if (/^supplementary\s+(file|table|figure|video|text|data|doc|raw|material)\s+[a-z0-9]+/i.test(lower)) {
+  // Require an actual item identifier. Prose such as "Supplementary data to
+  // this article can be found online at <DOI>" is not a downloadable item and
+  // must remain ordinary reader text instead of becoming a fabricated card.
+  if (/^supplementary\s+(file|table|figure|video|text|data|doc|raw|material)\s+(?:s?\d+|[a-z]\d*)\b/i.test(lower)) {
     return true;
   }
   if (/^s\d+[\s\.\:]/i.test(lower)) {
@@ -1736,7 +1753,7 @@ function processReaderContent(sections: any[], quality = 'low', engine: string) 
   sections.forEach(block => {
     let text = (block.text || '').replace(/\s+/g, ' ').trim()
     if (!text && !block.html) return
-    
+
     const rawType = block.type || block.sectionType || block.blockType
     let type = 'paragraph'
     if (rawType === 'heading') type = 'heading'
@@ -2596,6 +2613,12 @@ async function uploadOriginalPdfFile(file: File) {
       if (hasValidOriginalFilePdf(source.value)) {
         await loadInlinePdf()
       }
+
+      // Auto-trigger PDF ingestion processing only when reader is missing
+      const isReaderMissing = !source.value.readableInApp || source.value.fullTextStatus !== 'imported'
+      if (isReaderMissing) {
+        triggerPdfIngestionFlow(false)
+      }
     } else {
       settingsStore.showToast(res.message || 'Lỗi khi tải lên tệp PDF.', 'error')
     }
@@ -2975,6 +2998,7 @@ function handleReaderContentClick(event: MouseEvent) {
 }
 
 const isLoadingReader = ref(false)
+
 const readerError = ref('')
 const readerMetadata = ref<string[]>([])
 const readerMetadataBlocks = ref<any[]>([])
@@ -3193,6 +3217,19 @@ const isModeratorUser = computed(() => {
   return !!(currentUserId && moderators.map(e => e.trim().toLowerCase()).includes(currentUserId.toLowerCase()))
 })
 
+const showDebugActions = ref(false)
+const readerProvenance = computed(() => String(
+  source.value?.extractionMethod || smartReaderSourceType.value || extractionEngine.value || ''
+).toLowerCase())
+const isStructuredReaderActive = computed(() =>
+  ['jats', 'html'].includes(readerProvenance.value) ||
+  /xml|html|jats|plos|frontiers|pmc/.test(readerProvenance.value)
+)
+const isPdfReaderActive = computed(() =>
+  ['pdf_text', 'ocr', 'mixed'].includes(readerProvenance.value) ||
+  /docling|uploaded_pdf|pymupdf|pdf_parse/.test(readerProvenance.value)
+)
+
 const hasImportCandidate = computed(() => {
   if (!source.value) return false
   const hasCloudinary = !!(source.value.originalFile?.cloudinaryPublicId && source.value.originalFile?.storageProvider === 'cloudinary')
@@ -3210,40 +3247,12 @@ async function handleImport() {
   if (source.value && (isEligibleForImport.value || isModeratorUser.value)) {
     isImporting.value = true
     try {
-      const res = (await importFullText(source.value._id)) as any
-      if (res.success) {
-        if (res.warnings && res.warnings.length > 0) {
-          settingsStore.showToast(`Nhập bản đọc thành công với cảnh báo: ${res.warnings.join(', ')}`, 'success')
-        } else {
-          settingsStore.showToast('Nhập bản đọc thành công!', 'success')
-        }
-      } else {
-        const importErr = res.error || res.message || ''
-        let friendly = 'Không thể kết nối đến máy chủ nhập bản đọc.'
-        if (importErr.includes('403') || importErr.includes('publisher_blocked')) {
-          friendly = 'Máy chủ tài liệu trả về 403 (Publisher blocked). Hãy upload PDF thủ công hoặc mở link gốc.'
-        } else if (importErr.includes('SSRF')) {
-          friendly = 'URL bị chặn bởi kiểm tra an toàn SSRF. Không tắt bảo vệ này.'
-        } else if (importErr.includes('Tài liệu không có tệp') || importErr.includes('không hỗ trợ bản đọc')) {
-          friendly = 'Nguồn này chỉ có metadata, chưa có toàn văn để nhập.'
-        } else if (importErr) {
-          friendly = importErr
-        }
-        settingsStore.showToast(`Nhập bản đọc thất bại: ${friendly}`, 'error')
-      }
-    } catch (err: any) {
-      console.error('Import source error:', err)
-      const errData = err.response?.data
-      const importErr = errData?.error || errData?.message || err.message || ''
-      let friendly = 'Không thể kết nối đến máy chủ nhập bản đọc.'
-      if (importErr.includes('403') || importErr.includes('publisher_blocked') || importErr.includes('candidate_fetch_failed')) {
-        friendly = 'Nhà xuất bản chặn tải tự động. Hãy upload PDF thủ công hoặc mở link gốc để đọc.'
-      } else if (importErr.includes('SSRF')) {
-        friendly = 'URL bị chặn bởi kiểm tra an toàn SSRF.'
-      } else if (importErr) {
-        friendly = importErr
-      }
-      settingsStore.showToast(`Nhập bản đọc thất bại: ${friendly}`, 'error')
+      const sourceProgressStore = useSourceProgressStore()
+      await sourceProgressStore.startStructuredReader(
+        source.value._id,
+        source.value.title || 'Tài liệu học thuật',
+        false
+      )
     } finally {
       await fetchSource()
       isImporting.value = false
@@ -3293,54 +3302,76 @@ function promptReimport() {
 }
 
 async function handleReimportConfirm() {
-  if (source.value) {
-    isCurrentlyReimporting.value = true
-    try {
-      const res = await reimportFullText(source.value._id)
-      if (res.success) {
-        if (res.reimported) {
-          if (res.warnings && res.warnings.length > 0) {
-            settingsStore.showToast(`Nhập lại bản đọc thành công với cảnh báo: ${res.warnings.join(', ')}`, 'success')
-          } else {
-            settingsStore.showToast('Nhập lại bản đọc thành công.', 'success')
-          }
-        } else {
-          const importErr = res.importResult?.error || res.importResult?.message || ''
-          let friendly = 'Không thể kết nối đến máy chủ nhập bản đọc.'
-          if (importErr.includes('403')) {
-            friendly = 'Máy chủ tài liệu trả về 403. Hãy upload PDF thủ công hoặc dùng link PDF công khai khác.'
-          } else if (importErr.includes('SSRF')) {
-            friendly = 'URL bị chặn bởi kiểm tra an toàn SSRF. Không tắt bảo vệ này.'
-          } else if (importErr.includes('Tài liệu không có tệp') || importErr.includes('không hỗ trợ bản đọc') || importErr.includes('metadata_only') || importErr.includes('metadata-only')) {
-            friendly = 'Nguồn này chỉ có thông tin mô tả (Metadata), không tìm thấy nội dung toàn văn để nhập bản đọc.'
-          } else if (importErr) {
-            friendly = importErr
-          }
-          settingsStore.showToast(`Nhập lại bản đọc thất bại: ${friendly}`, 'error')
-        }
-        showReimportConfirm.value = false
-        await fetchSource()
-      }
-    } catch (err: any) {
-      console.error('Reimport source error:', err)
-      const errData = err.response?.data
-      const importErr = errData?.error || errData?.message || err.message || ''
-      let friendly = 'Không thể nhập lại tài liệu.'
-      if (importErr.includes('403') || importErr.includes('publisher_blocked') || importErr.includes('candidate_fetch_failed')) {
-        friendly = 'Nhà xuất bản chặn tải tự động. Hãy upload PDF thủ công hoặc mở link gốc để đọc.'
-      } else if (importErr.includes('SSRF')) {
-        friendly = 'URL bị chặn bởi kiểm tra an toàn SSRF.'
-      } else if (importErr.includes('metadata_only') || importErr.includes('metadata-only')) {
-        friendly = 'Nguồn này chỉ có thông tin mô tả (Metadata), không tìm thấy nội dung toàn văn để nhập bản đọc.'
-      } else if (importErr) {
-        friendly = importErr
-      }
-      settingsStore.showToast(`Nhập lại bản đọc thất bại: ${friendly}`, 'error')
-    } finally {
-      isCurrentlyReimporting.value = false
-    }
+  const currentSource = source.value
+  if (!currentSource) return
+
+  isCurrentlyReimporting.value = true
+  showReimportConfirm.value = false
+  await nextTick()
+
+  try {
+    const sourceProgressStore = useSourceProgressStore()
+    await sourceProgressStore.startStructuredReader(
+      currentSource._id,
+      currentSource.title || 'Tài liệu học thuật',
+      true
+    )
+    await fetchSource()
+  } finally {
+    isCurrentlyReimporting.value = false
   }
 }
+
+const showPdfRegenConfirm = ref(false)
+const isCurrentlyProcessingPdf = ref(false)
+
+const pdfRegenConfirmMessage = computed(() => {
+  if (!source.value) return ''
+  const isJatsOrHtml = source.value.extractionMethod === 'jats' || source.value.extractionMethod === 'html'
+  if (isJatsOrHtml) {
+    return 'Cảnh báo: Bản đọc hiện tại được dựng từ định dạng có cấu trúc chất lượng cao (JATS XML/HTML). Việc dựng lại bản đọc từ PDF có thể làm giảm chất lượng cấu trúc và mất một số định dạng gốc. Bạn có chắc chắn muốn tiếp tục?'
+  }
+  return 'Thao tác này sẽ dựng lại bản đọc thông minh từ file PDF gốc hiện tại. Các chương mục, phân đoạn và chunks cũ sẽ được ghi đè. Bạn có chắc chắn muốn tiếp tục?'
+})
+
+function triggerPdfIngestionFlow(force = false) {
+  if (!source.value) return
+  const isReaderExists = source.value.readableInApp && source.value.fullTextStatus === 'imported'
+  if (isReaderExists && !force) {
+    showPdfRegenConfirm.value = true
+    return
+  }
+  runPdfIngestion(force)
+}
+
+async function runPdfIngestion(force = false) {
+  if (!source.value) return
+  isCurrentlyProcessingPdf.value = true
+  showPdfRegenConfirm.value = false
+
+  try {
+    const sourceProgressStore = useSourceProgressStore()
+    const targetType = props.mode === 'moderation' ? 'contribution' : 'approved_source'
+
+    await sourceProgressStore.startPdfOnlyPipeline(
+      source.value._id,
+      source.value.title || 'Tài liệu học thuật',
+      targetType,
+      force
+    )
+  } catch (err: any) {
+    console.error('PDF ingestion failed:', err)
+    settingsStore.showToast(err.message || 'Lỗi khi xử lý tệp PDF.', 'error')
+  } finally {
+    isCurrentlyProcessingPdf.value = false
+    await fetchSource()
+  }
+}
+
+async function handlePdfRegenConfirm() {
+  await runPdfIngestion(true)
+}
+
 
 const isReviewing = ref(false)
 
@@ -3435,60 +3466,6 @@ function mergeSourcePreservingReaderState(previous: any, incoming: any): any {
   }
 }
 
-const autoImportedForSourceId = ref<string | null>(null)
-const autoImportFailed = ref(false)
-
-async function maybeAutoImportSmartReader() {
-  if (props.mode !== 'moderation') return
-  if (!source.value) return
-  // Only auto-import if smart reader not yet available
-  if (source.value.readableInApp) return
-  const sid = source.value._id
-  // Do not retry if already attempted for this source
-  if (autoImportedForSourceId.value === sid) return
-  // Do not run if already importing
-  if (isImporting.value) return
-  // Must have some candidate to import from
-  if (!hasImportCandidate.value) return
-  autoImportedForSourceId.value = sid
-  autoImportFailed.value = false
-  isImporting.value = true
-  try {
-    const res = (await importFullText(sid)) as any
-    if (res.success) {
-      settingsStore.showToast('Bản đọc thông minh đã được nhập tự động.', 'success')
-    } else {
-      const importErr = res.error || res.message || ''
-      let friendly = 'Không thể nhập bản đọc tự động. Bạn có thể thử lại thủ công.'
-      if (importErr.includes('403') || importErr.includes('publisher_blocked')) {
-        friendly = 'Nhà xuất bản chặn tải tự động. Hãy upload PDF thủ công.'
-      } else if (importErr.includes('SSRF')) {
-        friendly = 'URL bị chặn bởi kiểm tra an toàn SSRF.'
-      } else if (importErr) {
-        friendly = importErr
-      }
-      settingsStore.showToast(`Nhập tự động thất bại: ${friendly}`, 'error')
-      autoImportFailed.value = true
-    }
-  } catch (err: any) {
-    const errData = err.response?.data
-    const importErr = errData?.error || errData?.message || err.message || ''
-    let friendly = 'Không thể kết nối đến máy chủ nhập bản đọc.'
-    if (importErr.includes('403') || importErr.includes('publisher_blocked') || importErr.includes('candidate_fetch_failed')) {
-      friendly = 'Nhà xuất bản chặn tải tự động. Hãy upload PDF thủ công.'
-    } else if (importErr.includes('SSRF')) {
-      friendly = 'URL bị chặn bởi kiểm tra an toàn SSRF.'
-    } else if (importErr) {
-      friendly = importErr
-    }
-    settingsStore.showToast(`Nhập tự động thất bại: ${friendly}`, 'error')
-    autoImportFailed.value = true
-  } finally {
-    await fetchSource()
-    isImporting.value = false
-  }
-}
-
 async function fetchSourceByIdOrPreview(id: string) {
   if (props.mode === 'moderation') {
     const res = await getSourcePreview(id)
@@ -3543,10 +3520,8 @@ async function fetchSource() {
           }
         } else if (source.value && getOriginalPdfUrl(source.value)) {
           activeTab.value = 'original'
-          await loadInlinePdf()
+          loadInlinePdf()
         }
-        // Auto-import smart reader for pending contributions that don't have it yet
-        await maybeAutoImportSmartReader()
       } else {
         hasError.value = true
       }
@@ -3560,7 +3535,7 @@ async function fetchSource() {
           await fetchAllReaderData()
         } else if (getOriginalPdfUrl(source.value)) {
           activeTab.value = 'original'
-          await loadInlinePdf()
+          loadInlinePdf()
         }
       }
     }
@@ -3590,10 +3565,19 @@ function updateTableSizingClasses() {
       const table = wrapper.querySelector('table')
       if (!table) return
 
-      const origStyle = table.style.width
-      table.style.width = 'max-content'
-      const naturalWidth = table.offsetWidth || table.scrollWidth
-      table.style.width = origStyle
+      const origWidth = table.style.width
+      const origMaxWidth = table.style.maxWidth
+      const origWhiteSpace = table.style.whiteSpace
+
+      table.style.width = 'auto'
+      table.style.maxWidth = 'none'
+      table.style.whiteSpace = 'nowrap'
+
+      const naturalWidth = table.scrollWidth || table.offsetWidth
+
+      table.style.width = origWidth
+      table.style.maxWidth = origMaxWidth
+      table.style.whiteSpace = origWhiteSpace
 
       const block = wrapper.closest('.reader-block')
       if (!block) return
@@ -3638,6 +3622,22 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.reader-debug-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--color-border, #262626);
+  border-radius: var(--radius-md, 6px);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+:deep(.reader-debug-action--active) {
+  border-color: var(--color-primary, #ffffff) !important;
+  box-shadow: inset 0 0 0 1px var(--color-primary, #ffffff);
+}
+
 .source-detail-container {
   width: 100%;
   max-width: none;
@@ -4374,6 +4374,16 @@ onUnmounted(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   display: block;
   margin: 0 auto;
+}
+
+/* Docling artifacts are validated scientific figures rather than publisher
+   furniture. Let their extracted crop fill the same reader width used by
+   high-resolution structured-source figures while preserving aspect ratio. */
+:deep(.figure-block .docling-figure-img),
+:deep(.figure-block[data-cloudinary-public-id] .figure-img) {
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
 }
 
 :deep(.figure-block .caption),

@@ -964,7 +964,7 @@ async function submitContribution() {
           const contributionId = res.data?._id || res.data?.data?._id
           if (contributionId) {
             const sourceProgressStore = useSourceProgressStore()
-            sourceProgressStore.startPipeline(contributionId, previewData.value?.title || 'Tài liệu học thuật')
+            sourceProgressStore.startPdfOnlyPipeline(contributionId, previewData.value?.title || 'Tài liệu học thuật', 'contribution', false, true)
           }
         }
       }

@@ -183,3 +183,11 @@ export const deleteApprovedSourceOriginalPdf = async (id: string): Promise<any> 
   const { data } = await apiClient.delete<any>(`/sources/approved/${id}/original-pdf`)
   return data
 }
+
+/**
+ * Triggers PDF ingestion processing for approved academic sources.
+ */
+export const processUploadedPdfForApprovedSource = async (id: string, forceReplace = false, structuredFirst = false): Promise<any> => {
+  const { data } = await apiClient.post<any>(`/sources/approved/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst })
+  return data
+}

@@ -53,7 +53,7 @@
           <!-- Card Header -->
           <div class="source-card__header">
             <h4 class="source-card__title">
-              {{ source.metadata?.title || 'Tài liệu không có tiêu đề' }}
+              {{ source.title || source.metadata?.title || 'Tài liệu không có tiêu đề' }}
             </h4>
             <div style="display: flex; gap: var(--space-2); align-items: center;">
               <span v-if="source.originalFile" class="pdf-badge">PDF Upload</span>
@@ -302,7 +302,7 @@
                 Bạn có chắc chắn muốn <strong>{{ reviewAction === 'approved' ? 'duyệt' : 'từ chối' }}</strong> nguồn đóng góp này?
               </p>
               <div class="selected-source-preview">
-                <strong>{{ selectedSource?.metadata?.title || 'Tài liệu không có tiêu đề' }}</strong>
+                <strong>{{ selectedSource?.title || selectedSource?.metadata?.title || 'Tài liệu không có tiêu đề' }}</strong>
                 <div v-if="selectedSource?.doi" class="mono text-xs">{{ selectedSource.doi }}</div>
                 <div v-if="selectedSource?.originalFile" class="text-xs" style="margin-top: 4px; color: var(--color-text-muted);">
                   Tệp: {{ selectedSource.originalFile.originalFileName }} ({{ formatBytes(selectedSource.originalFile.fileSize) }})

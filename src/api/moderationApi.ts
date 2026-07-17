@@ -21,6 +21,7 @@ export interface SourceContributionUser {
 
 export interface SourceContribution {
   _id: string
+  title?: string
   submittedBy: SourceContributionUser
   doi?: string
   normalizedDoi?: string
@@ -217,6 +218,14 @@ export const uploadModerationSourcePdf = async (id: string, file: File): Promise
  */
 export const deleteModerationSourceOriginalPdf = async (id: string): Promise<any> => {
   const { data } = await apiClient.delete<any>(`/moderation/sources/${id}/original-pdf`)
+  return data
+}
+
+/**
+ * Triggers PDF ingestion extraction/compilation processing for moderation contributions.
+ */
+export const processUploadedPdfForContribution = async (id: string, forceReplace = false, structuredFirst = false): Promise<any> => {
+  const { data } = await apiClient.post<any>(`/moderation/sources/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst })
   return data
 }
 

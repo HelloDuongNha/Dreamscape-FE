@@ -6,7 +6,7 @@
         class="modal-overlay"
         role="dialog"
         aria-modal="true"
-        aria-label="Đang xử lý nguồn đóng góp..."
+        :aria-label="modalTitle"
         @click.self="sourceProgressStore.minimizeDialog()"
         @keydown.esc="sourceProgressStore.minimizeDialog()"
       >
@@ -14,7 +14,7 @@
           <!-- Modal header -->
           <div class="modal-header">
             <div class="modal-title-area">
-              <span class="modal-title-text">Đóng góp tài liệu</span>
+              <span class="modal-title-text">{{ modalTitle }}</span>
             </div>
 
             <div class="modal-header__right">
@@ -34,7 +34,7 @@
           <div class="modal-body-content">
             <div class="modal-source-info">
               <h3 class="source-title-heading">{{ sourceProgressStore.sourceTitle }}</h3>
-              <p class="source-subtitle">Hệ thống đang tiền xử lý nguồn, tải PDF và xây dựng bản đọc thông minh tự động...</p>
+              <p class="source-subtitle">{{ modalSubtitle }}</p>
             </div>
 
             <!-- Pending Loading Content -->
@@ -61,9 +61,26 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
 
 const sourceProgressStore = useSourceProgressStore()
+
+const modalTitle = computed(() => {
+  if (sourceProgressStore.pipelineKind === 'structured') return 'Nhập lại bản đọc'
+  if (sourceProgressStore.pipelineKind === 'pdf') return 'Tạo bản đọc từ PDF'
+  return 'Đóng góp tài liệu'
+})
+
+const modalSubtitle = computed(() => {
+  if (sourceProgressStore.pipelineKind === 'structured') {
+    return 'Hệ thống đang lấy lại nội dung có cấu trúc từ DOI, JATS/XML hoặc HTML.'
+  }
+  if (sourceProgressStore.pipelineKind === 'pdf') {
+    return 'Hệ thống đang phân tích PDF bằng Docling và dựng Bản đọc thông minh.'
+  }
+  return 'Hệ thống đang tiền xử lý nguồn, tải PDF và xây dựng Bản đọc thông minh tự động...'
+})
 </script>
 
 <style scoped>
