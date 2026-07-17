@@ -180,23 +180,24 @@
                   </div>
                 </div>
                 <div class="pdf-info-actions">
-                  <a
+                  <button
                     v-if="source.originalFile.cloudinarySecureUrl"
-                    :href="source.originalFile.cloudinarySecureUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    type="button"
                     class="pdf-action-btn pdf-action-btn--primary"
+                    :disabled="activePdfActionId === source._id"
+                    @click="openStoredPdf(source)"
                   >
-                    Mở PDF ↗
-                  </a>
-                  <a
+                    {{ activePdfActionId === source._id ? 'Đang mở...' : 'Mở PDF ↗' }}
+                  </button>
+                  <button
                     v-if="source.originalFile.cloudinarySecureUrl"
-                    :href="source.originalFile.cloudinarySecureUrl"
-                    download
+                    type="button"
                     class="pdf-action-btn pdf-action-btn--secondary"
+                    :disabled="activePdfActionId === source._id"
+                    @click="requestPdfDownload(source)"
                   >
                     Tải PDF
-                  </a>
+                  </button>
                 </div>
               </div>
             </div>
@@ -346,17 +347,29 @@
         </div>
       </Transition>
     </Teleport>
+
+    <AppConfirm
+      v-model="showPdfDownloadConfirm"
+      title="Tải tài liệu PDF"
+      :message="pdfDownloadConfirmMessage"
+      confirm-label="Tải về"
+      cancel-label="Hủy"
+      :loading="isDownloadingPdf"
+      @confirm="confirmPdfDownload"
+      @cancel="cancelPdfDownload"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useSettingsStore } from '@/store/useSettingsStore'
-import { getModerationSources, reviewSource, type SourceContribution } from '@/api/moderationApi'
+import { getModerationSources, getModerationSourcePdfInline, reviewSource, type SourceContribution } from '@/api/moderationApi'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
 import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
 import AppStatusBadge from '@/components/common/AppStatusBadge.vue'
+import AppConfirm from '@/components/common/AppConfirm.vue'
 
 const settingsStore = useSettingsStore()
 const sourceProgressStore = useSourceProgressStore()
@@ -395,6 +408,15 @@ const showReviewModal = ref(false)
 const selectedSource = ref<SourceContribution | null>(null)
 const reviewAction = ref<'approved' | 'rejected'>('approved')
 const reviewNote = ref('')
+const showPdfDownloadConfirm = ref(false)
+const pendingPdfDownload = ref<SourceContribution | null>(null)
+const isDownloadingPdf = ref(false)
+const activePdfActionId = ref<string | null>(null)
+
+const pdfDownloadConfirmMessage = computed(() => {
+  const name = pendingPdfDownload.value?.originalFile?.originalFileName || 'tài liệu này'
+  return `Tải “${name}” về thiết bị của bạn?`
+})
 
 const tabs = [
   { status: 'pending' as const, label: 'Chờ duyệt' },
@@ -519,6 +541,72 @@ function formatDate(dateStr?: string) {
     })
   } catch {
     return dateStr
+  }
+}
+
+async function fetchStoredPdf(source: SourceContribution): Promise<Blob> {
+  const blob = await getModerationSourcePdfInline(source._id)
+  if (blob.type !== 'application/pdf') {
+    let message = 'Tệp trả về không phải PDF hợp lệ.'
+    try {
+      const parsed = JSON.parse(await blob.text())
+      message = parsed?.message || message
+    } catch {}
+    throw new Error(message)
+  }
+  return blob
+}
+
+async function openStoredPdf(source: SourceContribution) {
+  const previewWindow = window.open('', '_blank')
+  activePdfActionId.value = source._id
+  try {
+    const blob = await fetchStoredPdf(source)
+    const blobUrl = URL.createObjectURL(blob)
+    if (!previewWindow) throw new Error('Trình duyệt đã chặn tab xem PDF.')
+    previewWindow.opener = null
+    previewWindow.location.href = blobUrl
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+  } catch (error: any) {
+    previewWindow?.close()
+    settingsStore.showToast(error.message || 'Không thể mở PDF.', 'error')
+  } finally {
+    activePdfActionId.value = null
+  }
+}
+
+function requestPdfDownload(source: SourceContribution) {
+  pendingPdfDownload.value = source
+  showPdfDownloadConfirm.value = true
+}
+
+function cancelPdfDownload() {
+  showPdfDownloadConfirm.value = false
+  pendingPdfDownload.value = null
+}
+
+async function confirmPdfDownload() {
+  const source = pendingPdfDownload.value
+  if (!source) return
+  isDownloadingPdf.value = true
+  activePdfActionId.value = source._id
+  try {
+    const blob = await fetchStoredPdf(source)
+    const blobUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = source.originalFile?.originalFileName || `${source.title || 'document'}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(blobUrl)
+    settingsStore.showToast('Đã bắt đầu tải PDF.', 'success')
+    cancelPdfDownload()
+  } catch (error: any) {
+    settingsStore.showToast(error.message || 'Không thể tải PDF.', 'error')
+  } finally {
+    isDownloadingPdf.value = false
+    activePdfActionId.value = null
   }
 }
 
