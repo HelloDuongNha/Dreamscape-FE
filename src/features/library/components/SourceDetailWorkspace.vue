@@ -248,20 +248,8 @@
                     
                     <!-- Action Buttons -->
                     <div style="display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-4); width: 100%; max-width: 400px; align-items: center;">
-                      <a v-if="pmcArticleUrl" :href="pmcArticleUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--primary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
-                        Mở bài viết trên PMC ↗
-                      </a>
-                      <a v-if="pmcPdfUrl" :href="pmcPdfUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--secondary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
-                        Mở trang tải PDF trên PMC ↗
-                      </a>
-                      <a v-if="wileyEpdfUrl" :href="wileyEpdfUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--primary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
-                        Mở Wiley ePDF ↗
-                      </a>
-                      <a v-if="externalPdfUrl && !wileyEpdfUrl && externalPdfUrl !== pmcPdfUrl" :href="externalPdfUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--primary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
-                        Mở link PDF gốc ↗
-                      </a>
-                      <a v-if="externalArticleUrl && externalArticleUrl !== pmcArticleUrl" :href="externalArticleUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--secondary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
-                        Mở trang nguồn ↗
+                      <a v-if="preferredExternalDocumentUrl" :href="preferredExternalDocumentUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--primary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
+                        {{ preferredExternalDocumentLabel }} ↗
                       </a>
                       
                       <!-- Manual Upload action button -->
@@ -330,14 +318,14 @@
                     Chi tiết: {{ originalDocState.error || originalDocState.reason }}
                   </div>
                   <a 
-                    v-if="originalLink"
-                    :href="originalLink"
+                    v-if="preferredExternalDocumentUrl"
+                    :href="preferredExternalDocumentUrl"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="sidebar-action-btn sidebar-action-btn--primary"
                     style="text-align: center; display: block; width: 100%; max-width: 400px; text-decoration: none; margin-top: var(--space-3);"
                   >
-                    Mở liên kết tài liệu gốc ↗
+                    {{ preferredExternalDocumentLabel }} ↗
                   </a>
                 </div>
               </div>
@@ -934,37 +922,15 @@
             
             <!-- Case 2: External PDF Link or PMC PDF download (not cached yet) -->
             <template v-else-if="originalDocStatusLabel === 'Có link PDF ngoài' || originalDocStatusLabel === 'Không thể lưu tự động'">
-              <a 
-                v-if="externalPdfUrl"
-                :href="externalPdfUrl"
+              <a
+                v-if="preferredExternalDocumentUrl"
+                :href="preferredExternalDocumentUrl"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="sidebar-action-btn sidebar-action-btn--primary"
                 style="text-align: center; display: block; text-decoration: none;"
               >
-                Mở PDF ngoài ↗
-              </a>
-              
-              <a 
-                v-if="pmcArticleUrl"
-                :href="pmcArticleUrl"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="sidebar-action-btn sidebar-action-btn--secondary"
-                style="text-align: center; display: block; text-decoration: none;"
-              >
-                Mở bài viết trên PMC ↗
-              </a>
-              
-              <a 
-                v-if="wileyEpdfUrl"
-                :href="wileyEpdfUrl"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="sidebar-action-btn sidebar-action-btn--primary"
-                style="text-align: center; display: block; text-decoration: none;"
-              >
-                Mở Wiley ePDF ↗
+                {{ preferredExternalDocumentLabel }} ↗
               </a>
             </template>
             
@@ -2094,6 +2060,24 @@ const externalArticleUrl = computed(() => {
   return source.value?.url || source.value?.htmlUrl || ''
 })
 
+// A source may expose the same document through DOI, PMC and publisher URLs.
+// Present one deterministic external action so users do not have to guess
+// which of several near-identical PDF buttons is authoritative.
+const preferredExternalDocumentUrl = computed(() => {
+  if (wileyEpdfUrl.value) return wileyEpdfUrl.value
+  if (externalPdfUrl.value) return externalPdfUrl.value
+  if (pmcPdfUrl.value) return pmcPdfUrl.value
+  if (pmcArticleUrl.value) return pmcArticleUrl.value
+  return externalArticleUrl.value
+})
+
+const preferredExternalDocumentLabel = computed(() => {
+  if (wileyEpdfUrl.value) return 'Mở PDF tại Wiley'
+  if (externalPdfUrl.value || pmcPdfUrl.value) return 'Mở PDF tại nguồn'
+  if (pmcArticleUrl.value) return 'Mở bài viết trên PMC'
+  return 'Mở trang nguồn'
+})
+
 const iframeUrl = computed(() => {
   const url = originalDocState.value.pdfViewUrl
   if (!url) return ''
@@ -2722,15 +2706,12 @@ async function handleDeleteOriginalPdf() {
 
 async function downloadPdf() {
   if (!source.value) return
-  const pdfUrl = getOriginalPdfUrl(source.value)
-  if (pdfUrl) {
-    const link = document.createElement('a')
-    link.href = pdfUrl
-    link.target = '_blank'
-    link.download = `${source.value.title || 'document'}.pdf`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  const externalPdfUrl = !source.value.originalFile ? getOriginalPdfUrl(source.value) : ''
+  if (externalPdfUrl) {
+    // External publisher PDFs are not DreamScape-owned files. Let the browser
+    // open the publisher endpoint instead of pretending it can force-download
+    // a cross-origin/verification-protected response.
+    window.open(externalPdfUrl, '_blank', 'noopener,noreferrer')
     return
   }
   try {
@@ -2739,7 +2720,9 @@ async function downloadPdf() {
       blob = await (await fetch(activeBlobUrl)).blob()
     } else {
       settingsStore.showToast('Đang tải PDF về máy...', 'success')
-      blob = await getApprovedSourcePdfInline(source.value._id)
+      blob = props.mode === 'moderation'
+        ? await getModerationSourcePdfInline(source.value._id)
+        : await getApprovedSourcePdfInline(source.value._id)
     }
     
     if (blob.type !== 'application/pdf') {
@@ -2771,34 +2754,45 @@ async function downloadPdf() {
 
 async function openPdfInNewTab() {
   if (!source.value) return
-  const pdfUrl = getOriginalPdfUrl(source.value)
-  if (pdfUrl) {
-    window.open(pdfUrl, '_blank', 'noopener,noreferrer')
+  const externalPdfUrl = !source.value.originalFile ? getOriginalPdfUrl(source.value) : ''
+  if (externalPdfUrl) {
+    window.open(externalPdfUrl, '_blank', 'noopener,noreferrer')
     return
   }
+  const previewWindow = window.open('', '_blank')
   try {
     let url = ''
     if (originalDocState.value.status === 'pdf_inline_ready' && originalDocState.value.pdfViewUrl) {
       url = originalDocState.value.pdfViewUrl
     } else {
       settingsStore.showToast('Đang mở PDF...', 'success')
-      const blob = await getApprovedSourcePdfInline(source.value._id)
+      const blob = props.mode === 'moderation'
+        ? await getModerationSourcePdfInline(source.value._id)
+        : await getApprovedSourcePdfInline(source.value._id)
       if (blob.type !== 'application/pdf') {
         const text = await blob.text()
         try {
           const parsed = JSON.parse(text)
           if (parsed && parsed.success === false) {
             settingsStore.showToast(parsed.message || 'Lỗi khi tải tài liệu PDF.', 'error')
+            previewWindow?.close()
             return
           }
         } catch {}
         settingsStore.showToast('Định dạng tệp không phải PDF.', 'error')
+        previewWindow?.close()
         return
       }
       url = URL.createObjectURL(blob)
     }
-    window.open(url, '_blank', 'noopener,noreferrer')
+    if (previewWindow) {
+      previewWindow.opener = null
+      previewWindow.location.href = url
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
   } catch (err: any) {
+    previewWindow?.close()
     console.error('Error opening PDF in new tab:', err)
     settingsStore.showToast('Không thể mở PDF trong tab mới.', 'error')
   }
