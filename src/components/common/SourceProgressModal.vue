@@ -38,21 +38,12 @@
             </div>
 
             <!-- Pending Loading Content -->
-            <div class="pending-analysis-box">
-              <div class="loading-spinner-wrapper">
-                <div class="spinner"></div>
-              </div>
-              
-              <div class="progress-details">
-                <span class="progress-text">{{ sourceProgressStore.stepText }}</span>
-                <span class="progress-percent">{{ sourceProgressStore.progress }}%</span>
-              </div>
-
-              <!-- Progress bar -->
-              <div class="progress-bar-bg">
-                <div class="progress-bar-fill" :style="{ width: `${sourceProgressStore.progress}%` }"></div>
-              </div>
-            </div>
+            <PipelineProgressPanel
+              :progress="sourceProgressStore.progress"
+              :step-text="sourceProgressStore.stepText"
+              :detail-text="sourceProgressStore.stageDetail"
+              :elapsed-seconds="sourceProgressStore.elapsedSeconds"
+            />
           </div>
         </div>
       </div>
@@ -63,6 +54,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
+import PipelineProgressPanel from './PipelineProgressPanel.vue'
 
 const sourceProgressStore = useSourceProgressStore()
 

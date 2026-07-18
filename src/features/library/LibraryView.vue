@@ -232,7 +232,7 @@
                   </button>
                   <button class="wizard-option" @click="selectType('pdf')">
                     <span class="wizard-option__title">Tải lên tệp PDF</span>
-                    <span class="wizard-option__desc">Tải lên tệp PDF toàn văn trực tiếp từ máy (tối đa 25MB).</span>
+                    <span class="wizard-option__desc">Tải lên tệp PDF toàn văn trực tiếp từ máy (tối đa {{ PDF_MAX_FILE_SIZE_LABEL }}).</span>
                   </button>
                   <button class="wizard-option" @click="selectType('isbn')">
                     <span class="wizard-option__title">ISBN / Sách</span>
@@ -304,7 +304,7 @@
                             <span class="file-size">({{ formatBytes(selectedFile.size) }})</span>
                           </div>
                           <div v-else class="file-prompt-text">
-                            Kéo thả hoặc nhấp để chọn tệp PDF (Tối đa 25MB)
+                            Kéo thả hoặc nhấp để chọn tệp PDF (Tối đa {{ PDF_MAX_FILE_SIZE_LABEL }})
                           </div>
                         </div>
                       </div>
@@ -522,6 +522,10 @@ import AppInput from '@/components/common/AppInput.vue'
 import AppStatusBadge from '@/components/common/AppStatusBadge.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 import apiClient from '@/api/client'
+import {
+  PDF_MAX_FILE_SIZE_BYTES,
+  PDF_MAX_FILE_SIZE_LABEL,
+} from '@/utils/pdfUploadLimits'
 
 const router = useRouter()
 const settingsStore = useSettingsStore()
@@ -786,9 +790,9 @@ function onFileChange(event: any) {
     return
   }
   
-  if (file.size > 25 * 1024 * 1024) {
+  if (file.size > PDF_MAX_FILE_SIZE_BYTES) {
     selectedFile.value = null
-    pdfFileError.value = 'Kích thước tệp vượt quá giới hạn cho phép (25MB).'
+    pdfFileError.value = `Kích thước tệp vượt quá giới hạn cho phép (${PDF_MAX_FILE_SIZE_LABEL}).`
     return
   }
   

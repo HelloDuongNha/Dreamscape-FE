@@ -38,21 +38,14 @@
             </div>
 
             <!-- Pending Loading Content -->
-            <div class="pending-analysis-box">
-              <div class="loading-spinner-wrapper">
-                <div class="spinner"></div>
-              </div>
-              
-              <div class="progress-details">
-                <span class="progress-text">{{ extractionStore.stepText }}</span>
-                <span class="progress-percent">{{ extractionStore.progress }}%</span>
-              </div>
-
-              <!-- Progress bar -->
-              <div class="progress-bar-bg">
-                <div class="progress-bar-fill" :style="{ width: `${extractionStore.progress}%` }"></div>
-              </div>
-            </div>
+            <PipelineProgressPanel
+              :progress="extractionStore.progress"
+              :step-text="extractionStore.stepText"
+              :detail-text="extractionStore.stageDetail"
+              :elapsed-seconds="extractionStore.elapsedSeconds"
+              :processed-label="extractionStore.processedLabel"
+              :estimated-remaining-seconds="extractionStore.estimatedRemainingSeconds"
+            />
           </div>
         </div>
       </div>
@@ -62,6 +55,7 @@
 
 <script setup lang="ts">
 import { useExtractionStore } from '@/store/useExtractionStore'
+import PipelineProgressPanel from './PipelineProgressPanel.vue'
 
 const extractionStore = useExtractionStore()
 </script>

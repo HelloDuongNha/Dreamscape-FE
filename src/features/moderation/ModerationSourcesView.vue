@@ -181,7 +181,7 @@
                 </div>
                 <div class="pdf-info-actions">
                   <button
-                    v-if="source.originalFile.cloudinarySecureUrl"
+                    v-if="source.originalFile"
                     type="button"
                     class="pdf-action-btn pdf-action-btn--primary"
                     :disabled="activePdfActionId === source._id"
@@ -190,7 +190,7 @@
                     {{ activePdfActionId === source._id ? 'Đang mở...' : 'Mở PDF ↗' }}
                   </button>
                   <button
-                    v-if="source.originalFile.cloudinarySecureUrl"
+                    v-if="source.originalFile"
                     type="button"
                     class="pdf-action-btn pdf-action-btn--secondary"
                     :disabled="activePdfActionId === source._id"

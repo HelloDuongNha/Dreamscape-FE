@@ -11,12 +11,46 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
   const progress = ref(0)
   const status = ref<'pending' | 'success' | 'failed' | 'none'>('none')
   const stepText = ref('Đang khởi tạo...')
+  const stageDetail = ref('Đang chuẩn bị tác vụ và kiểm tra dữ liệu đầu vào.')
+  const elapsedSeconds = ref(0)
   const pipelineKind = ref<'submission' | 'pdf' | 'structured' | 'none'>('none')
   
   const smartReaderResult = ref<'success' | 'failed' | 'limited' | 'ocr_needed'>('limited')
   const pdfResult = ref<'success' | 'failed' | 'blocked' | 'external_only' | 'no_candidate' | 'none'>('none')
   const selectedSource = ref<'jats' | 'html' | 'pdf_text' | 'docling_pdf' | 'none'>('none')
   const detectedIdentifiers = ref<{ doi?: string; isbn?: string; pmcid?: string } | null>(null)
+  let clockTimer: ReturnType<typeof setInterval> | null = null
+  let smoothTimer: ReturnType<typeof setInterval> | null = null
+
+  function startClock() {
+    if (clockTimer) clearInterval(clockTimer)
+    elapsedSeconds.value = 0
+    const startedAt = Date.now()
+    clockTimer = setInterval(() => {
+      elapsedSeconds.value = Math.floor((Date.now() - startedAt) / 1000)
+    }, 1000)
+  }
+
+  function stopSmoothProgress() {
+    if (smoothTimer) clearInterval(smoothTimer)
+    smoothTimer = null
+  }
+
+  function startSmoothProgress(cap: number, expectedStageMs: number) {
+    stopSmoothProgress()
+    const startedAt = Date.now()
+    const initial = progress.value
+    smoothTimer = setInterval(() => {
+      const ratio = 1 - Math.exp(-(Date.now() - startedAt) / expectedStageMs)
+      progress.value = Math.max(progress.value, Math.min(cap - 0.2, initial + (cap - initial) * ratio))
+    }, 500)
+  }
+
+  function stopTimers() {
+    stopSmoothProgress()
+    if (clockTimer) clearInterval(clockTimer)
+    clockTimer = null
+  }
 
   async function startPdfOnlyPipeline(id: string, title: string, targetType: 'contribution' | 'approved_source' = 'contribution', forceReplace = false, structuredFirst = false) {
     contributionId.value = id
@@ -31,6 +65,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     pdfResult.value = 'success'
     selectedSource.value = 'none'
     detectedIdentifiers.value = null
+    startClock()
 
     // Step 1: Upload is done (0 - 20)
     await new Promise((resolve) => setTimeout(resolve, 300))
@@ -38,10 +73,13 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
 
     // Step 2: Check text layer (20 - 40)
     stepText.value = 'Đang kiểm tra lớp văn bản...'
+    stageDetail.value = 'Đếm trang có text để quyết định dùng parser thường hay OCR.'
     progress.value = 40
 
     // Step 3: Run processing (40 - 85)
     stepText.value = 'Đang nhận diện thông tin tài liệu...'
+    stageDetail.value = 'Đang nhận diện DOI/ISBN, dựng bố cục, bảng và hình ảnh. Sách scan dài có thể cần OCR trong nhiều phút.'
+    startSmoothProgress(84, 120_000)
     let finalStatus: 'success' | 'failed' = 'failed'
     let finalSmartReaderResult: 'success' | 'failed' | 'limited' | 'ocr_needed' = 'failed'
     let finalStepText = 'Lỗi xử lý tệp PDF.'
@@ -50,6 +88,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
         ? await processUploadedPdfForContribution(id, forceReplace, structuredFirst)
         : await processUploadedPdfForApprovedSource(id, forceReplace, structuredFirst)
       progress.value = 85
+      stopSmoothProgress()
       if (runRes.success && runRes.readerCreated) {
         finalStatus = 'success'
         finalSmartReaderResult = 'success'
@@ -75,6 +114,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     } catch (err: any) {
       console.warn('PDF-only processing failed:', err)
       progress.value = 85
+      stopSmoothProgress()
       finalStatus = 'failed'
       finalSmartReaderResult = 'failed'
       selectedSource.value = 'none'
@@ -89,6 +129,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     stepText.value = finalStepText
     isDialogVisible.value = false
     isPinnedVisible.value = true // Show completion notification
+    stopTimers()
   }
 
   async function startPipeline(id: string, title: string) {
@@ -102,12 +143,16 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     pipelineKind.value = 'submission'
     smartReaderResult.value = 'limited'
     pdfResult.value = 'none'
+    stageDetail.value = 'Đang chuẩn bị nguồn và kiểm tra quyền truy cập nội dung.'
+    startClock()
 
     // Step 1: Submission is already done, advance to 20%
     progress.value = 20
 
     // Step 2: Import Smart Reader (20% - 45%)
     stepText.value = 'Đang nhập bản đọc thông minh...'
+    stageDetail.value = 'Đang thử JATS/XML và HTML có cấu trúc trước để giữ heading, bảng và hình tốt nhất.'
+    startSmoothProgress(44, 30_000)
     try {
       const importRes = await importFullText(id)
       if (importRes.success) {
@@ -120,10 +165,13 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       smartReaderResult.value = 'failed'
     }
     progress.value = 45
+    stopSmoothProgress()
 
     // Step 3: Cache PDF (45% - 75%)
     // Always attempt — backend resolves candidates dynamically from DOI/PMCID/URLs
     stepText.value = 'Đang tìm và lưu PDF gốc online...'
+    stageDetail.value = 'Đang thử các nguồn PDF hợp pháp và lưu bản gốc vào Firebase Storage khi tìm thấy.'
+    startSmoothProgress(74, 45_000)
     try {
       const cacheRes = await cacheModerationSourceOriginalPdf(id)
       if (cacheRes.success) {
@@ -154,11 +202,14 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       }
     }
     progress.value = 75
+    stopSmoothProgress()
 
     // Structured DOI/PMCID/URL import remains first. Only when it failed and a
     // real Original PDF was cached do we invoke the PDF Docling fallback once.
     if (smartReaderResult.value === 'failed' && pdfResult.value === 'success') {
       stepText.value = 'Không có bản đọc HTML/JATS; đang dựng từ PDF bằng Docling...'
+      stageDetail.value = 'Docling đang phục hồi thứ tự đọc, heading, table và figure từ PDF.'
+      startSmoothProgress(92, 120_000)
       try {
         const doclingRes = await processUploadedPdfForContribution(id, false, false)
         if (doclingRes.success && doclingRes.readerCreated) {
@@ -177,6 +228,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
         smartReaderResult.value = 'failed'
         stepText.value = err.response?.data?.message || err.message || 'Không thể xử lý PDF bằng Docling.'
       }
+      stopSmoothProgress()
     }
 
     // Step 4: Finalizing metadata (75% - 95%)
@@ -192,6 +244,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     stepText.value = 'Hoàn tất xử lý nguồn.'
     isDialogVisible.value = false
     isPinnedVisible.value = true // Show completion notification
+    stopTimers()
   }
 
   async function startStructuredReader(id: string, title: string, reimport = true) {
@@ -210,13 +263,17 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     pdfResult.value = 'none'
     selectedSource.value = 'none'
     detectedIdentifiers.value = null
+    stageDetail.value = 'Đang tìm nguồn có cấu trúc phù hợp và kiểm tra nội dung trả về.'
+    startClock()
 
     try {
       progress.value = 35
+      startSmoothProgress(88, 45_000)
       const response: any = reimport
         ? await reimportFullText(id)
         : await importFullText(id)
       progress.value = 90
+      stopSmoothProgress()
 
       const succeeded = response?.success === true && (!reimport || response?.reimported === true)
       if (!succeeded) {
@@ -257,6 +314,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       progress.value = 100
       isDialogVisible.value = false
       isPinnedVisible.value = true
+      stopTimers()
     }
   }
 
@@ -275,6 +333,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
   }
 
   function stopTracking() {
+    stopTimers()
     contributionId.value = null
     sourceTitle.value = ''
     isDialogVisible.value = false
@@ -294,6 +353,8 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     progress,
     status,
     stepText,
+    stageDetail,
+    elapsedSeconds,
     pipelineKind,
     smartReaderResult,
     pdfResult,

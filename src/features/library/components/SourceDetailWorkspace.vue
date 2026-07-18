@@ -1128,6 +1128,10 @@ import { useExtractionStore } from '@/store/useExtractionStore'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
 import AppButton from '@/components/common/AppButton.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
+import {
+  PDF_MAX_FILE_SIZE_BYTES,
+  PDF_MAX_FILE_SIZE_LABEL,
+} from '@/utils/pdfUploadLimits'
 
 const props = withDefaults(
   defineProps<{
@@ -2155,6 +2159,9 @@ function getOriginalPdfUrl(source: any) {
 
 function hasValidOriginalFilePdf(source: any): boolean {
   const orig = source?.originalFile
+  if (orig?.storageProvider === 'firebase') {
+    return !!(orig.firebaseStorageBucket && orig.firebaseStoragePath)
+  }
   const cloudUrl = orig?.cloudinarySecureUrl || orig?.secureUrl || orig?.url
   if (!cloudUrl) return false
   const mime = orig.mimeType || ''
@@ -2550,7 +2557,7 @@ function handleFileSelected(event: Event) {
   // Client-side quick validations
   const isPdfExt = file.name.toLowerCase().endsWith('.pdf')
   const isPdfMime = file.type === 'application/pdf' || file.type === ''
-  const isPdfSize = file.size <= 25 * 1024 * 1024 // 25MB
+  const isPdfSize = file.size <= PDF_MAX_FILE_SIZE_BYTES
 
   if (!isPdfExt || !isPdfMime) {
     settingsStore.showToast('Tệp tải lên không phải là định dạng PDF hợp lệ.', 'error')
@@ -2559,7 +2566,7 @@ function handleFileSelected(event: Event) {
   }
 
   if (!isPdfSize) {
-    settingsStore.showToast('Kích thước tệp vượt quá giới hạn cho phép (25MB).', 'error')
+    settingsStore.showToast(`Kích thước tệp vượt quá giới hạn cho phép (${PDF_MAX_FILE_SIZE_LABEL}).`, 'error')
     if (fileInputRef.value) fileInputRef.value.value = ''
     return
   }
@@ -3227,8 +3234,9 @@ const isPdfReaderActive = computed(() =>
 const hasImportCandidate = computed(() => {
   if (!source.value) return false
   const hasCloudinary = !!(source.value.originalFile?.cloudinaryPublicId && source.value.originalFile?.storageProvider === 'cloudinary')
+  const hasFirebase = !!(source.value.originalFile?.firebaseStoragePath && source.value.originalFile?.storageProvider === 'firebase')
   const hasUrls = !!(source.value.pdfUrl || source.value.htmlUrl || source.value.sourceUrl || source.value.fullTextUrl)
-  return !!(hasCloudinary || hasUrls)
+  return !!(hasCloudinary || hasFirebase || hasUrls)
 })
 
 const isEligibleForImport = computed(() => {

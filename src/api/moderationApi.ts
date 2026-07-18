@@ -51,12 +51,14 @@ export interface SourceContribution {
   createdAt: string
   updatedAt: string
   originalFile?: {
-    storageProvider: 'cloudinary' | 'local' | 'gridfs'
+    storageProvider: 'firebase' | 'cloudinary' | 'local' | 'gridfs'
     originalFileName: string
     mimeType: string
     fileSize: number
     cloudinaryPublicId?: string
     cloudinarySecureUrl?: string
+    firebaseStorageBucket?: string
+    firebaseStoragePath?: string
     cloudinaryResourceType?: 'image' | 'raw' | 'video'
     cloudinaryFormat?: string
     uploadedBy?: string
@@ -228,4 +230,3 @@ export const processUploadedPdfForContribution = async (id: string, forceReplace
   const { data } = await apiClient.post<any>(`/moderation/sources/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst })
   return data
 }
-
