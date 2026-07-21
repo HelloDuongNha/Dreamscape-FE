@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { importFullText, reimportFullText, cacheModerationSourceOriginalPdf, processUploadedPdfForContribution } from '@/api/moderationApi'
 import { processUploadedPdfForApprovedSource } from '@/api/sourceApi'
+import { useAcademicJobQueueStore } from './useAcademicJobQueueStore'
 
 export const useSourceProgressStore = defineStore('sourceProgress', () => {
   const contributionId = ref<string | null>(null)
@@ -19,15 +20,56 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
   const pdfResult = ref<'success' | 'failed' | 'blocked' | 'external_only' | 'no_candidate' | 'none'>('none')
   const selectedSource = ref<'jats' | 'html' | 'pdf_text' | 'docling_pdf' | 'none'>('none')
   const detectedIdentifiers = ref<{ doi?: string; isbn?: string; pmcid?: string } | null>(null)
+  const expectedTotalSeconds = ref<number | null>(null)
+  const estimatedRemainingSeconds = computed<number | null>(() => {
+    if (status.value !== 'pending' || expectedTotalSeconds.value === null) return null
+    return Math.max(0, expectedTotalSeconds.value - elapsedSeconds.value)
+  })
   let clockTimer: ReturnType<typeof setInterval> | null = null
   let smoothTimer: ReturnType<typeof setInterval> | null = null
+  let terminalTimer: ReturnType<typeof setTimeout> | null = null
+  let clockStartedAt = 0
+
+  function durationStorageKey() {
+    return contributionId.value && pipelineKind.value !== 'none'
+      ? `dreamscape:academic-duration:${pipelineKind.value}:${contributionId.value}`
+      : ''
+  }
+
+  function loadExpectedDuration() {
+    expectedTotalSeconds.value = null
+    const key = durationStorageKey()
+    if (!key) return
+    try {
+      const samples = JSON.parse(localStorage.getItem(key) || '[]')
+        .filter((value: unknown) => typeof value === 'number' && value > 0)
+        .sort((a: number, b: number) => a - b)
+      if (samples.length > 0) expectedTotalSeconds.value = samples[Math.floor(samples.length / 2)]
+    } catch {
+      expectedTotalSeconds.value = null
+    }
+  }
+
+  function rememberDuration() {
+    const key = durationStorageKey()
+    const duration = Math.max(1, Math.round((Date.now() - clockStartedAt) / 1000))
+    if (!key || !clockStartedAt) return
+    try {
+      const previous = JSON.parse(localStorage.getItem(key) || '[]')
+      const samples = Array.isArray(previous) ? previous.filter(value => typeof value === 'number' && value > 0) : []
+      localStorage.setItem(key, JSON.stringify([...samples, duration].slice(-5)))
+    } catch {
+      // Timing history is optional and must never affect ingestion.
+    }
+  }
 
   function startClock() {
     if (clockTimer) clearInterval(clockTimer)
     elapsedSeconds.value = 0
-    const startedAt = Date.now()
+    clockStartedAt = Date.now()
+    loadExpectedDuration()
     clockTimer = setInterval(() => {
-      elapsedSeconds.value = Math.floor((Date.now() - startedAt) / 1000)
+      elapsedSeconds.value = Math.floor((Date.now() - clockStartedAt) / 1000)
     }, 1000)
   }
 
@@ -42,7 +84,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     const initial = progress.value
     smoothTimer = setInterval(() => {
       const ratio = 1 - Math.exp(-(Date.now() - startedAt) / expectedStageMs)
-      progress.value = Math.max(progress.value, Math.min(cap - 0.2, initial + (cap - initial) * ratio))
+      progress.value = Math.max(progress.value, Math.round(Math.min(cap - 0.2, initial + (cap - initial) * ratio)))
     }, 500)
   }
 
@@ -52,11 +94,16 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     clockTimer = null
   }
 
-  async function startPdfOnlyPipeline(id: string, title: string, targetType: 'contribution' | 'approved_source' = 'contribution', forceReplace = false, structuredFirst = false) {
+  function finishTimers() {
+    rememberDuration()
+    stopTimers()
+  }
+
+  async function runPdfOnlyPipeline(id: string, title: string, targetType: 'contribution' | 'approved_source' = 'contribution', forceReplace = false, structuredFirst = false, promotedFromQueue = false) {
     contributionId.value = id
     sourceTitle.value = title
-    isDialogVisible.value = true
-    isPinnedVisible.value = false
+    isDialogVisible.value = !promotedFromQueue
+    isPinnedVisible.value = promotedFromQueue
     progress.value = 0
     status.value = 'pending'
     stepText.value = 'Đã tải PDF gốc lên hệ thống.'
@@ -129,14 +176,15 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     stepText.value = finalStepText
     isDialogVisible.value = false
     isPinnedVisible.value = true // Show completion notification
-    stopTimers()
+    finishTimers()
+    scheduleTerminalDismiss()
   }
 
-  async function startPipeline(id: string, title: string) {
+  async function runPipeline(id: string, title: string, promotedFromQueue = false) {
     contributionId.value = id
     sourceTitle.value = title
-    isDialogVisible.value = true
-    isPinnedVisible.value = false
+    isDialogVisible.value = !promotedFromQueue
+    isPinnedVisible.value = promotedFromQueue
     progress.value = 0
     status.value = 'pending'
     stepText.value = 'Đang gửi nguồn vào hàng chờ duyệt...'
@@ -244,15 +292,16 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     stepText.value = 'Hoàn tất xử lý nguồn.'
     isDialogVisible.value = false
     isPinnedVisible.value = true // Show completion notification
-    stopTimers()
+    finishTimers()
+    scheduleTerminalDismiss()
   }
 
-  async function startStructuredReader(id: string, title: string, reimport = true) {
+  async function runStructuredReader(id: string, title: string, reimport = true, promotedFromQueue = false) {
     const startedAt = Date.now()
     contributionId.value = id
     sourceTitle.value = title
-    isDialogVisible.value = true
-    isPinnedVisible.value = false
+    isDialogVisible.value = !promotedFromQueue
+    isPinnedVisible.value = promotedFromQueue
     progress.value = 10
     status.value = 'pending'
     pipelineKind.value = 'structured'
@@ -314,7 +363,24 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       progress.value = 100
       isDialogVisible.value = false
       isPinnedVisible.value = true
-      stopTimers()
+      finishTimers()
+      scheduleTerminalDismiss()
+    }
+  }
+
+  function scheduleTerminalDismiss() {
+    if (terminalTimer) clearTimeout(terminalTimer)
+    terminalTimer = setTimeout(() => {
+      isPinnedVisible.value = false
+      terminalTimer = null
+    }, 3000)
+  }
+
+  function dismissPinned() {
+    isPinnedVisible.value = false
+    if (status.value !== 'pending' && terminalTimer) {
+      clearTimeout(terminalTimer)
+      terminalTimer = null
     }
   }
 
@@ -323,6 +389,33 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     if (status.value === 'pending') {
       isPinnedVisible.value = true
     }
+  }
+
+  function startPdfOnlyPipeline(id: string, title: string, targetType: 'contribution' | 'approved_source' = 'contribution', forceReplace = false, structuredFirst = false) {
+    return useAcademicJobQueueStore().enqueue({
+      sourceId: id,
+      title,
+      kind: 'pdf',
+      run: ({ promotedFromQueue }) => runPdfOnlyPipeline(id, title, targetType, forceReplace, structuredFirst, promotedFromQueue),
+    })
+  }
+
+  function startPipeline(id: string, title: string) {
+    return useAcademicJobQueueStore().enqueue({
+      sourceId: id,
+      title,
+      kind: 'submission',
+      run: ({ promotedFromQueue }) => runPipeline(id, title, promotedFromQueue),
+    })
+  }
+
+  function startStructuredReader(id: string, title: string, reimport = true) {
+    return useAcademicJobQueueStore().enqueue({
+      sourceId: id,
+      title,
+      kind: 'structured',
+      run: ({ promotedFromQueue }) => runStructuredReader(id, title, reimport, promotedFromQueue),
+    })
   }
 
   function openDialog() {
@@ -334,6 +427,8 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
 
   function stopTracking() {
     stopTimers()
+    if (terminalTimer) clearTimeout(terminalTimer)
+    terminalTimer = null
     contributionId.value = null
     sourceTitle.value = ''
     isDialogVisible.value = false
@@ -355,6 +450,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     stepText,
     stageDetail,
     elapsedSeconds,
+    estimatedRemainingSeconds,
     pipelineKind,
     smartReaderResult,
     pdfResult,
@@ -365,6 +461,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     startStructuredReader,
     minimizeDialog,
     openDialog,
-    stopTracking
+    stopTracking,
+    dismissPinned,
   }
 })

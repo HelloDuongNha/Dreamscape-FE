@@ -3,7 +3,7 @@
     <!-- Dedicated pinned lane for Oracle notifications at the absolute top (Top 1) -->
     <div
       v-if="oracleStore.isPinnedVisible && oracleStore.trackedDream"
-      class="oracle-pinned-toast"
+      :class="['oracle-pinned-toast', { 'oracle-pinned-toast--terminal': oracleStore.completedDream || oracleStore.failedDream }]"
       @click="handleOraclePinnedClick"
     >
       <div class="oracle-pinned-toast__header">
@@ -11,7 +11,7 @@
         <button
           class="oracle-pinned-toast__close"
           aria-label="Dismiss notification"
-          @click.stop="oracleStore.stopTracking()"
+          @click.stop="oracleStore.dismissPinned()"
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -30,7 +30,7 @@
     <!-- Dedicated pinned lane for Extraction notifications (Top 2) -->
     <div
       v-if="extractionStore.isPinnedVisible && extractionStore.sourceId"
-      class="extraction-pinned-toast"
+      :class="['extraction-pinned-toast', { 'pinned-toast--terminal': extractionStore.status !== 'pending' }]"
       @click="handleExtractionPinnedClick"
     >
       <div class="extraction-pinned-toast__header">
@@ -38,7 +38,7 @@
         <button
           class="extraction-pinned-toast__close"
           aria-label="Dismiss notification"
-          @click.stop="extractionStore.stopTracking()"
+          @click.stop="extractionStore.dismissPinned()"
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -57,7 +57,7 @@
     <!-- Dedicated pinned lane for Source Pipeline notifications (Top 3) -->
     <div
       v-if="sourceProgressStore.isPinnedVisible && sourceProgressStore.contributionId"
-      class="source-pinned-toast"
+      :class="['source-pinned-toast', { 'pinned-toast--terminal': sourceProgressStore.status !== 'pending' }]"
       @click="handleSourcePinnedClick"
     >
       <div class="source-pinned-toast__header">
@@ -65,7 +65,7 @@
         <button
           class="source-pinned-toast__close"
           aria-label="Dismiss notification"
-          @click.stop="sourceProgressStore.stopTracking()"
+          @click.stop="sourceProgressStore.dismissPinned()"
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -79,6 +79,20 @@
       <div v-if="sourceProgressStore.status === 'pending'" class="source-pinned-toast__progress-bar-bg">
         <div class="source-pinned-toast__progress-bar-fill" :style="{ width: `${sourceProgressStore.progress}%` }"></div>
       </div>
+    </div>
+
+    <div
+      v-for="(job, index) in academicQueue.queuedJobs"
+      :key="job.id"
+      class="source-pinned-toast academic-queue-toast"
+    >
+      <div class="source-pinned-toast__header">
+        <span class="source-pinned-toast__title">Đang chờ #{{ index + 1 }}</span>
+      </div>
+      <p class="source-pinned-toast__body">
+        {{ queueKindLabel(job.kind) }} · {{ job.title }}
+      </p>
+      <p class="academic-queue-toast__hint">Sẽ tự chạy khi tác vụ phía trước hoàn tất.</p>
     </div>
 
     <TransitionGroup name="stack-list" tag="div" class="stack-list-wrapper">
@@ -110,18 +124,25 @@ import { useMessageToastStore } from '@/store/useMessageToastStore'
 import { useRouter }            from 'vue-router'
 import { useChatStore }         from '@/store/useChatStore'
 import { useOracleStore }       from '@/store/useOracleStore'
-import { usePostStore }         from '@/store/usePostStore'
 import { useExtractionStore }   from '@/store/useExtractionStore'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
+import { useAcademicJobQueueStore } from '@/store/useAcademicJobQueueStore'
 import MessageToast             from './MessageToast.vue'
 
 const toastStore = useMessageToastStore()
 const chatStore  = useChatStore()
 const router     = useRouter()
 const oracleStore = useOracleStore()
-const postStore  = usePostStore()
 const extractionStore = useExtractionStore()
 const sourceProgressStore = useSourceProgressStore()
+const academicQueue = useAcademicJobQueueStore()
+
+function queueKindLabel(kind: string) {
+  if (kind === 'pdf') return 'Dựng bản đọc từ PDF'
+  if (kind === 'structured') return 'Nhập lại từ DOI / HTML / XML'
+  if (kind === 'rules') return 'Phân tích luật'
+  return 'Xử lý nguồn'
+}
 
 const sourceTitle = computed(() => {
   if (sourceProgressStore.status === 'success') return 'Hoàn thành'
@@ -238,14 +259,15 @@ const oracleMessage = computed(() => {
   if (oracleStore.failedDream) {
     return 'Oracle chưa thể phân tích giấc mơ này. Vui lòng thử lại sau.'
   }
-  return `Oracle đang phân tích giấc mơ (${oracleStore.progress}%)...`
+  const minutes = Math.floor(oracleStore.elapsedSeconds / 60)
+  const seconds = oracleStore.elapsedSeconds % 60
+  const elapsed = minutes > 0 ? `${minutes} phút ${seconds} giây` : `${seconds} giây`
+  return `${oracleStore.statusMessage} · ${oracleStore.progress}% · đã chạy ${elapsed}`
 })
 
 function handleOraclePinnedClick() {
   if (oracleStore.completedDream) {
-    const dreamId = oracleStore.completedDream._id
-    oracleStore.stopTracking()
-    postStore.openPost(dreamId)
+    oracleStore.openDialog()
   } else if (oracleStore.failedDream) {
     oracleStore.stopTracking()
   } else {
@@ -256,8 +278,9 @@ function handleOraclePinnedClick() {
 const extractionTitle = computed(() => {
   if (extractionStore.status === 'success') {
     if (extractionStore.outcome === 'success_with_existing_candidates') {
-      return 'Đã có luật tương tự'
+      return 'Kết quả Rule V3 đã có sẵn'
     }
+    if (extractionStore.outcome === 'success_no_verified_candidates') return 'Không có candidate đạt kiểm chứng'
     return 'Phân tích hoàn thành'
   }
   if (extractionStore.status === 'stopped') {
@@ -274,14 +297,7 @@ const extractionTitle = computed(() => {
 
 const extractionMessage = computed(() => {
   if (extractionStore.status === 'success') {
-    if (extractionStore.outcome === 'success_with_existing_candidates') {
-      return 'Không tạo bản mới vì các ứng viên tương tự đã tồn tại. Đã mở danh sách hiện có.'
-    }
-    let msg = `Đã trích xuất ${extractionStore.createdCount} ứng viên quy luật.`
-    if (extractionStore.hasApproved) {
-      msg += ' (Lưu ý: Tài liệu này đã đóng góp các quy luật được phê duyệt trước đó.)'
-    }
-    return msg
+    return extractionStore.message || 'Hoàn tất phân tích Rule V3.'
   }
   if (extractionStore.status === 'stopped') {
     if (extractionStore.outcome === 'stopped_domain_irrelevant') {
@@ -352,6 +368,8 @@ async function handleToastClick(conversationId: string) {
 
 /* Pinned Oracle toast styling */
 .oracle-pinned-toast {
+  position: relative;
+  overflow: hidden;
   width: 100%;
   background: #181818;
   border: 1px solid #262626;
@@ -366,6 +384,39 @@ async function handleToastClick(conversationId: string) {
   box-sizing: border-box;
   box-shadow: none;
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.oracle-pinned-toast--terminal::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background: #6e8cff;
+  animation: oracle-terminal-drain 3s linear forwards;
+}
+
+.extraction-pinned-toast.pinned-toast--terminal,
+.source-pinned-toast.pinned-toast--terminal {
+  position: relative;
+  overflow: hidden;
+}
+
+.pinned-toast--terminal::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background: #6e8cff;
+  animation: oracle-terminal-drain 3s linear forwards;
+}
+
+@keyframes oracle-terminal-drain {
+  from { width: 100%; }
+  to { width: 0; }
 }
 
 .oracle-pinned-toast:hover {
@@ -625,5 +676,21 @@ async function handleToastClick(conversationId: string) {
 .source-pinned-toast__close:hover {
   opacity: 1;
   color: var(--color-text-primary);
+}
+
+.academic-queue-toast {
+  cursor: default;
+  border-style: dashed;
+  background: #151515;
+}
+
+.academic-queue-toast .source-pinned-toast__title {
+  color: #94a3b8;
+}
+
+.academic-queue-toast__hint {
+  margin: 0;
+  color: #737373;
+  font-size: 10px;
 }
 </style>

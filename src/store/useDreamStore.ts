@@ -67,7 +67,7 @@ export const useDreamStore = defineStore('dream', () => {
   }
 
   /** Create a dream and prepend it to the feed */
-  async function addDream(content: string, isPublic: boolean, moodTag = ''): Promise<void> {
+  async function addDream(content: string, isPublic: boolean, moodTag = ''): Promise<{ dream: ApiDream }> {
     const { data } = await apiClient.post<CreateDreamResponse>('/dreams', {
       content,
       is_public: isPublic,
@@ -87,11 +87,15 @@ export const useDreamStore = defineStore('dream', () => {
     }
     dreams.value.unshift(populatedDream)
     const { useSettingsStore } = await import('@/store/useSettingsStore')
-    useSettingsStore().showToast('Post created successfully.', 'success')
+    useSettingsStore().showToast(
+      'Đã đăng giấc mơ.',
+      'success',
+    )
     
     // Kick off Oracle analysis tracking UI & polling
     const { useOracleStore } = await import('@/store/useOracleStore')
     useOracleStore().startTracking(populatedDream)
+    return { dream: populatedDream }
   }
 
   /**

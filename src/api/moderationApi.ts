@@ -40,6 +40,13 @@ export interface SourceContribution {
     referenceCount: number
     updatedAt?: string
   }
+  readerBuildSnapshots?: Array<{
+    engine: string
+    sourceType: string
+    sectionCount: number
+    chunkCount: number
+    builtAt: string
+  }>
   readableInApp?: boolean
   fullTextStatus?: 'none' | 'importing' | 'imported' | 'failed' | 'available'
   pdfUrl?: string

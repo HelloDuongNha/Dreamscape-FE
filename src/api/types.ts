@@ -43,6 +43,17 @@ export interface AiScientificContextNote {
   ruleId:     string
   note:       string
   confidence: number
+  dreamEvidence?: string[]
+  insightTitle?: string
+  boundary?: string
+  ruleCode?: string
+  ruleStatement?: string
+  matchedDreamDetails?: string[]
+  evidenceQuotes?: {
+    sourceId: string
+    chunkId: string
+    quote: string
+  }[]
   sources?: {
     sourceId: string
     title: string
@@ -59,6 +70,20 @@ export interface AiSymbolicNote {
   meaning:       string
   relevance:     number
   symbolValence: number
+  origin?:        'dictionary' | 'contextual_observation'
+  knowledgeStatus?: 'dictionary' | 'observed'
+  dictionarySymbol?: string
+  dreamEvidence?: string
+  contextualTone?: 'threatening' | 'reassuring' | 'ambivalent' | 'neutral'
+  motifStats?: {
+    previousPersonalDreamCount: number
+    similarDreamCount: number
+    sameSequenceCount: number
+    confirmedContextCount: number
+    observedPersonalDreamCount?: number
+    observedPublicDreamCount?: number
+    observedToneCounts?: Record<'threatening' | 'reassuring' | 'ambivalent' | 'neutral', number>
+  }
 }
 
 export interface AiCulturalSymbolicNote {
@@ -67,26 +92,98 @@ export interface AiCulturalSymbolicNote {
 }
 
 export interface AiRealLifeHypothesis {
+  ruleId?: string | null
+  ruleCode?: string
+  ruleStatement?: string
   hypothesis:            string
   evidenceFromDream:     string[]
   confidence:            number
   needsUserConfirmation: boolean
   followUpQuestion:      string
+  reasonForAsking?:      string
+  ifYesMeaning?:         string
+  ifNoMeaning?:          string
+  questionType?:         'past' | 'present' | 'future'
+  verificationKey?:      string
+  questionBasis?:        'academic_rule' | 'dream_sequence' | 'sleep_context'
+  questionDimension?:    string
+  questionGroup?:        string
+  answerSemantics?: {
+    yes: 'supports' | 'weakens' | 'unresolved'
+    no: 'supports' | 'weakens' | 'unresolved'
+    unsure: 'unresolved'
+  }
+  sources?: {
+    sourceId: string
+    title: string
+    authors: string[]
+    year?: number
+    journal?: string
+    doi?: string
+    chunkIds?: string[]
+  }[]
   userFeedback?:         'yes' | 'no' | 'unsure' | null
 }
 
 export interface AiDreamAnalysisResult {
   title:                     string
   emotional_tone:            string
+  emotional_tone_key?:       'urgent_conflicted' | 'anxious' | 'fearful' | 'sad' | 'calm' | 'mixed' | 'neutral'
   summary:                   string
   core_analysis:             string
   disclaimer:                string
   confidence:                number
-  dreamValenceScore:         number
+  feedback_conclusion?:      string | null
+  feedback_changed_paths?:   string[]
+  feedback_changed_fragments?: Record<string, string[]>
+  feedback_analysis?: {
+    confirmedFacts: string[]
+    rejectedDirections: string[]
+    interpretation: string
+    nextSteps: string[]
+  } | null
+  grounding_summary?: {
+    narrativeUsed: boolean
+    resolvedContextCount: number
+    unresolvedContextCount: number
+    dictionaryMotifCount: number
+    contextualMotifCount: number
+    appliedRuleCount: number
+    explanatoryRuleCount: number
+    similarDreamCount: number
+    sleepContextFactCount: number
+  }
+  analysis_mode?:            'llm_grounded' | 'structured_fallback'
   scientific_context_notes?: AiScientificContextNote[]
   symbolic_notes?:           AiSymbolicNote[]
   cultural_symbolic_notes?:  AiCulturalSymbolicNote[]
   real_life_hypotheses?:     AiRealLifeHypothesis[]
+  interpretive_threads?: {
+    title: string
+    dreamEvidence: string[]
+    reasoning: string
+    alternativeExplanation: string
+  }[]
+  practical_reflections?: {
+    suggestion: string
+    rationale: string
+  }[]
+  similar_dreams?: {
+    dreamId: string
+    title: string
+    excerpt: string
+    createdAt: string
+    authorDisplayName: string
+    sameAuthor: boolean
+    similarity: number
+    matchedOn: string[]
+  }[]
+  feedback_revision?: {
+    hypothesis: string
+    status: 'supported' | 'weakened' | 'unresolved'
+    interpretation: string
+    ruleId?: string
+  }[]
 }
 
 export interface ApiDream {
@@ -103,6 +200,16 @@ export interface ApiDream {
   ai_status:      'pending' | 'sensing' | 'completed' | 'failed'
   ai_result:      AiDreamAnalysisResult | null
   aiAnalysis?:    AiDreamAnalysisResult | null
+  analysisMetadata?: {
+    currentStage?: 'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing' | 'completed'
+    progress?: number
+    statusMessage?: string
+    currentMiniStep?: string
+    stageResults?: Partial<Record<'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing', string>>
+    startedAt?: string
+    generatedAt?: string
+    durationMs?: number
+  } | null
   edit_history:   { content: string; editedAt: string }[]
 }
 
@@ -195,8 +302,8 @@ export interface ApiNotification {
   _id:         string
   recipientId: string
   senderId:    ApiUser
-  type:        'like' | 'comment' | 'follow'
-  postId?:     string
+  type:        'like' | 'comment' | 'follow' | 'dream_analysis'
+  postId?:     string | Pick<ApiDream, '_id' | 'content'>
   isRead:      boolean
   timestamp:   string
 }

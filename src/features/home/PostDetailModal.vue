@@ -8,7 +8,6 @@
         role="dialog"
         aria-modal="true"
         :aria-label="`Dream by ${postStore.focusedUser?.display_name}`"
-        @click.self="postStore.closePost()"
         @keydown.esc="postStore.closePost()"
       >
         <div class="modal-container" tabindex="-1" ref="containerRef">
@@ -31,8 +30,8 @@
             </RouterLink>
 
             <div class="modal-header__right">
-              <span class="modal-mood" :class="`modal-mood--${moodClass}`">
-                {{ postStore.focusedDream.mood_tag }}
+              <span v-if="modalMoodLabel" class="modal-mood" :class="`modal-mood--${moodClass}`">
+                {{ modalMoodLabel }}
               </span>
               <button
                 id="modal-close-btn"
@@ -273,18 +272,53 @@ const avatarBg  = computed(() => getAvatarBg(postStore.focusedUser?._id ?? ''))
 const timestamp = computed(() =>
   postStore.focusedDream ? timeAgo(postStore.focusedDream.created_at) : ''
 )
-const moodClass = computed(() =>
-  postStore.focusedDream?.mood_tag.toLowerCase().replace(/\s+/g, '-') ?? ''
-)
-const isEdited = computed(() =>
-  (postStore.focusedDream?.edit_history?.length ?? 0) > 0
-)
-
 const analysis = computed(() => {
   const d = postStore.focusedDream
   if (!d) return null
   return d.ai_result ?? d.aiAnalysis ?? null
 })
+type EmotionToneKey = 'urgent_conflicted' | 'anxious' | 'fearful' | 'sad' | 'calm' | 'mixed' | 'neutral'
+const emotionLabels: Record<'vi' | 'en', Record<EmotionToneKey, string>> = {
+  vi: {
+    urgent_conflicted: 'Gấp gáp · bối rối · tiếc nuối',
+    anxious: 'Lo âu',
+    fearful: 'Sợ hãi',
+    sad: 'Buồn · tiếc nuối',
+    calm: 'Bình yên',
+    mixed: 'Cảm xúc đan xen',
+    neutral: 'Chưa xác định rõ',
+  },
+  en: {
+    urgent_conflicted: 'Urgent · conflicted · regretful',
+    anxious: 'Anxious',
+    fearful: 'Fearful',
+    sad: 'Sad · regretful',
+    calm: 'Calm',
+    mixed: 'Mixed emotions',
+    neutral: 'Unclear',
+  },
+}
+
+const emotionToneKey = computed<EmotionToneKey>(() => {
+  const explicit = analysis.value?.emotional_tone_key
+  if (explicit && explicit in emotionLabels.vi) return explicit
+  const legacy = `${analysis.value?.emotional_tone || postStore.focusedDream?.mood_tag || ''}`.toLocaleLowerCase('vi')
+  if (/gấp|bối rối/.test(legacy)) return 'urgent_conflicted'
+  if (/lo âu|lo lắng|anx/.test(legacy)) return 'anxious'
+  if (/sợ|fear|hoảng/.test(legacy)) return 'fearful'
+  if (/buồn|tiếc|sad|regret/.test(legacy)) return 'sad'
+  if (/bình yên|calm|thư thái/.test(legacy)) return 'calm'
+  if (/đan xen|mixed/.test(legacy)) return 'mixed'
+  return 'neutral'
+})
+const interfaceLanguage = computed<'vi' | 'en'>(() =>
+  document.documentElement.lang.toLocaleLowerCase().startsWith('en') ? 'en' : 'vi'
+)
+const modalMoodLabel = computed(() => emotionLabels[interfaceLanguage.value][emotionToneKey.value])
+const moodClass = computed(() => emotionToneKey.value.replace(/_/g, '-'))
+const isEdited = computed(() =>
+  (postStore.focusedDream?.edit_history?.length ?? 0) > 0
+)
 
 // ── Like state ────────────────────────────────────────────────────────────────
 
@@ -429,6 +463,12 @@ watch(() => postStore.focusedId, (val) => {
 .modal-mood--calm        { background: #0e2a1c; color: #4ade80; border-color: #1a3d2e; }
 .modal-mood--prophetic   { background: #1e1230; color: #a78bfa; border-color: #2d1f4a; }
 .modal-mood--euphoric    { background: #2a1e08; color: #f59e0b; border-color: #3d2d10; }
+.modal-mood--urgent-conflicted { background: #2a1e08; color: #f5c36a; border-color: #4a3514; }
+.modal-mood--anxious,
+.modal-mood--fearful { background: #2d1010; color: #f19a9f; border-color: #4b2024; }
+.modal-mood--sad { background: #24182f; color: #c9a7e8; border-color: #3b2850; }
+.modal-mood--mixed { background: #171e30; color: #aab9e8; border-color: #293654; }
+.modal-mood--neutral { background: #242424; color: #b8b8b8; border-color: #343434; }
 
 .modal-close-btn {
   width: 32px;

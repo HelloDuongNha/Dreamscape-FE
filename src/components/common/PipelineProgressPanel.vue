@@ -31,6 +31,7 @@ const props = defineProps<{
   elapsedSeconds?: number
   processedLabel?: string
   estimatedRemainingSeconds?: number | null
+  remainingText?: string
 }>()
 
 function durationLabel(totalSeconds: number): string {
@@ -45,10 +46,13 @@ function durationLabel(totalSeconds: number): string {
 
 const elapsedLabel = computed(() => durationLabel(props.elapsedSeconds || 0))
 const remainingLabel = computed(() => {
-  if (typeof props.estimatedRemainingSeconds === 'number' && props.estimatedRemainingSeconds >= 0) {
-    return `Còn khoảng ${durationLabel(props.estimatedRemainingSeconds)}`
+  if (props.remainingText) return props.remainingText
+  const estimate = props.estimatedRemainingSeconds
+  if (typeof estimate !== 'number') {
+    return 'Đang đo tốc độ xử lý để ước tính'
   }
-  return 'Thời gian còn lại: đang ước tính'
+  if (estimate < 0) return `Vượt ước tính ${durationLabel(Math.abs(estimate))} · vẫn đang xử lý`
+  return `Còn khoảng ${durationLabel(estimate)}`
 })
 </script>
 

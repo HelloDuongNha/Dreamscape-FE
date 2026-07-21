@@ -1,796 +1,309 @@
 <template>
-  <div class="settings-section">
-    <!-- Unauthorized Fallback Screen -->
-    <div v-if="isUnauthorized" class="unauthorized-container">
-      <div class="unauthorized-card">
-        <div class="unauthorized-icon" aria-hidden="true"></div>
-        <h3 class="unauthorized-title">Không có quyền truy cập</h3>
-        <p class="unauthorized-desc">Bạn không có quyền truy cập trang duyệt ứng viên quy luật.</p>
-      </div>
+  <div class="rule-review-page">
+    <div v-if="isUnauthorized" class="empty-panel">
+      <h3>Không có quyền truy cập</h3>
+      <p>Bạn không có quyền duyệt tri thức học thuật.</p>
     </div>
 
-    <!-- Main Panel -->
-    <div v-else class="moderation-panel">
-      <div class="moderation-header">
+    <template v-else>
+      <header class="page-header">
         <div>
-          <h2 class="settings-section__title">Duyệt tri thức học thuật</h2>
-          <p class="settings-section__desc">
-            Xem các kết luận được rút ra từ tài liệu trước khi đưa vào phân tích giấc mơ.
-          </p>
+          <p class="eyebrow">Kiểm duyệt quy luật học thuật</p>
+          <h1>Duyệt tri thức học thuật</h1>
+          <p>Đối chiếu kết luận với bằng chứng nguồn trước khi đưa vào phân tích giấc mơ.</p>
         </div>
+        <div class="header-actions">
+          <div v-if="activeStatus === 'pending' || activeStatus === 'rejected'" class="bulk-actions">
+            <template v-if="activeStatus === 'pending'">
+              <AppButton variant="smart" @click="openBulkAction('approve_pending')">Duyệt tất cả{{ sourceIdFilter ? ' của tài liệu' : '' }}</AppButton>
+              <AppButton variant="danger-outline" @click="openBulkAction('reject_pending')">Từ chối tất cả{{ sourceIdFilter ? ' của tài liệu' : '' }}</AppButton>
+            </template>
+            <template v-else>
+              <AppButton variant="secondary" @click="openBulkAction('restore_rejected')">Khôi phục tất cả{{ sourceIdFilter ? ' của tài liệu' : '' }}</AppButton>
+              <AppButton variant="danger-outline" @click="openBulkAction('delete_rejected')">Xóa tất cả{{ sourceIdFilter ? ' của tài liệu' : '' }}</AppButton>
+            </template>
+          </div>
+          <div class="header-count">
+            <strong>{{ candidates.length }}</strong>
+            <span>{{ activeTabLabel.toLowerCase() }}</span>
+          </div>
+        </div>
+      </header>
+
+      <div v-if="sourceIdFilter" class="source-filter">
+        <span>Đang lọc theo một tài liệu</span>
+        <button type="button" @click="clearSourceFilter">Bỏ lọc</button>
       </div>
 
-      <!-- Main Columns Layout -->
-      <div class="candidates-layout">
-        
-        <!-- Left Column: Compact List Sidebar -->
-        <div class="layout-left">
-          <!-- Filter Pill if sourceId exists -->
-          <div v-if="sourceIdFilter" class="filter-pill">
-            <span class="filter-pill-text">Đang lọc theo tài liệu</span>
-            <button @click="clearSourceFilter" class="clear-pill-btn" aria-label="Bỏ lọc">&times;</button>
-          </div>
-
-          <!-- Status Tabs -->
-          <div class="moderation-tabs">
-            <button
-              v-for="tab in statusTabs"
-              :key="tab.status"
-              :class="['moderation-tab', { 'moderation-tab--active': activeStatus === tab.status }]"
-              @click="changeTab(tab.status)"
-            >
-              {{ tab.label }}
-            </button>
-          </div>
-
-          <!-- Loading State -->
-          <div v-if="isLoadingList" class="moderation-loading">
+      <nav class="status-tabs" aria-label="Trạng thái quy luật">
+        <button
+          v-for="tab in statusTabs"
+          :key="tab.value"
+          type="button"
+          :class="{ active: activeStatus === tab.value }"
+          @click="changeTab(tab.value)"
+        >
+          {{ tab.label }}
+        </button>
+      </nav>
+      <div class="review-layout">
+        <aside class="candidate-sidebar">
+          <div v-if="isLoadingList" class="loading-state">
             <span class="spinner"></span>
-            <p>Đang tải ứng viên...</p>
+            <span>Đang tải quy luật…</span>
           </div>
-
-          <!-- Empty State -->
-          <div v-else-if="candidates.length === 0" class="moderation-empty">
-            <div class="moderation-empty__icon" aria-hidden="true"></div>
-            <h3 class="moderation-empty__title">Không có dữ liệu</h3>
-            <p class="moderation-empty__desc">
-              {{ emptyStateMessage }}
-            </p>
+          <div v-else-if="candidates.length === 0" class="empty-panel compact">
+            <h3>Không có dữ liệu</h3>
+            <p>{{ sourceIdFilter ? 'Tài liệu này chưa có quy luật ở trạng thái đã chọn.' : 'Chưa có quy luật ở trạng thái đã chọn.' }}</p>
           </div>
-
-          <!-- List Items -->
-          <div v-else class="candidates-list-scroll">
-            <div
-              v-for="(groupCands, sourceTitle) in groupedCandidates"
-              :key="sourceTitle"
-              class="source-group-section"
-            >
-              <h4 class="source-group-header" :title="sourceTitle">{{ sourceTitle }}</h4>
-              <div class="source-group-cards">
-                <div
-                  v-for="cand in groupCands"
-                  :key="cand._id"
-                  :class="['candidate-list-card', { 'candidate-list-card--active': selectedId === cand._id }]"
-                  @click="selectCandidate(cand._id)"
+          <div v-else class="candidate-list">
+            <section v-for="(items, sourceTitle) in groupedCandidates" :key="sourceTitle" class="source-group" :style="sourceGroupStyle(String(sourceTitle))">
+              <h2><span>{{ sourceTitle }}</span><small>{{ items.length }} quy luật</small></h2>
+              <div class="source-rule-list">
+                <button
+                  v-for="candidate in items"
+                  :key="candidate._id"
+                  type="button"
+                  :class="['candidate-card', { selected: selectedId === candidate._id }]"
+                  @click="selectCandidate(candidate._id)"
                 >
-                  <div class="cand-card-row">
-                    <span class="cand-card-title" :title="cand.label">{{ cand.label || 'Không có nhãn' }}</span>
-                  </div>
-                  <div class="cand-card-row footer-row">
-                    <span :class="['status-badge', getStatusClass(cand.status)]">
-                      {{ getStatusLabel(cand.status) }}
-                    </span>
-                    <span class="cand-card-date">{{ formatDate(cand.createdAt) }}</span>
-                  </div>
-                </div>
+                  <span class="candidate-title">{{ candidate.label }}</span>
+                  <span class="candidate-card-meta">
+                    <span :class="['status-chip', `status-${candidate.status}`]">{{ statusLabel(candidate.status) }}</span>
+                    <span class="score-chip" :style="{ color: scoreColor(candidate.evidenceCredibilityScore) }">{{ candidate.evidenceCredibilityScore ?? 0 }}/100</span>
+                    <span>{{ candidate.exactCitationCount ?? 0 }} cụm dẫn chứng</span>
+                  </span>
+                </button>
               </div>
-            </div>
+            </section>
           </div>
+        </aside>
 
-          <!-- Clear all button for rejected list at the bottom -->
-          <div v-if="activeStatus === 'rejected' && candidates.length > 0" class="clear-all-row-bottom">
-            <button
-              type="button"
-              class="action-link-btn text-danger-underline"
-              style="font-size: 0.8rem;"
-              @click="triggerClearAll"
-            >
-              Xóa tất cả bị từ chối
-            </button>
-          </div>
-        </div>
-
-        <!-- Right Column: Human-First Zero-Input Document Review -->
-        <div class="layout-right">
-          <!-- Loading Detail State -->
-          <div v-if="isLoadingDetail" class="detail-placeholder">
+        <main class="candidate-detail">
+          <div v-if="isLoadingDetail" class="loading-state detail-loading">
             <span class="spinner"></span>
-            <p>Đang tải chi tiết ứng viên...</p>
+            <span>Đang tải kết luận và bằng chứng…</span>
           </div>
-
-          <!-- No selection state -->
-          <div v-else-if="!selectedCandidate" class="detail-placeholder">
-            <div class="placeholder-icon"></div>
-            <h3>Chọn ứng viên từ danh sách</h3>
-            <p>Nhấp vào một ứng viên quy luật ở bên trái để xem thông tin chi tiết.</p>
+          <div v-else-if="!selectedCandidate" class="empty-panel detail-empty">
+            <h3>Chọn một quy luật</h3>
+            <p>Thông tin đánh giá và trích dẫn sẽ xuất hiện tại đây.</p>
           </div>
-
-          <!-- Content Details Document View -->
-          <div v-else class="detail-scroll-area">
-            
-            <!-- 1. KẾT LUẬN RÚT RA -->
-            <div class="review-document-card">
-              <h2 class="review-rule-title">{{ form.label }}</h2>
-              <p class="review-rule-citation">
-                <strong>Nguồn nghiên cứu:</strong> {{ getFormattedSourceInfo(selectedCandidate) }}
-              </p>
-            </div>
-
-            <!-- 2. TÓM TẮT TỪ TÀI LIỆU -->
-            <div class="review-document-block prominent-block">
-              <h3 class="review-block-title">Tóm tắt từ tài liệu</h3>
-              <div class="review-card-body">
-                <p class="prominent-evidence-text">{{ form.evidenceSummary }}</p>
+          <article v-else class="rule-document">
+            <section class="rule-hero">
+              <div class="hero-topline">
+                <span :class="['status-chip', `status-${selectedCandidate.status}`]">{{ statusLabel(selectedCandidate.status) }}</span>
+                <span class="rule-code">{{ selectedCandidate.proposedRuleId }}</span>
               </div>
-            </div>
-
-            <!-- 3. CƠ SỞ HỌC THUẬT -->
-            <div class="review-document-block">
-              <h3 class="review-block-title">Cơ sở học thuật</h3>
-              <div class="review-card-body">
-                <p class="formatted-text-block">{{ form.scientificBasis }}</p>
+              <h2>{{ selectedCandidate.label }}</h2>
+              <p class="source-line">{{ formattedSource }}</p>
+              <div v-if="selectedCandidate.qualityAccepted === false" class="quality-blocked">
+                <strong>Không đạt kiểm tra chất lượng</strong>
+                <span>{{ selectedCandidate.qualitySummary }}</span>
               </div>
-            </div>
+            </section>
 
-            <!-- 3.5. TIÊU CHÍ ĐÁNH GIÁ & ĐỘ PHÙ HỢP -->
-            <div class="review-document-block">
-              <h3 class="review-block-title">Tiêu chí đánh giá & Độ phù hợp</h3>
-              <div class="review-card-body">
-                <!-- Warning for non-oracle eligible candidates -->
-                <div v-if="selectedCandidate.oracleEligible === false" class="block-highlight" style="border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.05); padding: var(--space-4); margin-bottom: var(--space-4); border-radius: var(--radius-md);">
-                  <p class="formatted-text-block" style="color: #ef4444; font-weight: 600; margin: 0;">
-                    Tài liệu này có thể có kết luận học thuật hợp lệ, nhưng không phù hợp để dùng trực tiếp trong phân tích giấc mơ.
-                  </p>
-                </div>
-
-                <div class="scores-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin-bottom: var(--space-2);">
-                  <div class="score-card" style="background: var(--color-bg-subtle); padding: var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--color-border); text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <div class="score-label" style="font-size: 0.82rem; color: var(--color-text-muted); margin-bottom: var(--space-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-                      Mức chứng minh trong tài liệu
-                    </div>
-                    <div class="score-value" style="font-size: 2.2rem; font-weight: 800; color: #3b82f6; line-height: 1.1; margin: var(--space-1) 0;">
-                      {{ selectedCandidate.evidenceCredibilityScore ?? 0 }}/100
-                    </div>
-                    <div class="score-desc" style="font-size: 0.76rem; color: var(--color-text-muted); line-height: 1.4; margin-top: var(--space-2);">
-                      Điểm này cho biết kết luận này được chính tài liệu chứng minh rõ đến đâu.
-                    </div>
-                  </div>
-
-                  <div class="score-card" style="background: var(--color-bg-subtle); padding: var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--color-border); text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <div class="score-label" style="font-size: 0.82rem; color: var(--color-text-muted); margin-bottom: var(--space-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-                      Độ hữu ích cho Oracle
-                    </div>
-                    <div class="score-value" :style="{ color: selectedCandidate.oracleEligible ? '#10b981' : '#a3a3a3' }" style="font-size: 2.2rem; font-weight: 800; line-height: 1.1; margin: var(--space-1) 0;">
-                      {{ selectedCandidate.oracleUsefulnessScore ?? 0 }}/100
-                    </div>
-                    <div class="score-desc" style="font-size: 0.76rem; color: var(--color-text-muted); line-height: 1.4; margin-top: var(--space-2);">
-                      Điểm này cho biết kết luận này hữu ích thế nào cho việc giải mã giấc mơ của người dùng.
-                    </div>
-                  </div>
+            <section class="content-card inference-card">
+              <div class="section-heading">
+                <div>
+                  <h3>Nội dung có thể sử dụng</h3>
+                  <p class="section-description">Quan hệ, bối cảnh và giới hạn được rút ra từ tài liệu.</p>
                 </div>
               </div>
-            </div>
-
-            <!-- 4. ĐỘ TIN CẬY HỌC THUẬT -->
-            <div v-if="selectedCandidate.legitimacyLevel" class="review-document-block">
-              <h3 class="review-block-title">Độ tin cậy học thuật</h3>
-              <div class="review-card-body">
-                <p class="formatted-text-block" style="margin-bottom: var(--space-2);">
-                  {{ getLegitimacyExplanation(selectedCandidate) }}
-                </p>
-                <div v-if="selectedCandidate.legitimacyReason" class="assessment-row" style="margin-top: var(--space-2);">
-                  <strong>Đánh giá chi tiết:</strong>
-                  <p class="formatted-text-block mt-1">{{ selectedCandidate.legitimacyReason }}</p>
+              <div class="relationship-flow">
+                <div>
+                  <span>Yếu tố / chủ thể</span>
+                  <strong>{{ selectedCandidate.factor || 'Chưa xác định' }}</strong>
+                </div>
+                <div class="relationship-arrow" aria-hidden="true">→</div>
+                <div>
+                  <span>Kết quả / hiện tượng</span>
+                  <strong>{{ selectedCandidate.inputSource || 'Chưa xác định' }}</strong>
                 </div>
               </div>
-            </div>
+              <p v-if="selectedCandidate.fullStatement" class="rule-explanation">{{ selectedCandidate.fullStatement }}</p>
+              <ul class="rule-reading-guide">
+                <li>
+                  <strong>Chỉ áp dụng trong bối cảnh:</strong>
+                  {{ reviewConditions.length ? punctuatedList(reviewConditions, '; ') : 'Tài liệu chưa nêu bối cảnh đủ cụ thể.' }}
+                </li>
+                <li>
+                  <strong>Dấu hiệu cần xuất hiện trong lời kể:</strong>
+                  {{ reviewDreamTags.length ? punctuatedList(reviewDreamTags, ', ') : 'Chưa xác định được dấu hiệu phù hợp.' }}
+                </li>
+                <li>
+                  <strong>Giới hạn cần giữ:</strong>
+                  {{ reviewLimitations.length ? punctuatedList(reviewLimitations, '; ') : 'Tài liệu chưa nêu giới hạn đủ rõ.' }}
+                </li>
+              </ul>
+            </section>
 
-            <!-- 5. XUNG ĐỘT HOẶC GHI CHÚ LIÊN QUAN (only if relevant) -->
-            <div v-if="selectedCandidate.conflictStatus && selectedCandidate.conflictStatus !== 'none' && getConflictExplanation(selectedCandidate)" class="review-document-block">
-              <h3 class="review-block-title">Xung đột hoặc ghi chú liên quan</h3>
-              <div class="review-card-body block-highlight" style="border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.02); padding: var(--space-4);">
-                <p class="formatted-text-block">{{ getConflictExplanation(selectedCandidate) }}</p>
-              </div>
-            </div>
-
-            <!-- 6. BẰNG CHỨNG HỖ TRỢ (only if clean excerpts exist) -->
-            <div class="review-document-block" v-if="evidenceExcerpts && evidenceExcerpts.length > 0">
-              <h3 class="review-block-title">Bằng chứng hỗ trợ</h3>
-              <div class="excerpt-cards-list">
-                <div
-                  v-for="(exc, idx) in evidenceExcerpts"
-                  :key="idx"
-                  class="excerpt-card"
-                >
-                  <div class="excerpt-card-header" @click="toggleExcerptCollapse(idx)">
-                    <div class="excerpt-card-meta">
-                      <span class="excerpt-section-tag">{{ exc.sectionType || 'Paragraph' }}</span>
-                      <span v-if="exc.sectionTitle" class="excerpt-title-tag" :title="exc.sectionTitle">{{ exc.sectionTitle }}</span>
-                      <span v-if="exc.pageStart" class="excerpt-page-tag">
-                        Trang {{ exc.pageStart }}<span v-if="exc.pageEnd && exc.pageEnd !== exc.pageStart">-{{ exc.pageEnd }}</span>
-                      </span>
-                    </div>
-                    <span class="collapse-chevron">{{ excerptCollapsed[idx] ? 'v' : '^' }}</span>
+            <section class="assessment-grid">
+              <div class="content-card assessment-card">
+                <div class="score-header">
+                  <div>
+                    <h3 class="assessment-title">Mức hỗ trợ từ tài liệu</h3>
+                    <strong class="score-number" :style="{ color: scoreColor(selectedCandidate.evidenceCredibilityScore) }">{{ selectedCandidate.evidenceCredibilityScore ?? 0 }}/100</strong>
                   </div>
-
-                  <div v-if="!excerptCollapsed[idx]" class="excerpt-card-body">
-                    <blockquote class="focused-excerpt-blockquote">
-                      "{{ exc.excerpt }}"
-                    </blockquote>
-                    
-                    <!-- Context Collapsible -->
-                    <div class="context-collapsible-wrapper" v-if="getCorrespondingChunkPreview(exc.chunkId)">
-                      <button
-                        type="button"
-                        class="context-toggle-btn"
-                        @click="toggleChunkPreview(exc.chunkId)"
-                      >
-                        {{ showChunkPreviewMap[exc.chunkId] ? 'Ẩn ngữ cảnh rộng' : 'Xem thêm ngữ cảnh rộng' }}
-                      </button>
-                      <div v-show="showChunkPreviewMap[exc.chunkId]" class="context-preview-box">
-                        <p class="context-preview-text">{{ getCorrespondingChunkPreview(exc.chunkId) }}</p>
+                  <span :class="['level-badge', scoreLevelClass(selectedCandidate.evidenceCredibilityScore)]">
+                    {{ scoreLevelLabel(selectedCandidate.evidenceCredibilityScore) }}
+                  </span>
+                </div>
+                <div class="score-track" role="progressbar" aria-label="Mức hỗ trợ từ tài liệu" :aria-valuenow="selectedCandidate.evidenceCredibilityScore ?? 0" aria-valuemin="0" aria-valuemax="100">
+                  <span :style="{ width: `${selectedCandidate.evidenceCredibilityScore ?? 0}%`, backgroundColor: scoreColor(selectedCandidate.evidenceCredibilityScore) }"></span>
+                </div>
+                <p class="score-conclusion">{{ evidenceScoreConclusion }}</p>
+                <p class="score-note">Điểm phản ánh mức tài liệu đang hỗ trợ kết luận, không phải xác suất kết luận đúng trong mọi trường hợp.</p>
+                <dl class="criteria-list">
+                  <div v-for="item in scoreCriteriaRows" :key="item.key" class="criterion-row">
+                    <dt>
+                      <span>{{ scoreCriterionLabel(item.key) }}</span>
+                      <div class="criterion-help">
+                        <button type="button" aria-label="Giải thích tiêu chí" @click.stop="toggleCriterionHelp(item.key)">?</button>
+                        <div v-if="openCriterionKey === item.key" @click.stop>
+                          <strong>Ngưỡng chấm điểm</strong>
+                          <ul><li v-for="line in rubricBullets(item.rubric)" :key="line">{{ line }}</li></ul>
+                          <strong>Vì sao quy luật nhận {{ item.score }}/{{ item.maxScore }}</strong>
+                          <ul><li>{{ item.reason }}</li></ul>
+                        </div>
                       </div>
-                    </div>
+                    </dt>
+                    <dd :style="{ color: scoreColor(item.maxScore ? item.score / item.maxScore * 100 : 0) }">{{ item.score }}/{{ item.maxScore }}</dd>
                   </div>
+                </dl>
+              </div>
+
+            </section>
+
+            <section v-if="ruleRelationships.length" class="content-card relationship-card">
+              <div class="section-heading">
+                <div>
+                  <h3>Quan hệ với các quy luật khác</h3>
+                  <p class="section-description">Đối chiếu theo chiều chủ thể → kết quả, điều kiện và chiều tác động; không chỉ so khớp câu chữ.</p>
                 </div>
               </div>
-            </div>
-
-            <!-- 8. COLLAPSIBLE ADVANCED EDIT Accordion -->
-            <div class="advanced-collapsible-section">
-              <button
-                type="button"
-                class="advanced-toggle-btn"
-                @click="showAdvancedEdit = !showAdvancedEdit"
-              >
-                <span>Chỉnh sửa nâng cao</span>
-                <span class="toggle-chevron">{{ showAdvancedEdit ? '▲' : '▼' }}</span>
+              <button v-for="item in ruleRelationships" :key="item.ruleId" type="button" class="related-rule" @click="selectCandidate(item.ruleId)">
+                <span :class="['relation-kind', `relation-kind--${item.relationship}`]">{{ relationshipLabel(item.relationship) }}</span>
+                <strong>{{ item.label }}</strong>
+                <small>{{ item.ruleCode }} · {{ item.evidenceScore }}/100</small>
               </button>
-              <div v-show="showAdvancedEdit" class="advanced-fields-panel">
-                <p class="advanced-intro-text">
-                  Lưu ý: Chỉ chỉnh phần này nếu bạn hiểu cách quy luật được dùng trong pipeline phân tích. Thay đổi ở đây sẽ cập nhật trực tiếp dữ liệu thô.
-                </p>
+            </section>
 
-                <form @submit.prevent="handleSaveCandidate">
-                  <div class="form-grid">
-                    
-                    <!-- Form Edit Fields (Editable if pending/needs_edit) -->
-                    <div class="form-group form-group--full">
-                      <label class="form-label" for="edit-label">Nhãn quy luật</label>
-                      <input
-                        id="edit-label"
-                        v-model="form.label"
-                        type="text"
-                        class="form-input"
-                        :readonly="isReadonly"
-                        required
-                      />
-                    </div>
+            <section v-if="selectedCandidate.probeBlueprint" class="content-card probe-card">
+              <div class="section-heading">
+                <div>
+                  <h3>Khả năng kiểm tra khi áp dụng</h3>
+                  <p class="section-description">Chỉ tạo câu hỏi khi chính kết luận học thuật có một điều kiện mà người kể có thể xác nhận hoặc bác bỏ.</p>
+                </div>
+              </div>
+              <p v-if="selectedCandidate.probeBlueprint.checkable">{{ selectedCandidate.probeBlueprint.applicabilityCheck }}</p>
+              <p v-else>{{ selectedCandidate.probeBlueprint.explanation }}</p>
+              <p v-if="selectedCandidate.probeBlueprint.conditionSummary"><strong>Điều kiện trong tài liệu:</strong> {{ selectedCandidate.probeBlueprint.conditionSummary }}</p>
+              <p class="section-description">{{ selectedCandidate.probeBlueprint.feedbackEffect }}</p>
+            </section>
 
-                    <div class="form-group form-group--full">
-                      <label class="form-label" for="edit-scientificBasis">Cơ sở khoa học (scientificBasis)</label>
-                      <textarea
-                        id="edit-scientificBasis"
-                        v-model="form.scientificBasis"
-                        rows="4"
-                        class="form-textarea"
-                        :readonly="isReadonly"
-                        required
-                      ></textarea>
-                    </div>
+            <section class="content-card feedback-card">
+              <div class="section-heading">
+                <div>
+                  <h3>Phản hồi khi áp dụng vào giấc mơ</h3>
+                  <p class="section-description">Câu hỏi được viết lại theo từng giấc mơ; thống kê này đo mức phù hợp thực tế, không làm thay đổi điểm học thuật.</p>
+                </div>
+                <strong>{{ feedbackStats.applicabilityRate === null ? 'Chưa đủ dữ liệu' : `${feedbackStats.applicabilityRate}% phù hợp` }}</strong>
+              </div>
+              <div class="feedback-bar" :aria-label="`${feedbackStats.total} lượt phản hồi`">
+                <span class="feedback-bar__yes" :style="{ width: `${feedbackPercent('supports')}%` }"></span>
+                <span class="feedback-bar__no" :style="{ width: `${feedbackPercent('weakens')}%` }"></span>
+                <span class="feedback-bar__unsure" :style="{ width: `${feedbackPercent('unresolved')}%` }"></span>
+              </div>
+              <div class="feedback-reactions">
+                <span><b>✓</b> Áp dụng phù hợp · {{ feedbackStats.supports }}</span>
+                <span><b>×</b> Không phù hợp trường hợp · {{ feedbackStats.weakens }}</span>
+                <span><b>?</b> Chưa đủ thông tin · {{ feedbackStats.unresolved }}</span>
+              </div>
+              <p v-if="feedbackStats.total === 0" class="feedback-empty">Chưa có phản hồi vì quy luật chưa được áp dụng vào một kết quả phân tích giấc mơ có câu hỏi xác nhận.</p>
+            </section>
 
-                    <div class="form-group form-group--full">
-                      <label class="form-label" for="edit-aiInstruction">Chỉ dẫn AI (aiInstruction)</label>
-                      <textarea
-                        id="edit-aiInstruction"
-                        v-model="form.aiInstruction"
-                        rows="4"
-                        class="form-textarea"
-                        :readonly="isReadonly"
-                        required
-                      ></textarea>
-                    </div>
-
-                    <div class="form-group form-group--full">
-                      <label class="form-label" for="edit-limitations">Giới hạn nghiên cứu (limitations)</label>
-                      <textarea
-                        id="edit-limitations"
-                        v-model="form.limitations"
-                        rows="3"
-                        class="form-textarea"
-                        :readonly="isReadonly"
-                        required
-                      ></textarea>
-                    </div>
-
-                    <div class="form-group form-group--full">
-                      <label class="form-label" for="edit-evidenceSummary">Tóm tắt bằng chứng (evidenceSummary)</label>
-                      <textarea
-                        id="edit-evidenceSummary"
-                        v-model="form.evidenceSummary"
-                        rows="3"
-                        class="form-textarea"
-                        :readonly="isReadonly"
-                        required
-                      ></textarea>
-                    </div>
-
-                    <div class="form-group form-group--full">
-                      <label class="form-label" for="edit-reviewerNote">Ghi chú của kiểm duyệt viên (reviewerNote)</label>
-                      <textarea
-                        id="edit-reviewerNote"
-                        v-model="form.reviewerNote"
-                        rows="2"
-                        class="form-textarea"
-                        :readonly="isReadonly"
-                      ></textarea>
-                    </div>
-
-                    <!-- Technical database fields -->
-                    <div class="form-group form-group--full">
-                      <label class="form-label" for="edit-proposedRuleId">Mã đề xuất (proposedRuleId)</label>
-                      <input
-                        id="edit-proposedRuleId"
-                        v-model="form.proposedRuleId"
-                        type="text"
-                        class="form-input mono"
-                        :readonly="isReadonly"
-                        required
-                      />
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="edit-group">Nhóm quy luật (group)</label>
-                      <select
-                        id="edit-group"
-                        v-model="form.group"
-                        class="form-input select-styled"
-                        :disabled="isReadonly"
-                        required
-                      >
-                        <option value="sleep_context">Bối cảnh giấc mơ (sleep_context)</option>
-                        <option value="dream_psychology">Tâm lý học giấc mơ (dream_psychology)</option>
-                        <option value="personality_knowledge">Tính cách cá nhân (personality_knowledge)</option>
-                        <option value="cultural_limitation">Giới hạn văn hóa (cultural_limitation)</option>
-                      </select>
-                      <p class="field-help-desc">{{ getGroupDesc(form.group) }}</p>
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="edit-category">Phân loại (category)</label>
-                      <input
-                        id="edit-category"
-                        v-model="form.category"
-                        type="text"
-                        class="form-input"
-                        :readonly="isReadonly"
-                        required
-                      />
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="edit-factor">Nhân tố (factor)</label>
-                      <input
-                        id="edit-factor"
-                        v-model="form.factor"
-                        type="text"
-                        class="form-input"
-                        :readonly="isReadonly"
-                        required
-                      />
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="edit-claimStrength">Độ mạnh khẳng định (claimStrength)</label>
-                      <select
-                        id="edit-claimStrength"
-                        v-model="form.claimStrength"
-                        class="form-input select-styled"
-                        :disabled="isReadonly"
-                        required
-                      >
-                        <option value="interpretive_framework">Khung diễn giải</option>
-                        <option value="possible_contributing_factor">Yếu tố có thể góp phần</option>
-                        <option value="association_not_causation">Liên hệ, không phải nhân quả</option>
-                        <option value="hypothesis_not_diagnosis">Giả thuyết, không phải chẩn đoán</option>
-                        <option value="epistemic_boundary_rule">Quy tắc giới hạn tri thức</option>
-                      </select>
-                      <p class="field-help-desc">{{ getClaimStrengthDesc(form.claimStrength) }}</p>
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="edit-confidenceCap">Mức tin cậy tối đa (confidenceCap)</label>
-                      <input
-                        id="edit-confidenceCap"
-                        v-model.number="form.confidenceCap"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="0.65"
-                        class="form-input"
-                        :readonly="isReadonly"
-                        required
-                      />
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="edit-evidenceCredibilityScore">Mức chứng minh trong tài liệu (evidenceCredibilityScore)</label>
-                      <input
-                        id="edit-evidenceCredibilityScore"
-                        v-model.number="form.evidenceCredibilityScore"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        class="form-input"
-                        :readonly="isReadonly"
-                        required
-                      />
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="edit-oracleUsefulnessScore">Độ hữu ích cho Oracle (oracleUsefulnessScore)</label>
-                      <input
-                        id="edit-oracleUsefulnessScore"
-                        v-model.number="form.oracleUsefulnessScore"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        class="form-input"
-                        :readonly="isReadonly"
-                        required
-                      />
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="edit-paperDomain">Phạm vi nghiên cứu (paperDomain)</label>
-                      <select
-                        id="edit-paperDomain"
-                        v-model="form.paperDomain"
-                        class="form-input select-styled"
-                        :disabled="isReadonly"
-                        required
-                      >
-                        <option value="dream_sleep_psychology">Tâm lý học giấc mơ / Giấc ngủ (dream_sleep_psychology)</option>
-                        <option value="computer_vision">Thị giác máy tính (computer_vision)</option>
-                        <option value="medicine">Y học tổng quát (medicine)</option>
-                        <option value="general_science">Khoa học chung (general_science)</option>
-                        <option value="unknown">Không xác định (unknown)</option>
-                      </select>
-                    </div>
-
-                    <div class="form-group" style="display: flex; align-items: center; gap: 8px; align-self: center;">
-                      <input
-                        id="edit-oracleEligible"
-                        v-model="form.oracleEligible"
-                        type="checkbox"
-                        :disabled="isReadonly"
-                        style="width: auto; margin: 0;"
-                      />
-                      <label class="form-label" for="edit-oracleEligible" style="margin: 0; cursor: pointer;">Phù hợp với Oracle (oracleEligible)</label>
-                    </div>
-
-
-                    <div class="form-group">
-                      <label class="form-label" for="edit-evidenceRole">Vai trò bằng chứng (evidenceRole)</label>
-                      <select
-                        id="edit-evidenceRole"
-                        v-model="form.evidenceRole"
-                        class="form-input select-styled"
-                        :disabled="isReadonly"
-                        required
-                      >
-                        <option value="primary_support">Bằng chứng chính</option>
-                        <option value="secondary_support">Bằng chứng phụ</option>
-                        <option value="background">Bối cảnh nền</option>
-                        <option value="limitation">Giới hạn áp dụng</option>
-                        <option value="contradiction">Bằng chứng trái chiều</option>
-                      </select>
-                      <p class="field-help-desc">{{ getEvidenceRoleDesc(form.evidenceRole) }}</p>
-                    </div>
-
-                    <div class="form-group form-group--full">
-                      <label class="form-label" for="edit-inputSource">Nguồn đầu vào (inputSource)</label>
-                      <input
-                        id="edit-inputSource"
-                        v-model="form.inputSource"
-                        type="text"
-                        class="form-input"
-                        :readonly="isReadonly"
-                        required
-                      />
-                    </div>
-
-                    <div class="form-group form-group--full">
-                      <div class="textarea-header">
-                        <label class="form-label" for="edit-inputRequired">Điều kiện cấu trúc (inputRequired JSON)</label>
-                        <button
-                          v-if="!isReadonly"
-                          type="button"
-                          class="prettify-btn"
-                          @click="handlePrettifyJson"
-                        >
-                          Định dạng JSON
-                        </button>
-                      </div>
-                      <textarea
-                        id="edit-inputRequired"
-                        v-model="inputRequiredStr"
-                        rows="5"
-                        class="form-textarea mono"
-                        :readonly="isReadonly"
-                        required
-                      ></textarea>
-                    </div>
-
-                    <!-- Save changes button inside advanced only -->
-                    <div class="form-group form-group--full form-save-row" v-if="!isReadonly">
-                      <AppButton
-                        variant="secondary"
-                        type="submit"
-                        :loading="isSaving"
-                      >
-                        Lưu cấu hình nâng cao
-                      </AppButton>
-                    </div>
+            <section v-if="evidenceExcerpts.length" class="content-card citations-card">
+              <div class="section-heading">
+                <div>
+                  <h3>Trích dẫn nguồn đã kiểm chứng</h3>
+                  <p class="section-description">Mỗi đoạn dưới đây được lấy từ đúng chunk và đã đối chiếu nguyên văn.</p>
+                </div>
+                <span class="verified-badge">Khớp nguyên văn</span>
+              </div>
+              <div class="citation-list">
+                <article v-for="excerpt in evidenceExcerpts" :key="excerpt.evidenceGroupId" class="citation-item">
+                  <div class="citation-meta">
+                    <span>{{ excerpt.sourceTitle || 'Tài liệu chưa xác định' }} · {{ excerpt.sectionTitle || excerpt.sectionType || 'Đoạn văn' }}</span>
+                    <span v-if="excerpt.pageStart">Trang {{ excerpt.pageStart }}<template v-if="excerpt.pageEnd && excerpt.pageEnd !== excerpt.pageStart">–{{ excerpt.pageEnd }}</template></span>
                   </div>
-                </form>
+                  <blockquote>{{ excerpt.excerpt }}</blockquote>
+                  <button
+                    v-if="hasWiderContext(excerpt)"
+                    type="button"
+                    class="context-button"
+                    @click="toggleContext(excerpt.evidenceGroupId)"
+                  >
+                    {{ visibleContexts[excerpt.evidenceGroupId] ? 'Ẩn ngữ cảnh' : 'Xem ngữ cảnh rộng' }}
+                  </button>
+                  <p v-if="visibleContexts[excerpt.evidenceGroupId]" class="context-text">{{ chunkPreview(excerpt.chunkId) }}</p>
+                </article>
               </div>
-            </div>
+            </section>
 
-            <!-- Flat Action Footer for General Actions -->
-            <div class="review-actions-sticky-footer" v-if="!isReadonly">
-              <div class="sticky-footer-right" style="gap: var(--space-3); display: flex; width: 100%; justify-content: flex-end;">
-                <AppButton
-                  variant="danger-outline"
-                  type="button"
-                  :loading="isRejecting"
-                  @click="triggerRejection"
-                >
-                  Từ chối
-                </AppButton>
-                <AppButton
-                  variant="smart"
-                  type="button"
-                  :loading="isApproving"
-                  @click="triggerApproval"
-                >
-                  Phê duyệt quy luật
-                </AppButton>
+            <section v-if="selectedCandidate.status === 'pending'" class="action-bar">
+              <div>
+                <strong>Quyết định kiểm duyệt</strong>
+                <span>{{ selectedCandidate.qualityAccepted === false ? 'Quy luật này không thể duyệt vì chưa vượt qua kiểm tra chất lượng.' : 'Chỉ duyệt khi kết luận phản ánh đúng bằng chứng và có ích cho phân tích.' }}</span>
               </div>
-            </div>
-
-            <!-- Actions for Approved status -->
-            <div class="review-actions-sticky-footer" v-else-if="selectedCandidate.status === 'approved'">
-              <div class="sticky-footer-right" style="width: 100%; display: flex; justify-content: flex-end;">
-                <button
-                  type="button"
-                  class="action-link-btn text-danger-underline"
-                  @click="triggerDeactivate"
-                >
-                  Vô hiệu hóa
-                </button>
+              <div class="action-buttons">
+                <AppButton variant="danger-outline" :loading="isRejecting" @click="showRejectModal = true">Từ chối</AppButton>
+                <AppButton variant="smart" :disabled="selectedCandidate.qualityAccepted === false" :loading="isApproving" @click="showApproveModal = true">Phê duyệt</AppButton>
               </div>
-            </div>
-
-            <!-- Actions for Rejected status -->
-            <div class="review-actions-sticky-footer" v-else-if="selectedCandidate.status === 'rejected'">
-              <div class="sticky-footer-right" style="gap: var(--space-4); display: flex; align-items: center; width: 100%; justify-content: flex-end;">
-                <button
-                  type="button"
-                  class="action-link-btn text-muted-underline"
-                  :disabled="isRestoring"
-                  @click="handleRestore"
-                >
-                  {{ isRestoring ? 'Đang khôi phục...' : 'Khôi phục về Chờ duyệt' }}
-                </button>
-                <button
-                  type="button"
-                  class="action-link-btn text-danger-underline"
-                  @click="triggerDelete"
-                >
-                  Xóa vĩnh viễn
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
+            </section>
+          </article>
+        </main>
       </div>
-    </div>
+    </template>
 
-    <!-- Confirm Approval Modal -->
     <Teleport to="body">
       <Transition name="modal-fade">
-        <div
-          v-if="showApproveModal"
-          class="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Xác nhận phê duyệt"
-          @click.self="showApproveModal = false"
-        >
-          <div class="modal-container" tabindex="-1">
-            <div class="modal-header">
-              <h3 class="modal-header__title">Xác nhận phê duyệt ứng viên quy luật</h3>
-              <button class="modal-close-btn" aria-label="Đóng" @click="showApproveModal = false">&times;</button>
-            </div>
-            <div class="modal-body">
-              <p class="modal-description-text">
-                Sau khi phê duyệt, ứng viên này sẽ trở thành quy luật đang hoạt động và có thể được dùng trong phân tích giấc mơ.
-              </p>
-            </div>
+        <div v-if="showApproveModal" class="modal-overlay" role="dialog" aria-modal="true" @click.self="showApproveModal = false">
+          <div class="modal-container">
+            <div class="modal-header"><h3>Phê duyệt quy luật?</h3><button @click="showApproveModal = false">×</button></div>
+            <div class="modal-body"><p>Quy luật sẽ được đưa vào kho tri thức đang hoạt động cùng các trích dẫn đã kiểm chứng.</p></div>
             <div class="modal-footer">
-              <AppButton variant="secondary" size="sm" @click="showApproveModal = false">Hủy</AppButton>
-              <AppButton variant="smart" size="sm" :loading="isApproving" @click="confirmApproval">Xác nhận phê duyệt</AppButton>
+              <AppButton variant="secondary" @click="showApproveModal = false">Hủy</AppButton>
+              <AppButton variant="smart" :loading="isApproving" @click="confirmApproval">Phê duyệt</AppButton>
             </div>
           </div>
         </div>
       </Transition>
     </Teleport>
 
-    <!-- Reject Notes Modal -->
     <Teleport to="body">
       <Transition name="modal-fade">
-        <div
-          v-if="showRejectModal"
-          class="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Từ chối ứng viên"
-          @click.self="showRejectModal = false"
-        >
-          <div class="modal-container" tabindex="-1">
-            <div class="modal-header">
-              <h3 class="modal-header__title">Từ chối ứng viên quy luật</h3>
-              <button class="modal-close-btn" aria-label="Đóng" @click="showRejectModal = false">&times;</button>
-            </div>
-            <div class="modal-body">
-              <p class="modal-description-text">
-                Vui lòng nhập lý do từ chối ứng viên quy luật này:
-              </p>
-              <textarea
-                v-model="rejectReviewNote"
-                rows="4"
-                class="form-textarea"
-                placeholder="Ví dụ: Dữ liệu chưa đủ thuyết phục, mô hình hóa sai hoặc thiếu trích xuất trọng tâm..."
-              ></textarea>
-            </div>
+        <div v-if="bulkAction" class="modal-overlay" role="dialog" aria-modal="true" @click.self="bulkAction = null">
+          <div class="modal-container">
+            <div class="modal-header"><h3>{{ bulkActionCopy.title }}</h3><button @click="bulkAction = null">×</button></div>
+            <div class="modal-body"><p>{{ bulkActionCopy.message }}</p></div>
             <div class="modal-footer">
-              <AppButton variant="secondary" size="sm" @click="showRejectModal = false">Hủy</AppButton>
-              <AppButton variant="danger" size="sm" :loading="isRejecting" @click="confirmRejection">Xác nhận từ chối</AppButton>
+              <AppButton variant="secondary" :disabled="isBulkRunning" @click="bulkAction = null">Hủy</AppButton>
+              <AppButton :variant="bulkActionCopy.danger ? 'danger' : 'smart'" :loading="isBulkRunning" @click="confirmBulkAction">{{ bulkActionCopy.confirm }}</AppButton>
             </div>
           </div>
         </div>
       </Transition>
     </Teleport>
 
-    <!-- Deactivate Confirm Modal -->
     <Teleport to="body">
       <Transition name="modal-fade">
-        <div
-          v-if="showDeactivateModal"
-          class="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Vô hiệu hóa quy luật"
-          @click.self="showDeactivateModal = false"
-        >
-          <div class="modal-container" tabindex="-1">
-            <div class="modal-header">
-              <h3 class="modal-header__title">Vô hiệu hóa quy luật</h3>
-              <button class="modal-close-btn" aria-label="Đóng" @click="showDeactivateModal = false">&times;</button>
-            </div>
-            <div class="modal-body">
-              <p class="modal-description-text">
-                Vui lòng nhập lý do vô hiệu hóa quy luật này:
-              </p>
-              <textarea
-                v-model="deactivateReason"
-                rows="4"
-                class="form-textarea"
-                placeholder="Lý do vô hiệu hóa..."
-                style="margin-bottom: var(--space-3);"
-              ></textarea>
-              <label class="form-checkbox-label" style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer;">
-                <input
-                  type="checkbox"
-                  v-model="deactivateConfirmCheckbox"
-                />
-                Xác nhận muốn vô hiệu hóa quy luật này
-              </label>
-            </div>
+        <div v-if="showRejectModal" class="modal-overlay" role="dialog" aria-modal="true" @click.self="showRejectModal = false">
+          <div class="modal-container">
+            <div class="modal-header"><h3>Từ chối quy luật?</h3><button @click="showRejectModal = false">×</button></div>
+            <div class="modal-body"><p>Quy luật sẽ được chuyển sang danh sách bị từ chối. Nội dung học thuật gốc không bị thay đổi.</p></div>
             <div class="modal-footer">
-              <AppButton variant="secondary" size="sm" @click="showDeactivateModal = false">Hủy</AppButton>
-              <AppButton variant="danger" size="sm" :loading="isDeactivating" @click="confirmDeactivate">Xác nhận vô hiệu hóa</AppButton>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
-    <!-- Delete Confirm Modal -->
-    <Teleport to="body">
-      <Transition name="modal-fade">
-        <div
-          v-if="showDeleteModal"
-          class="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Xóa vĩnh viễn ứng viên"
-          @click.self="showDeleteModal = false"
-        >
-          <div class="modal-container" tabindex="-1">
-            <div class="modal-header">
-              <h3 class="modal-header__title">Xóa vĩnh viễn ứng viên</h3>
-              <button class="modal-close-btn" aria-label="Đóng" @click="showDeleteModal = false">&times;</button>
-            </div>
-            <div class="modal-body">
-              <p class="modal-description-text" style="color: #ef4444;">
-                Hành động này không thể hoàn tác. Ứng viên quy luật này sẽ bị xóa hoàn toàn khỏi cơ sở dữ liệu.
-              </p>
-              <label class="form-checkbox-label" style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer;">
-                <input
-                  type="checkbox"
-                  v-model="deleteConfirmCheckbox"
-                />
-                Tôi xác nhận muốn xóa vĩnh viễn ứng viên này
-              </label>
-            </div>
-            <div class="modal-footer">
-              <AppButton variant="secondary" size="sm" @click="showDeleteModal = false">Hủy</AppButton>
-              <AppButton variant="danger" size="sm" :loading="isDeleting" @click="confirmDelete">Xác nhận xóa</AppButton>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
-    <!-- Clear All Rejected Confirm Modal -->
-    <Teleport to="body">
-      <Transition name="modal-fade">
-        <div
-          v-if="showClearAllModal"
-          class="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Xóa tất cả ứng viên bị từ chối"
-          @click.self="showClearAllModal = false"
-        >
-          <div class="modal-container" tabindex="-1">
-            <div class="modal-header">
-              <h3 class="modal-header__title">Xóa tất cả ứng viên bị từ chối</h3>
-              <button class="modal-close-btn" aria-label="Đóng" @click="showClearAllModal = false">&times;</button>
-            </div>
-            <div class="modal-body">
-              <p class="modal-description-text" style="color: #ef4444;">
-                CẢNH BÁO: Tất cả các ứng viên quy luật có trạng thái 'Từ chối' (bao gồm cả các quy luật đã vô hiệu hóa) sẽ bị xóa vĩnh viễn khỏi hệ thống!
-              </p>
-              <p class="modal-description-text">
-                Vui lòng nhập <strong>CONFIRM</strong> bên dưới để xác nhận:
-              </p>
-              <input
-                type="text"
-                v-model="clearAllConfirmationInput"
-                class="form-input"
-                placeholder="Nhập CONFIRM..."
-              />
-            </div>
-            <div class="modal-footer">
-              <AppButton variant="secondary" size="sm" @click="showClearAllModal = false">Hủy</AppButton>
-              <AppButton variant="danger" size="sm" :loading="isClearingAll" @click="confirmClearAll">Xác nhận xóa sạch</AppButton>
+              <AppButton variant="secondary" @click="showRejectModal = false">Hủy</AppButton>
+              <AppButton variant="danger" :loading="isRejecting" @click="confirmRejection">Từ chối</AppButton>
             </div>
           </div>
         </div>
@@ -800,28 +313,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import AppButton from '@/components/common/AppButton.vue'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
-import AppButton from '@/components/common/AppButton.vue'
 import {
-  getRuleCandidates,
-  getRuleCandidateDetail,
-  updateRuleCandidate,
   approveRuleCandidate,
+  getRuleCandidateDetail,
+  getRuleCandidates,
   rejectRuleCandidate,
-  deactivateRule,
-  restoreRejectedCandidate,
-  deleteCandidate,
-  clearAllRejectedCandidates,
-  getApprovedRules
-} from '@/api/ruleCandidateApi'
-import { getApprovedSourceById } from '@/api/sourceApi'
-import type {
-  RuleCandidate,
-  EvidenceChunkPreview,
-  EvidenceExcerpt
+  runRuleV3BulkAction,
+  type RuleV3BulkAction,
+  type CandidateDetailResponse,
+  type EvidenceChunkPreview,
+  type EvidenceExcerpt,
+  type RuleCandidate
 } from '@/api/ruleCandidateApi'
 
 const route = useRoute()
@@ -829,1825 +336,346 @@ const router = useRouter()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 
-// Access Controls
 const isUnauthorized = computed(() => {
-  const allowlist = (import.meta.env.VITE_MODERATOR_USER_IDS || '').split(',')
-  const myId = authStore.user?._id
-  return !myId || !allowlist.map((id: string) => id.trim().toLowerCase()).includes(myId.toLowerCase())
+  const ids = (import.meta.env.VITE_MODERATOR_USER_IDS || '').split(',').map((id: string) => id.trim().toLowerCase())
+  return !authStore.user?._id || !ids.includes(authStore.user._id.toLowerCase())
 })
 
-// Query filters
-const sourceIdFilter = ref<string | null>(null)
-const sourceFilterTitle = ref<string | null>(null)
-
-// Left Panel Tab State
-const activeStatus = ref<string>('pending')
 const statusTabs = [
-  { status: 'approved_rules', label: 'Tất cả luật' },
-  { status: 'pending', label: 'Chờ duyệt' },
-  { status: 'rejected', label: 'Bị từ chối' }
+  { value: 'pending', label: 'Chờ duyệt' },
+  { value: 'approved', label: 'Đã duyệt' },
+  { value: 'rejected', label: 'Bị từ chối' }
 ]
-
-const emptyStateMessage = computed(() => {
-  if (sourceIdFilter.value) {
-    return 'Chưa có ứng viên nào từ tài liệu này. Hãy trích xuất quy luật từ trang chi tiết tài liệu.'
-  }
-  return 'Chưa có ứng viên quy luật nào.'
-})
-
-// Lists & Selection
+const activeStatus = ref('pending')
+const sourceIdFilter = computed(() => route.query.sourceId ? String(route.query.sourceId) : null)
 const candidates = ref<RuleCandidate[]>([])
-const isLoadingList = ref(false)
 const selectedId = ref<string | null>(null)
+const selectedCandidate = ref<RuleCandidate | null>(null)
+const evidenceChunks = ref<EvidenceChunkPreview[]>([])
+const evidenceExcerpts = ref<EvidenceExcerpt[]>([])
+type RuleRelationshipRow = NonNullable<CandidateDetailResponse['ruleRelationships']>[number]
+const ruleRelationships = ref<RuleRelationshipRow[]>([])
+const emptyFeedbackStats = () => ({ supports: 0, weakens: 0, unresolved: 0, total: 0, applicabilityRate: null as number | null })
+const feedbackStats = ref(emptyFeedbackStats())
+const visibleContexts = ref<Record<string, boolean>>({})
+const isLoadingList = ref(false)
+const isLoadingDetail = ref(false)
+const isApproving = ref(false)
+const isRejecting = ref(false)
+const showApproveModal = ref(false)
+const showRejectModal = ref(false)
+const openCriterionKey = ref<string | null>(null)
+const bulkAction = ref<RuleV3BulkAction | null>(null)
+const isBulkRunning = ref(false)
 
+const activeTabLabel = computed(() => statusTabs.find(tab => tab.value === activeStatus.value)?.label || '')
+const bulkActionCopy = computed(() => ({
+  approve_pending: { title: 'Duyệt tất cả quy luật đang chờ?', message: 'Chỉ quy luật vượt qua cổng kiểm chứng và tạo được chỉ mục truy hồi mới được duyệt. Các quy luật lỗi sẽ được giữ lại để kiểm tra.', confirm: 'Duyệt tất cả', danger: false },
+  reject_pending: { title: 'Từ chối tất cả quy luật đang chờ?', message: 'Các quy luật trong phạm vi đang xem sẽ được chuyển sang danh sách bị từ chối.', confirm: 'Từ chối tất cả', danger: true },
+  restore_rejected: { title: 'Khôi phục tất cả quy luật?', message: 'Các quy luật bị từ chối trong phạm vi đang xem sẽ trở lại hàng chờ duyệt.', confirm: 'Khôi phục tất cả', danger: false },
+  delete_rejected: { title: 'Xóa vĩnh viễn tất cả quy luật bị từ chối?', message: 'Quy luật và toàn bộ liên kết dẫn chứng của chúng sẽ bị xóa. Thao tác này không thể hoàn tác.', confirm: 'Xóa vĩnh viễn', danger: true }
+} as const)[bulkAction.value || 'approve_pending'])
 const groupedCandidates = computed(() => {
   const groups: Record<string, RuleCandidate[]> = {}
-  for (const cand of candidates.value) {
-    const sourceObj = cand.academicSourceId && typeof cand.academicSourceId === 'object' ? cand.academicSourceId : null
-    const title = sourceObj?.title || cand.sourceTitle || 'Tài liệu khác'
-    if (!groups[title]) {
-      groups[title] = []
-    }
-    groups[title].push(cand)
+  for (const candidate of candidates.value) {
+    const title = candidate.sourceTitle || 'Tài liệu chưa xác định'
+    if (!groups[title]) groups[title] = []
+    groups[title].push(candidate)
   }
   return groups
 })
 
-// Detail & Edit Form State
-const selectedCandidate = ref<RuleCandidate | null>(null)
-const evidenceChunks = ref<EvidenceChunkPreview[]>([])
-const evidenceExcerpts = ref<EvidenceExcerpt[]>([])
-const isLoadingDetail = ref(false)
-const isSaving = ref(false)
-
-const form = ref<Partial<RuleCandidate>>({
-  proposedRuleId: '',
-  label: '',
-  group: 'dream_psychology',
-  category: '',
-  factor: '',
-  inputSource: '',
-  scientificBasis: '',
-  aiInstruction: '',
-  limitations: '',
-  claimStrength: 'interpretive_framework',
-  confidenceCap: 0.50,
-  evidenceRole: 'primary_support',
-  evidenceSummary: '',
-  reviewerNote: '',
-  evidenceCredibilityScore: 0,
-  oracleUsefulnessScore: 0,
-  oracleEligible: true,
-  paperDomain: 'unknown'
-})
-const inputRequiredStr = ref<string>('{}')
-
-// Collapsible advanced panel
-const showAdvancedEdit = ref(false)
-
-// Chunk UI states
-const chunkCollapsed = ref<boolean[]>([])
-const excerptCollapsed = ref<boolean[]>([])
-const showChunkPreviewMap = ref<Record<string, boolean>>({})
-
-const isReadonly = computed(() => {
-  if (!selectedCandidate.value) return true
-  return selectedCandidate.value.status === 'approved' || selectedCandidate.value.status === 'rejected'
+const formattedSource = computed(() => {
+  const candidate = selectedCandidate.value
+  if (!candidate) return ''
+  const authors = candidate.sourceAuthors?.length ? candidate.sourceAuthors.join(', ') : 'Chưa xác định tác giả'
+  const year = candidate.sourceYear ? ` (${candidate.sourceYear})` : ''
+  const title = candidate.sourceTitle || 'Tài liệu chưa có tiêu đề'
+  const doi = candidate.sourceDoi ? ` · DOI ${candidate.sourceDoi}` : ''
+  return `${authors}${year} · ${title}${doi}`
 })
 
-// Modals Trigger
-const showApproveModal = ref(false)
-const isApproving = ref(false)
+const scoreCriteriaRows = computed(() => selectedCandidate.value?.scoreCriteria || [])
+const reviewConditions = computed(() => (selectedCandidate.value?.conditionsList || []).filter(item => {
+  const value = item.trim()
+  return value.split(/\s+/u).length >= 2 && !/^(?:function|effect|role|relationship)\s+of\b/iu.test(value)
+}))
+const reviewLimitations = computed(() => (selectedCandidate.value?.limitationsList || []).filter(item => item.trim().split(/\s+/u).length >= 2))
+const reviewDreamTags = computed(() => (selectedCandidate.value?.dreamFeatureTags || [])
+  .map(item => item.replace(/_/g, ' ').trim())
+  .filter(item => item
+    && !/^(?:memory|emotion|sleep|dream|dreams|dream content|trí nhớ|cảm xúc|giấc ngủ|giấc mơ)$/iu.test(item)
+    && !/\b(?:neural|brain|cortex|cortical|EEG|activation|neuron)\b/iu.test(item)))
 
-const showRejectModal = ref(false)
-const isRejecting = ref(false)
-const rejectReviewNote = ref('')
+function punctuatedList(items: string[], separator: string) {
+  const value = items.map(item => item.trim()).filter(Boolean).join(separator)
+  return /[.!?]$/u.test(value) ? value : `${value}.`
+}
 
-// Initialize filters from route query
-// Initialize filters from route query
+const evidenceScoreConclusion = computed(() => {
+  const candidate = selectedCandidate.value
+  const score = candidate?.evidenceCredibilityScore || 0
+  const citations = candidate?.supportingCitationCount || 0
+  const sources = candidate?.independentSourceCount || 0
+  if (score >= 80) return `Bằng chứng hỗ trợ mạnh: ${citations} trích dẫn hỗ trợ đã kiểm chứng từ ${sources} nguồn độc lập.`
+  if (score >= 60) return `Bằng chứng đã có mức xác nhận vừa phải; hiện có ${citations} trích dẫn hỗ trợ từ ${sources} nguồn.`
+  if (score >= 40) return `Bằng chứng còn giới hạn: kết luận có dẫn chứng trực tiếp nhưng độ phủ hoặc xác nhận từ nguồn độc lập còn thiếu.`
+  return 'Bằng chứng yếu hoặc chưa đủ trực tiếp; không nên dùng quy luật này để diễn giải giấc mơ ở trạng thái hiện tại.'
+})
+
 watch(
-  () => route.query.sourceId,
-  async (newVal) => {
-    sourceIdFilter.value = newVal ? String(newVal) : null
-    if (sourceIdFilter.value) {
-      try {
-        const sourceData = await getApprovedSourceById(sourceIdFilter.value)
-        if (sourceData && sourceData.title) {
-          sourceFilterTitle.value = sourceData.title
-        } else {
-          sourceFilterTitle.value = null
-        }
-      } catch (err) {
-        console.error('Failed to fetch source details:', err)
-        sourceFilterTitle.value = null
-      }
-    } else {
-      sourceFilterTitle.value = null
-    }
-    fetchCandidatesList()
-  },
+  [() => route.query.sourceId, () => authStore.user?._id],
+  () => { if (!isUnauthorized.value) void fetchCandidates() },
   { immediate: true }
 )
 
 function clearSourceFilter() {
-  router.push({ path: route.path })
+  void router.push({ path: route.path })
+}
+
+function openBulkAction(action: RuleV3BulkAction) {
+  if (candidates.value.length === 0) return
+  bulkAction.value = action
+}
+
+async function confirmBulkAction() {
+  if (!bulkAction.value) return
+  const confirmations: Record<RuleV3BulkAction, string> = {
+    approve_pending: 'APPROVE_ALL_PENDING_RULES', reject_pending: 'REJECT_ALL_PENDING_RULES',
+    restore_rejected: 'RESTORE_ALL_REJECTED_RULES', delete_rejected: 'DELETE_ALL_REJECTED_RULES'
+  }
+  isBulkRunning.value = true
+  try {
+    const response = await runRuleV3BulkAction(bulkAction.value, confirmations[bulkAction.value], sourceIdFilter.value || undefined)
+    const failed = response.data.failed
+    settingsStore.showToast(failed ? `Đã xử lý ${response.data.processed} quy luật; ${failed} quy luật cần kiểm tra riêng.` : `Đã xử lý ${response.data.processed} quy luật.`, failed ? 'warning' : 'success')
+    bulkAction.value = null
+    await fetchCandidates()
+  } catch (error: any) {
+    settingsStore.showToast(error.response?.data?.message || 'Không thể thực hiện thao tác hàng loạt.', 'error')
+  } finally {
+    isBulkRunning.value = false
+  }
 }
 
 function changeTab(status: string) {
-  showAdvancedEdit.value = false
   activeStatus.value = status
-  fetchCandidatesList()
+  selectedCandidate.value = null
+  selectedId.value = null
+  void fetchCandidates()
 }
 
-// Fetch left column candidate rules list
-async function fetchCandidatesList() {
-  if (isUnauthorized.value) return
+async function fetchCandidates() {
   isLoadingList.value = true
   try {
-    if (sourceIdFilter.value && !sourceFilterTitle.value) {
-      try {
-        const sourceData = await getApprovedSourceById(sourceIdFilter.value)
-        if (sourceData && sourceData.title) {
-          sourceFilterTitle.value = sourceData.title
-        }
-      } catch (err) {
-        console.error('Failed to fetch source details on list load:', err)
-      }
-    }
-
-    if (activeStatus.value === 'approved_rules') {
-      const res = await getApprovedRules()
-      if (res.success) {
-        let mapped = res.data.map((rule: any) => ({
-          _id: rule.ruleId,
-          proposedRuleId: rule.ruleId,
-          label: normalizeVietnameseTerms(rule.label),
-          group: rule.group,
-          factor: rule.factor,
-          claimStrength: rule.claimStrength,
-          confidenceCap: rule.confidenceCap,
-          sourceTitle: rule.sourceTitle,
-          sourceAuthors: rule.sourceAuthors,
-          sourceYear: rule.sourceYear,
-          status: 'approved',
-          createdAt: rule.createdAt || new Date().toISOString()
-        }))
-        if (sourceFilterTitle.value) {
-          mapped = mapped.filter((rule: any) =>
-            rule.sourceTitle && rule.sourceTitle.toLowerCase().trim() === sourceFilterTitle.value!.toLowerCase().trim()
-          )
-        }
-        candidates.value = mapped as any
-      }
+    const response = await getRuleCandidates({
+      status: activeStatus.value,
+      academicSourceId: sourceIdFilter.value || undefined
+    })
+    candidates.value = response.data || []
+    if (candidates.value.length > 0) {
+      const nextId = candidates.value.some(item => item._id === selectedId.value) ? selectedId.value! : candidates.value[0]._id
+      await selectCandidate(nextId)
     } else {
-      const params: Record<string, string> = {
-        status: activeStatus.value
-      }
-      if (sourceIdFilter.value) {
-        params.academicSourceId = sourceIdFilter.value
-      }
-      const res = await getRuleCandidates(params)
-      if (res.success) {
-        candidates.value = res.data.map((cand: any) => ({
-          ...cand,
-          label: normalizeVietnameseTerms(cand.label)
-        }))
-      }
+      selectedId.value = null
+      selectedCandidate.value = null
+      evidenceChunks.value = []
+      evidenceExcerpts.value = []
+      ruleRelationships.value = []
+      feedbackStats.value = emptyFeedbackStats()
     }
-  } catch (err: any) {
-    settingsStore.showToast('Không thể tải danh sách ứng viên.', 'error')
+  } catch {
+    settingsStore.showToast('Không thể tải danh sách Rule V3.', 'error')
   } finally {
     isLoadingList.value = false
   }
 }
 
-// Helper maps
-const groupMeta = {
-  sleep_context: {
-    label: 'Bối cảnh giấc mơ',
-    desc: 'Ý nghĩa: Dùng cho những quy luật liên quan đến điều kiện ngủ, môi trường ngủ, tư thế, lịch ngủ, hoặc bối cảnh trước khi ngủ. (Lưu ý: Không dùng nhóm này trừ khi nguồn trực tiếp nghiên cứu các yếu tố này.)'
-  },
-  dream_psychology: {
-    label: 'Tâm lý học giấc mơ',
-    desc: 'Ý nghĩa: Dùng cho lý thuyết, cơ chế nhận thức, cảm xúc, trí nhớ, tự tổ chức, mô phỏng, hoặc xử lý thông tin trong giấc mơ.'
-  },
-  personality_knowledge: {
-    label: 'Tính cách cá nhân',
-    desc: 'Ý nghĩa: Dùng khi nguồn nghiên cứu liên hệ giấc mơ với đặc điểm tính cách hoặc khuynh hướng cá nhân.'
-  },
-  cultural_limitation: {
-    label: 'Giới hạn văn hóa',
-    desc: 'Ý nghĩa: Dùng để nhắc AI rằng diễn giải văn hóa/tâm linh chỉ là tham khảo và cần tránh áp đặt nếu thiếu dữ liệu văn hóa cá nhân.'
-  }
-}
-
-const claimStrengthMeta = {
-  interpretive_framework: {
-    label: 'Khung diễn giải',
-    desc: 'Ý nghĩa: Dùng như một lăng kính giải thích, không khẳng định chắc chắn.'
-  },
-  possible_contributing_factor: {
-    label: 'Yếu tố có thể góp phần',
-    desc: 'Ý nghĩa: Có thể liên quan, nhưng không khẳng định nguyên nhân trực tiếp.'
-  },
-  association_not_causation: {
-    label: 'Liên hệ, không phải nhân quả',
-    desc: 'Ý nghĩa: Có liên hệ trong nghiên cứu, nhưng không đủ để kết luận nguyên nhân.'
-  },
-  hypothesis_not_diagnosis: {
-    label: 'Giả thuyết, không phải chẩn đoán',
-    desc: 'Ý nghĩa: Chỉ là giả thuyết tham khảo, không dùng như chẩn đoán y khoa/tâm lý.'
-  },
-  epistemic_boundary_rule: {
-    label: 'Quy tắc giới hạn tri thức',
-    desc: 'Ý nghĩa: Nhắc AI không được diễn giải vượt quá bằng chứng.'
-  }
-}
-
-const evidenceRoleMeta = {
-  primary_support: {
-    label: 'Bằng chứng chính',
-    desc: 'Ý nghĩa: Đoạn này trực tiếp ủng hộ quy luật.'
-  },
-  secondary_support: {
-    label: 'Bằng chứng phụ',
-    desc: 'Ý nghĩa: Đoạn này bổ sung hoặc làm rõ quy luật.'
-  },
-  background: {
-    label: 'Bối cảnh nền',
-    desc: 'Ý nghĩa: Đoạn này cung cấp nền tảng, nhưng không phải bằng chứng trực tiếp.'
-  },
-  limitation: {
-    label: 'Giới hạn áp dụng',
-    desc: 'Ý nghĩa: Đoạn này nói về giới hạn hoặc phạm vi áp dụng của quy luật.'
-  },
-  contradiction: {
-    label: 'Bằng chứng trái chiều',
-    desc: 'Ý nghĩa: Đoạn này mâu thuẫn hoặc làm yếu quy luật.'
-  }
-}
-
-const statusMeta = {
-  pending: { label: 'Chờ duyệt', class: 'status-badge--pending' },
-  needs_edit: { label: 'Cần sửa', class: 'status-badge--needs-edit' },
-  approved: { label: 'Đã duyệt', class: 'status-badge--approved' },
-  rejected: { label: 'Từ chối', class: 'status-badge--rejected' }
-}
-
-function getGroupDesc(groupVal?: string) {
-  if (!groupVal) return '';
-  return groupMeta[groupVal as keyof typeof groupMeta]?.desc || '';
-}
-function getClaimStrengthDesc(csVal?: string) {
-  if (!csVal) return '';
-  return claimStrengthMeta[csVal as keyof typeof claimStrengthMeta]?.desc || '';
-}
-function getEvidenceRoleDesc(erVal?: string) {
-  if (!erVal) return '';
-  return evidenceRoleMeta[erVal as keyof typeof evidenceRoleMeta]?.desc || '';
-}
-function getStatusLabel(statusVal?: string) {
-  if (!statusVal) return '';
-  return statusMeta[statusVal as keyof typeof statusMeta]?.label || statusVal;
-}
-function getStatusClass(statusVal?: string) {
-  if (!statusVal) return '';
-  return statusMeta[statusVal as keyof typeof statusMeta]?.class || '';
-}
-function getFormattedSourceInfo(cand?: RuleCandidate) {
-  if (!cand) return '';
-  const source = cand.academicSourceId && typeof cand.academicSourceId === 'object' ? cand.academicSourceId : null;
-  const authors = source?.authors && source.authors.length > 0 
-    ? source.authors.join(', ') 
-    : (cand.sourceAuthors && cand.sourceAuthors.length > 0 ? cand.sourceAuthors.join(', ') : 'Unknown Authors');
-  const year = source?.year ? `(${source.year})` : (cand.sourceYear ? `(${cand.sourceYear})` : '');
-  const title = source?.title || cand.sourceTitle || 'Untitled Source';
-  return `${authors} ${year}, "${title}"`;
-}
-function getCorrespondingChunkPreview(chunkId: string): string {
-  const chunk = evidenceChunks.value.find(c => c.chunkId === chunkId);
-  return chunk ? chunk.chunkPreview : '';
-}
-function toggleExcerptCollapse(idx: number) {
-  excerptCollapsed.value[idx] = !excerptCollapsed.value[idx];
-}
-function toggleChunkPreview(chunkId: string) {
-  showChunkPreviewMap.value[chunkId] = !showChunkPreviewMap.value[chunkId];
-}
-
-function getErrorMessage(err: any, defaultMsg: string): string {
-  if (err.response && err.response.data) {
-    const data = err.response.data;
-    if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
-      return data.errors[0];
-    }
-    return data.message || defaultMsg;
-  }
-  return err.message || defaultMsg;
-}
-
-// Select list item and load details
 async function selectCandidate(id: string) {
-  showAdvancedEdit.value = false
   selectedId.value = id
   isLoadingDetail.value = true
   try {
-    const res = await getRuleCandidateDetail(id)
-    if (res.success && res.data) {
-      const cand = res.data.candidate
-
-      // Normalize Vietnamese terms in cand properties before setting selectedCandidate
-      cand.label = normalizeVietnameseTerms(cand.label)
-      cand.scientificBasis = normalizeVietnameseTerms(cand.scientificBasis)
-      cand.aiInstruction = normalizeVietnameseTerms(cand.aiInstruction)
-      cand.limitations = normalizeVietnameseTerms(cand.limitations)
-      cand.evidenceSummary = normalizeVietnameseTerms(cand.evidenceSummary)
-      if (cand.reviewerNote) {
-        cand.reviewerNote = stripMetadataLabels(normalizeVietnameseTerms(cand.reviewerNote))
-      }
-      if (cand.legitimacyReason) {
-        cand.legitimacyReason = stripMetadataLabels(normalizeVietnameseTerms(cand.legitimacyReason))
-      }
-      if (cand.conflictNotes) {
-        cand.conflictNotes = deduplicateSentences(stripMetadataLabels(normalizeVietnameseTerms(cand.conflictNotes)))
-      }
-
-      selectedCandidate.value = cand
-      evidenceChunks.value = res.data.evidenceChunks || []
-      
-      // Clean excerpts: filter out raw placeholders or chunk references
-      if (res.data.evidenceExcerpts && res.data.evidenceExcerpts.length > 0) {
-        const cleaned = res.data.evidenceExcerpts.filter((exc: any) => {
-          if (!exc || !exc.excerpt) return false
-          const text = exc.excerpt.trim()
-          if (!text) return false
-          const lower = text.toLowerCase()
-          if (
-            lower.startsWith('chunk #') || 
-            lower === 'paragraph' || 
-            lower.startsWith('[heading:') ||
-            lower.includes('chunk #') || 
-            lower.includes('[heading:')
-          ) {
-            return false
-          }
-          const typeLower = (exc.sectionType || '').toLowerCase()
-          const titleLower = (exc.sectionTitle || '').toLowerCase()
-          if (
-            typeLower.includes('chunk #') ||
-            titleLower.includes('chunk #') ||
-            typeLower.includes('[heading:') ||
-            titleLower.includes('[heading:')
-          ) {
-            return false
-          }
-          return true
-        })
-        evidenceExcerpts.value = cleaned.map((exc: any) => ({
-          ...exc,
-          excerpt: normalizeVietnameseTerms(exc.excerpt)
-        }))
-      } else {
-        evidenceExcerpts.value = []
-      }
-      
-      // Initialize collapse states
-      chunkCollapsed.value = new Array(evidenceChunks.value.length).fill(true) // Context chunks collapsed by default
-      excerptCollapsed.value = new Array(evidenceExcerpts.value.length).fill(false) // Excerpts expanded by default
-      showChunkPreviewMap.value = {}
-
-      // Bind form variables
-      form.value = {
-        proposedRuleId: cand.proposedRuleId,
-        label: cand.label,
-        group: cand.group,
-        category: cand.category,
-        factor: cand.factor,
-        inputSource: cand.inputSource,
-        scientificBasis: cand.scientificBasis,
-        aiInstruction: cand.aiInstruction,
-        limitations: cand.limitations,
-        claimStrength: cand.claimStrength,
-        confidenceCap: cand.confidenceCap,
-        evidenceRole: cand.evidenceRole,
-        evidenceSummary: cand.evidenceSummary,
-        reviewerNote: cand.reviewerNote || '',
-        evidenceCredibilityScore: cand.evidenceCredibilityScore ?? 0,
-        oracleUsefulnessScore: cand.oracleUsefulnessScore ?? 0,
-        oracleEligible: cand.oracleEligible ?? true,
-        paperDomain: cand.paperDomain || 'unknown'
-      }
-      inputRequiredStr.value = JSON.stringify(cand.inputRequired || {}, null, 2)
-    }
-  } catch (err: any) {
-    settingsStore.showToast('Không thể tải chi tiết ứng viên.', 'error')
+    const response = await getRuleCandidateDetail(id)
+    selectedCandidate.value = response.data.candidate
+    evidenceChunks.value = response.data.evidenceChunks || []
+    evidenceExcerpts.value = (response.data.evidenceExcerpts || []).filter(item => item.excerpt?.trim())
+    ruleRelationships.value = response.data.ruleRelationships || []
+    feedbackStats.value = response.data.feedbackStats || emptyFeedbackStats()
+    visibleContexts.value = {}
+  } catch {
     selectedCandidate.value = null
+    ruleRelationships.value = []
+    feedbackStats.value = emptyFeedbackStats()
+    settingsStore.showToast('Không thể tải chi tiết Rule V3.', 'error')
   } finally {
     isLoadingDetail.value = false
   }
-}
-
-// Format JSON
-function handlePrettifyJson() {
-  try {
-    const parsed = JSON.parse(inputRequiredStr.value)
-    inputRequiredStr.value = JSON.stringify(parsed, null, 2)
-  } catch (err) {
-    settingsStore.showToast('JSON không hợp lệ, không thể định dạng.', 'error')
-  }
-}
-
-// Save Changes Trigger (PATCH)
-async function handleSaveCandidate() {
-  if (!selectedCandidate.value || isReadonly.value) return
-
-  // Validate JSON string
-  let parsedInputRequired = {}
-  try {
-    parsedInputRequired = JSON.parse(inputRequiredStr.value)
-    if (typeof parsedInputRequired !== 'object' || parsedInputRequired === null || Array.isArray(parsedInputRequired)) {
-      settingsStore.showToast('Điều kiện áp dụng không phải JSON hợp lệ (phải là object).', 'error')
-      return
-    }
-    
-    // Prototype pollution detection
-    const hasPrototypePollution = (obj: any): boolean => {
-      for (const key in obj) {
-        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-          return true
-        }
-        if (typeof obj[key] === 'object' && obj[key] !== null) {
-          if (hasPrototypePollution(obj[key])) return true
-        }
-      }
-      return false
-    }
-
-    if (hasPrototypePollution(parsedInputRequired)) {
-      settingsStore.showToast('Phát hiện payload không hợp lệ trong inputRequired (prototype pollution).', 'error')
-      return
-    }
-
-  } catch (err) {
-    settingsStore.showToast('Điều kiện áp dụng không phải JSON hợp lệ.', 'error')
-    return
-  }
-
-  isSaving.value = true
-  try {
-    const payload = {
-      ...form.value,
-      inputRequired: parsedInputRequired
-    }
-    const res = await updateRuleCandidate(selectedCandidate.value._id, payload)
-    if (res.success) {
-      settingsStore.showToast('Lưu thay đổi thành công.', 'success')
-      await selectCandidate(selectedCandidate.value._id)
-      await fetchCandidatesList()
-    }
-  } catch (err: any) {
-    const errMsg = getErrorMessage(err, 'Chỉnh sửa thất bại.')
-    settingsStore.showToast(errMsg, 'error')
-  } finally {
-    isSaving.value = false
-  }
-}
-
-// Approval triggers
-function triggerApproval() {
-  showApproveModal.value = true
 }
 
 async function confirmApproval() {
   if (!selectedCandidate.value) return
   isApproving.value = true
   try {
-    const res = await approveRuleCandidate(selectedCandidate.value._id)
-    if (res.success) {
-      settingsStore.showToast('Đã phê duyệt quy luật.', 'success')
-      showApproveModal.value = false
-      await selectCandidate(selectedCandidate.value._id)
-      await fetchCandidatesList()
-    }
-  } catch (err: any) {
-    if (err.response && err.response.status === 409) {
-      settingsStore.showToast('Không thể phê duyệt vì mã quy luật đã tồn tại. Hãy chỉnh mã quy luật rồi thử lại.', 'error')
-    } else {
-      const errMsg = getErrorMessage(err, 'Phê duyệt quy luật thất bại.')
-      settingsStore.showToast(errMsg, 'error')
-    }
+    await approveRuleCandidate(selectedCandidate.value._id)
+    showApproveModal.value = false
+    settingsStore.showToast('Đã phê duyệt quy luật.', 'success')
+    await fetchCandidates()
+  } catch (error: any) {
+    settingsStore.showToast(error.response?.data?.message || 'Không thể phê duyệt quy luật.', 'error')
   } finally {
     isApproving.value = false
   }
-}
-
-// Rejection triggers
-function triggerRejection() {
-  rejectReviewNote.value = form.value.reviewerNote || ''
-  showRejectModal.value = true
 }
 
 async function confirmRejection() {
   if (!selectedCandidate.value) return
   isRejecting.value = true
   try {
-    const res = await rejectRuleCandidate(selectedCandidate.value._id, rejectReviewNote.value)
-    if (res.success) {
-      settingsStore.showToast('Đã từ chối ứng viên.', 'success')
-      showRejectModal.value = false
-      await selectCandidate(selectedCandidate.value._id)
-      await fetchCandidatesList()
-    }
-  } catch (err: any) {
-    const errMsg = getErrorMessage(err, 'Từ chối ứng viên thất bại.')
-    settingsStore.showToast(errMsg, 'error')
+    await rejectRuleCandidate(selectedCandidate.value._id, '')
+    showRejectModal.value = false
+    settingsStore.showToast('Đã từ chối quy luật.', 'success')
+    await fetchCandidates()
+  } catch (error: any) {
+    settingsStore.showToast(error.response?.data?.message || 'Không thể từ chối quy luật.', 'error')
   } finally {
     isRejecting.value = false
   }
 }
 
-function formatDate(dateStr: string) {
-  if (!dateStr) return 'N/A'
-  const date = new Date(dateStr)
-  return date.toLocaleString('vi-VN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+function chunkPreview(chunkId: string) {
+  return evidenceChunks.value.find(item => item.chunkId === chunkId)?.chunkPreview || ''
 }
 
-// New action states & modals
-const showDeactivateModal = ref(false)
-const deactivateReason = ref('')
-const deactivateConfirmCheckbox = ref(false)
-const isDeactivating = ref(false)
-
-const showDeleteModal = ref(false)
-const deleteConfirmCheckbox = ref(false)
-const isDeleting = ref(false)
-
-const showClearAllModal = ref(false)
-const clearAllConfirmationInput = ref('')
-const isClearingAll = ref(false)
-const isRestoring = ref(false)
-
-function triggerDeactivate() {
-  deactivateReason.value = ''
-  deactivateConfirmCheckbox.value = false
-  showDeactivateModal.value = true
+function hasWiderContext(excerpt: EvidenceExcerpt) {
+  const context = chunkPreview(excerpt.chunkId).replace(/\s+/g, ' ').trim()
+  const quote = excerpt.excerpt.replace(/\s+/g, ' ').trim()
+  return context.length >= quote.length + 30 && context !== quote
 }
 
-async function confirmDeactivate() {
-  if (!selectedCandidate.value) return
-  if (!deactivateConfirmCheckbox.value) {
-    settingsStore.showToast('Vui lòng tích chọn xác nhận vô hiệu hóa.', 'error')
-    return
-  }
-  isDeactivating.value = true
-  try {
-    const res = await deactivateRule(
-      selectedCandidate.value.proposedRuleId,
-      true,
-      deactivateReason.value
-    )
-    if (res.success) {
-      settingsStore.showToast('Quy luật đã được vô hiệu hóa thành công.', 'success')
-      showDeactivateModal.value = false
-      await selectCandidate(selectedCandidate.value.proposedRuleId)
-      await fetchCandidatesList()
-    }
-  } catch (err: any) {
-    const errMsg = getErrorMessage(err, 'Vô hiệu hóa quy luật thất bại.')
-    settingsStore.showToast(errMsg, 'error')
-  } finally {
-    isDeactivating.value = false
-  }
+function toggleContext(evidenceGroupId: string) {
+  visibleContexts.value[evidenceGroupId] = !visibleContexts.value[evidenceGroupId]
 }
 
-function triggerDelete() {
-  deleteConfirmCheckbox.value = false
-  showDeleteModal.value = true
+function toggleCriterionHelp(key: string) {
+  openCriterionKey.value = openCriterionKey.value === key ? null : key
 }
 
-async function confirmDelete() {
-  if (!selectedCandidate.value) return
-  if (!deleteConfirmCheckbox.value) {
-    settingsStore.showToast('Vui lòng tích chọn xác nhận xóa.', 'error')
-    return
-  }
-  isDeleting.value = true
-  try {
-    const res = await deleteCandidate(selectedCandidate.value._id, true)
-    if (res.success) {
-      settingsStore.showToast('Xóa ứng viên thành công.', 'success')
-      showDeleteModal.value = false
-      selectedCandidate.value = null
-      selectedId.value = null
-      await fetchCandidatesList()
-    }
-  } catch (err: any) {
-    const errMsg = getErrorMessage(err, 'Xóa ứng viên thất bại.')
-    settingsStore.showToast(errMsg, 'error')
-  } finally {
-    isDeleting.value = false
-  }
+function rubricBullets(value: string) {
+  return value
+    .split(/(?<=[.;])\s+/u)
+    .map(item => item.trim().replace(/[.;]$/u, ''))
+    .filter(Boolean)
 }
 
-async function handleRestore() {
-  if (!selectedCandidate.value) return
-  isRestoring.value = true
-  try {
-    const res = await restoreRejectedCandidate(selectedCandidate.value._id)
-    if (res.success) {
-      settingsStore.showToast('Khôi phục ứng viên về trạng thái chờ duyệt thành công.', 'success')
-      await selectCandidate(selectedCandidate.value._id)
-      await fetchCandidatesList()
-    }
-  } catch (err: any) {
-    const errMsg = getErrorMessage(err, 'Khôi phục ứng viên thất bại.')
-    settingsStore.showToast(errMsg, 'error')
-  } finally {
-    isRestoring.value = false
-  }
+function closeCriterionHelp() {
+  openCriterionKey.value = null
 }
 
-function triggerClearAll() {
-  clearAllConfirmationInput.value = ''
-  showClearAllModal.value = true
+onMounted(() => document.addEventListener('click', closeCriterionHelp))
+onBeforeUnmount(() => document.removeEventListener('click', closeCriterionHelp))
+
+function statusLabel(status: string) {
+  return ({ pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Bị từ chối' } as Record<string, string>)[status] || status
 }
 
-async function confirmClearAll() {
-  if (clearAllConfirmationInput.value !== 'CONFIRM') {
-    settingsStore.showToast('Vui lòng nhập chính xác "CONFIRM".', 'error')
-    return
-  }
-  isClearingAll.value = true
-  try {
-    const res = await clearAllRejectedCandidates('CONFIRM')
-    if (res.success) {
-      settingsStore.showToast('Đã xóa sạch toàn bộ ứng viên bị từ chối.', 'success')
-      showClearAllModal.value = false
-      selectedCandidate.value = null
-      selectedId.value = null
-      await fetchCandidatesList()
-    }
-  } catch (err: any) {
-    const errMsg = getErrorMessage(err, 'Xóa thất bại.')
-    settingsStore.showToast(errMsg, 'error')
-  } finally {
-    isClearingAll.value = false
-  }
+function scoreCriterionLabel(value: string) {
+  return ({
+    source_breadth: 'Số nguồn độc lập hỗ trợ',
+    research_fit: 'Độ phù hợp của thiết kế nghiên cứu',
+    evidence_breadth: 'Độ phủ dẫn chứng theo chunk',
+    scope_definition: 'Phạm vi và giới hạn được nêu rõ',
+    conflict_handling: 'Kiểm tra bằng chứng trái chiều'
+  } as Record<string, string>)[value] || value
 }
 
-function formatLegitimacyLevel(level?: string) {
-  if (!level) return 'Không xác định'
-  const map: Record<string, string> = {
-    weak: 'Yếu',
-    moderate: 'Trung bình',
-    strong: 'Mạnh',
-    mixed: 'Hỗn hợp'
-  }
-  return map[level] || level
+function relationshipLabel(value: string) {
+  return ({
+    equivalent: 'Cùng nội dung',
+    overlapping: 'Liên quan nhưng khác phạm vi',
+    contradictory: 'Kết luận trái chiều',
+    reverse_direction: 'Quan hệ đảo chiều'
+  } as Record<string, string>)[value] || value
 }
 
-function normalizeVietnameseTerms(text?: string): string {
-  if (!text) return ''
-  let normalized = text
-  normalized = normalized.replace(/quá trình consolization/gi, 'quá trình củng cố ký ức')
-  normalized = normalized.replace(/quá trình consolidation/gi, 'quá trình củng cố ký ức')
-  normalized = normalized.replace(/consolization ký ức/gi, 'củng cố ký ức')
-  normalized = normalized.replace(/consolization/gi, 'củng cố ký ức')
-  normalized = normalized.replace(/consolidation ký ức/gi, 'củng cố ký ức')
-  normalized = normalized.replace(/ổn định hóa trí nhớ/gi, 'củng cố ký ức')
-  normalized = normalized.replace(/consolidation/gi, 'củng cố ký ức')
-  normalized = normalized.replace(/củng cố ký ức ký ức/gi, 'củng cố ký ức')
-  normalized = normalized.replace(/củng cố ký ức\s+ký ức/gi, 'củng cố ký ức')
-  return normalized
+function feedbackPercent(key: 'supports' | 'weakens' | 'unresolved') {
+  return feedbackStats.value.total > 0 ? Math.round(feedbackStats.value[key] / feedbackStats.value.total * 100) : 0
 }
 
-function stripMetadataLabels(text?: string): string {
-  if (!text) return ''
-  let cleaned = text
-  
-  // Replace patterns like "Trạng thái trùng lặp/xung đột: Bổ trợ cho quy luật hiện có"
-  cleaned = cleaned.replace(/Trạng thái trùng lặp\/xung đột:\s*[^\n\.]*/gi, '')
-  // Replace "Loại bằng chứng: Khung lý thuyết" or similar
-  cleaned = cleaned.replace(/Loại bằng chứng:\s*[^\n\.]*/gi, '')
-  // Replace "Ghi chú xung đột: ..."
-  cleaned = cleaned.replace(/Ghi chú xung đột:\s*/gi, '')
-  // Replace "Mức độ hợp lệ: ..."
-  cleaned = cleaned.replace(/Mức độ hợp lệ:\s*/gi, '')
-  // Replace "Lý do đánh giá: ..."
-  cleaned = cleaned.replace(/Lý do đánh giá:\s*/gi, '')
-  
-  // Clean up any remaining double spaces or trailing punctuation
-  cleaned = cleaned.replace(/\s+/g, ' ')
-  cleaned = cleaned.trim()
-  return cleaned
+function sourceGroupStyle(title: string) {
+  let hash = 0
+  for (const char of title) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  const hues = [218, 252, 176, 32, 326, 198]
+  return { '--source-group-hue': String(hues[hash % hues.length]) }
 }
 
-function deduplicateSentences(text?: string): string {
-  if (!text) return ''
-  const sentences = text.split(/(?<=\.|\n)\s+/)
-  const uniqueSentences = new Set<string>()
-  for (const s of sentences) {
-    const trimmed = s.trim()
-    if (trimmed) {
-      uniqueSentences.add(trimmed)
-    }
-  }
-  return Array.from(uniqueSentences).join(' ')
+function scoreLevelLabel(score?: number) {
+  const value = score || 0
+  return value >= 80 ? 'Mạnh' : value >= 60 ? 'Vừa phải' : value >= 40 ? 'Có giới hạn' : 'Yếu'
 }
 
-function getConflictExplanation(cand?: RuleCandidate): string {
-  if (!cand) return ''
-  const status = cand.conflictStatus
-  if (!status || status === 'none') return ''
-  
-  let explanation = ''
-  if (status === 'supports_existing_rule') {
-    explanation = 'Kết luận này bổ sung cho một luật đã có. Nó không mâu thuẫn với dữ liệu hiện tại, nhưng nên được xem như phần mở rộng hoặc làm rõ thêm.'
-  } else if (status === 'duplicate_or_overlap') {
-    explanation = 'Kết luận này gần giống một luật hoặc ứng viên đã có. Nên kiểm tra kỹ trước khi duyệt để tránh tạo hai luật nói cùng một ý.'
-  } else if (status === 'conflicts_with_existing_rule' || status === 'possible_conflict') {
-    explanation = 'Kết luận này có dấu hiệu mâu thuẫn với một luật đã có. Cần so sánh bằng chứng trước khi duyệt.'
-  } else {
-    explanation = ''
-  }
-
-  const cleanNotes = deduplicateSentences(stripMetadataLabels(cand.conflictNotes))
-  if (cleanNotes) {
-    if (explanation) {
-      explanation += ' Chi tiết: ' + cleanNotes
-    } else {
-      explanation = cleanNotes
-    }
-  }
-  return normalizeVietnameseTerms(explanation)
+function scoreLevelClass(score?: number) {
+  const value = score || 0
+  return value >= 80 ? 'level-good' : value >= 60 ? 'level-moderate' : 'level-caution'
 }
 
-function getLegitimacyExplanation(cand?: RuleCandidate): string {
-  if (!cand) return ''
-  const score = cand.legitimacyScore || 0
-  const levelLabel = formatLegitimacyLevel(cand.legitimacyLevel)
-  
-  let baseDesc = ''
-  const evidenceType = cand.evidenceType || ''
-  if (evidenceType === 'theoretical_framework' || evidenceType === 'opinion_or_hypothesis') {
-    baseDesc = 'Độ tin cậy ở mức trung bình vì đây là bài viết thiên về khung lý thuyết, có dẫn các nghiên cứu liên quan nhưng không phải một thử nghiệm trực tiếp.'
-  } else if (evidenceType === 'empirical_study') {
-    baseDesc = 'Độ tin cậy cao hơn vì kết luận được hỗ trợ bởi dữ liệu hoặc kết quả thực nghiệm trong tài liệu.'
-  } else if (evidenceType === 'literature_review' || evidenceType === 'mixed') {
-    baseDesc = 'Độ tin cậy ở mức trung bình đến khá vì kết luận được tổng hợp từ nhiều nghiên cứu, nhưng vẫn phụ thuộc vào cách tác giả diễn giải nguồn.'
-  } else {
-    baseDesc = 'Bằng chứng hỗ trợ cho kết luận này cần đối chiếu thêm với các tài liệu nghiên cứu liên quan.'
-  }
-
-  let rating = `Mức tin cậy: ${levelLabel}, ${score}/100.`
-  return normalizeVietnameseTerms(`${rating} ${baseDesc}`)
+function scoreColor(score?: number) {
+  const value = Math.max(0, Math.min(100, Number(score) || 0))
+  const hue = Math.round(value * 1.2)
+  return `hsl(${hue} 72% 56%)`
 }
-
-onMounted(() => {
-  fetchCandidatesList()
-})
 </script>
 
 <style scoped>
-.candidates-layout {
-  display: grid;
-  grid-template-columns: 360px 1fr;
-  gap: var(--space-4);
-  margin-top: var(--space-4);
-  align-items: start;
-  min-height: 600px;
-}
-
-.layout-left {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  height: 800px;
-}
-
-.layout-right {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  height: 800px;
-  overflow: hidden;
-}
-
-/* Scroll areas */
-.candidates-list-scroll {
-  flex: 1;
-  overflow-y: auto;
-  margin-top: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding-right: 4px;
-}
-
-.source-group-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.source-group-header {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin: 20px 0 8px 0;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--color-border-subtle);
-  padding-bottom: 6px;
-}
-
-.source-group-cards {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.detail-scroll-area {
-  flex: 1;
-  overflow-y: auto;
-  padding-right: var(--space-2);
-}
-
-.detail-placeholder {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: var(--color-text-muted);
-}
-
-.placeholder-icon {
-  font-size: 3rem;
-  margin-bottom: var(--space-3);
-}
-
-/* Candidate List Card */
-.candidate-list-card {
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-base);
-  cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.candidate-list-card:hover {
-  background: var(--color-bg-hover);
-  border-color: #3f3f3f;
-}
-
-.candidate-list-card--active {
-  background: var(--color-bg-active);
-  border-color: var(--accent);
-}
-
-.cand-card-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.cand-card-title {
-  font-weight: var(--font-weight-semibold);
-  font-size: 0.95rem;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  width: 100%;
-}
-
-.cand-card-source-citation {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  width: 100%;
-}
-
-.cand-card-id {
-  font-size: 0.7rem;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  width: 100%;
-}
-
-.technical-row {
-  margin-top: 2px;
-  border-top: 1px dashed var(--color-border-subtle);
-  padding-top: 2px;
-}
-
-.footer-row {
-  margin-top: 2px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.cand-card-date {
-  color: var(--color-text-muted);
-  font-size: 0.7rem;
-  text-align: right;
-  margin-left: auto;
-}
-
-.cand-card-meta-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  width: 100%;
-}
-
-.group-badge {
-  font-size: 0.68rem;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border-subtle);
-}
-
-.status-badge {
-  font-size: 0.68rem;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-  font-weight: var(--font-weight-medium);
-  border: 1px solid transparent;
-}
-
-.status-badge--pending {
-  color: #f59e0b;
-  border-color: rgba(245, 158, 11, 0.3);
-  background: rgba(245, 158, 11, 0.08);
-}
-
-.status-badge--needs-edit {
-  color: #3b82f6;
-  border-color: rgba(59, 130, 246, 0.3);
-  background: rgba(59, 130, 246, 0.08);
-}
-
-.status-badge--approved {
-  color: #10b981;
-  border-color: rgba(16, 185, 129, 0.3);
-  background: rgba(16, 185, 129, 0.08);
-}
-
-.status-badge--rejected {
-  color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.3);
-  background: rgba(239, 68, 68, 0.08);
-}
-
-/* HUMAN-FIRST DOCUMENT LOOK */
-.review-document-card {
-  background: var(--color-bg-base);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  margin-bottom: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.review-document-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.review-section-tag {
-  font-size: 0.75rem;
-  font-weight: var(--font-weight-bold);
-  color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-}
-
-.status-badge-lg {
-  font-size: 0.75rem;
-  padding: 2px 8px;
-  border-radius: var(--radius-md);
-  font-weight: var(--font-weight-bold);
-  border: 1px solid transparent;
-}
-
-.review-rule-title {
-  font-size: 1.4rem;
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  margin: 0;
-  line-height: 1.35;
-}
-
-.review-rule-citation {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  line-height: 1.45;
-  margin: 0;
-  border-left: 2px solid var(--accent);
-  padding-left: var(--space-3);
-}
-
-.review-document-block {
-  margin-top: var(--space-5);
-}
-
-.review-block-title {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  margin: 0 0 var(--space-3) 0;
-}
-
-.review-card-body {
-  background: var(--color-bg-base);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-}
-
-.block-highlight {
-  border-left: 3px solid var(--accent);
-  background: rgba(255, 255, 255, 0.01);
-}
-
-.formatted-text-block {
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  color: var(--color-text-secondary);
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.prominent-block .review-card-body {
-  background: rgba(16, 185, 129, 0.02);
-  border-color: rgba(16, 185, 129, 0.2);
-}
-
-.prominent-evidence-text {
-  font-size: 0.95rem;
-  line-height: 1.6;
-  color: var(--color-text-primary);
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.warning-block .warning-box {
-  background: rgba(245, 158, 11, 0.02);
-  border-color: rgba(245, 158, 11, 0.2);
-}
-
-.warning-text {
-  color: #f59e0b;
-  font-size: var(--font-size-sm);
-  margin: 0 0 var(--space-2) 0;
-}
-
-.technical-footnote {
-  font-size: 0.72rem;
-  color: var(--color-text-muted);
-  margin-top: var(--space-6);
-  border-top: 1px solid var(--color-border-subtle);
-  padding-top: var(--space-3);
-  text-align: right;
-}
-
-.mono-footnote {
-  font-family: var(--font-family-mono), monospace;
-  background: var(--color-bg-elevated);
-  padding: 1px 4px;
-  border-radius: var(--radius-sm);
-}
-
-/* Collapsible advanced edit section */
-.advanced-collapsible-section {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  margin-top: var(--space-6);
-  margin-bottom: var(--space-8);
-  overflow: hidden;
-}
-
-.advanced-toggle-btn {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-bg-base);
-  border: none;
-  cursor: pointer;
-  color: var(--color-text-primary);
-  font-weight: var(--font-weight-medium);
-  transition: background var(--transition-fast);
-}
-
-.advanced-toggle-btn:hover {
-  background: var(--color-bg-hover);
-}
-
-.toggle-chevron {
-  font-size: 0.75rem;
-  color: var(--accent);
-}
-
-.advanced-fields-panel {
-  padding: var(--space-4);
-  background: var(--color-bg-elevated);
-  border-top: 1px solid var(--color-border-subtle);
-}
-
-.advanced-intro-text {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  margin: 0 0 var(--space-4) 0;
-  line-height: 1.45;
-}
-
-/* Form inputs & controls styles */
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.form-label {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-secondary);
-  margin-bottom: 4px;
-}
-
-.form-input,
-.form-textarea {
-  background: var(--color-bg-base);
-  border: 1px solid var(--color-border-input);
-  color: var(--color-text-primary);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
-  font-family: inherit;
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-normal);
-  transition: border-color var(--transition-fast), background var(--transition-fast);
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.form-input:focus,
-.form-textarea:focus {
-  outline: none;
-  border-color: var(--accent);
-  background: var(--color-bg-surface);
-}
-
-.form-input[readonly],
-.form-textarea[readonly],
-.form-input[disabled],
-.form-textarea[disabled] {
-  background: var(--color-bg-surface);
-  border-color: var(--color-border-subtle);
-  color: var(--color-text-secondary);
-  cursor: not-allowed;
-}
-
-/* Select inputs styled specifically for dark theme options */
-select.form-input,
-select.select-styled {
-  appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23a8a8a8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 4.5 6 7.5 9 4.5'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right var(--space-3) center;
-  padding-right: var(--space-6);
-  background-color: #1e1e1e !important;
-  color: #f3f5f7 !important;
-}
-
-select.form-input option,
-select.select-styled option {
-  background-color: #1e1e1e !important;
-  color: #f3f5f7 !important;
-}
-
-.field-help-desc {
-  font-size: 0.72rem;
-  color: var(--accent);
-  margin-top: 4px;
-  line-height: 1.35;
-}
-
-.mono {
-  font-family: var(--font-family-mono), monospace !important;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
-}
-
-.form-group--full {
-  grid-column: span 2;
-}
-
-.form-save-row {
-  margin-top: var(--space-4);
-  align-items: flex-start;
-}
-
-.textarea-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.prettify-btn {
-  background: var(--color-bg-base);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-size: 0.75rem;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-
-.prettify-btn:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-
-/* Approved/Rejected banners */
-.approved-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  background: rgba(16, 185, 129, 0.08);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--space-4);
-  color: #10b981;
-}
-
-.approved-banner__icon {
-  font-size: 1.2rem;
-  font-weight: bold;
-}
-
-.approved-banner__content {
-  font-size: var(--font-size-sm);
-  line-height: 1.4;
-}
-
-.approved-banner__content strong {
-  display: block;
-  font-size: 0.95rem;
-  margin-bottom: 2px;
-}
-
-.approved-banner__content p {
-  margin: 0;
-  color: var(--color-text-secondary);
-}
-
-.rejected-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--space-4);
-  color: #ef4444;
-}
-
-.rejected-banner__icon {
-  font-size: 1.2rem;
-  font-weight: bold;
-}
-
-.rejected-banner__content {
-  font-size: var(--font-size-sm);
-  line-height: 1.4;
-}
-
-.rejected-banner__content strong {
-  display: block;
-  font-size: 0.95rem;
-  margin-bottom: 2px;
-}
-
-.rejected-banner__content p {
-  margin: 0;
-  color: var(--color-text-secondary);
-}
-
-/* Excerpt Cards List */
-.excerpt-cards-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
-}
-
-.excerpt-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-base);
-  overflow: hidden;
-}
-
-.excerpt-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-3);
-  background: var(--color-bg-elevated);
-  cursor: pointer;
-  user-select: none;
-}
-
-.excerpt-card-header:hover {
-  background: var(--color-bg-hover);
-}
-
-.excerpt-card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
-.excerpt-section-tag {
-  font-size: 0.7rem;
-  text-transform: capitalize;
-  background: var(--color-bg-base);
-  border: 1px solid var(--color-border-subtle);
-  padding: 0 6px;
-  border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
-}
-
-.excerpt-title-tag {
-  font-size: 0.75rem;
-  color: var(--color-text-primary);
-  max-width: 200px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.excerpt-page-tag {
-  font-size: 0.7rem;
-  color: var(--color-text-muted);
-}
-
-.collapse-chevron {
-  font-size: 0.65rem;
-  color: var(--color-text-muted);
-}
-
-.excerpt-card-body {
-  padding: var(--space-3);
-  border-top: 1px solid var(--color-border-subtle);
-  background: var(--color-bg-base);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.focused-excerpt-blockquote {
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-relaxed);
-  color: var(--color-text-primary);
-  white-space: pre-wrap;
-  margin: 0;
-  font-style: italic;
-  border-left: 3px solid var(--accent);
-  padding-left: var(--space-3);
-}
-
-/* Context collapsible inside excerpts */
-.context-collapsible-wrapper {
-  margin-top: 4px;
-  border-top: 1px dashed var(--color-border-subtle);
-  padding-top: var(--space-2);
-}
-
-.context-toggle-btn {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  font-size: 0.72rem;
-  cursor: pointer;
-  padding: 2px 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.context-toggle-btn:hover {
-  color: var(--accent);
-}
-
-.context-preview-box {
-  background: var(--color-bg-elevated);
-  padding: var(--space-3);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-subtle);
-  margin-top: var(--space-2);
-}
-
-.context-preview-text {
-  font-size: 0.78rem;
-  line-height: var(--line-height-normal);
-  color: var(--color-text-secondary);
-  white-space: pre-wrap;
-  margin: 0;
-}
-
-/* Filter Pill */
-.filter-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: var(--color-bg-active);
-  border: 1px solid var(--color-border);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  margin-bottom: var(--space-3);
-  width: fit-content;
-  font-size: var(--font-size-xs);
-}
-
-.filter-pill-text {
-  color: var(--color-text-primary);
-  font-weight: var(--font-weight-medium);
-}
-
-.clear-pill-btn {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-size: 1.1rem;
-  line-height: 1;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.clear-pill-btn:hover {
-  color: #ef4444;
-}
-
-.clear-all-row-bottom {
-  margin-top: var(--space-3);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--color-border-subtle);
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  width: 100%;
-}
-
-/* Sticky Action Footer */
-.review-actions-sticky-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: var(--space-6);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
-  position: sticky;
-  bottom: 0;
-  background: var(--color-bg-elevated);
-  padding-bottom: 2px;
-}
-
-.sticky-footer-right {
-  display: flex;
-  gap: var(--space-3);
-}
-
-.trust-level-note-pill {
-  font-size: 0.78rem;
-  color: var(--accent);
-  font-weight: var(--font-weight-semibold);
-}
-
-/* Unauthorized section styles */
-.unauthorized-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-}
-
-.unauthorized-card {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-8) var(--space-6);
-  text-align: center;
-  max-width: 420px;
-}
-
-.unauthorized-icon {
-  font-size: 3rem;
-  margin-bottom: var(--space-4);
-}
-
-.unauthorized-title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  margin: 0 0 var(--space-2) 0;
-}
-
-.unauthorized-desc {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-  margin: 0;
-  line-height: 1.4;
-}
-
-/* Modal and overlay */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.modal-container {
-  background-color: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  width: 500px;
-  max-width: 90vw;
-  padding: var(--space-5);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--color-border-subtle);
-  padding-bottom: var(--space-3);
-}
-
-.modal-header__title {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  margin: 0;
-}
-
-.modal-close-btn {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  font-size: 1.5rem;
-  cursor: pointer;
-  line-height: 1;
-}
-
-.modal-close-btn:hover {
-  color: var(--color-text-primary);
-}
-
-.modal-body {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-}
-
-.modal-description-text {
-  color: var(--color-text-secondary);
-  line-height: 1.5;
-  margin-bottom: var(--space-3);
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  border-top: 1px solid var(--color-border-subtle);
-  padding-top: var(--space-3);
-}
-
-/* Tab styling details */
-.moderation-tabs {
-  display: flex;
-  gap: var(--space-2);
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 2px;
-}
-
-.moderation-tab {
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  transition: color var(--transition-fast), border-color var(--transition-fast);
-}
-
-.moderation-tab:hover {
-  color: var(--color-text-primary);
-}
-
-.moderation-tab--active {
-  color: var(--accent) !important;
-  border-bottom-color: var(--accent) !important;
-}
-
-.moderation-loading,
-.moderation-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-8) 0;
-  text-align: center;
-  color: var(--color-text-muted);
-}
-
-.moderation-empty__icon {
-  font-size: 2.5rem;
-  margin-bottom: var(--space-3);
-}
-
-.moderation-empty__title {
-  color: var(--color-text-primary);
-  margin: 0 0 var(--space-2) 0;
-}
-
-.spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
-  border-top-color: var(--accent);
-  animation: spin 0.8s linear infinite;
-  margin-bottom: var(--space-3);
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* thin elegant scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* Deactivated status styling */
-.status-badge--deactivated {
-  color: #9ca3af;
-  border-color: rgba(156, 163, 175, 0.3);
-  background: rgba(156, 163, 175, 0.08);
-}
-
-.deactivated-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  background: rgba(156, 163, 175, 0.08);
-  border: 1px solid rgba(156, 163, 175, 0.3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--space-4);
-  color: #9ca3af;
-}
-
-.deactivated-banner__icon {
-  font-size: 1.2rem;
-  font-weight: bold;
-}
-
-.deactivated-banner__content {
-  font-size: var(--font-size-sm);
-  line-height: 1.4;
-}
-
-.deactivated-banner__content strong {
-  display: block;
-  font-size: 0.95rem;
-  margin-bottom: 2px;
-}
-
-.deactivated-banner__content p {
-  margin: 0;
-  color: var(--color-text-secondary);
-}
-
-/* Underline text actions styling */
-.action-link-btn {
-  background: transparent;
-  border: none;
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
-  transition: color var(--transition-fast);
-}
-
-.action-link-btn:disabled {
-  color: var(--color-text-muted) !important;
-  cursor: not-allowed;
-  text-decoration: none;
-}
-
-.text-danger-underline {
-  color: #ef4444;
-}
-.text-danger-underline:hover:not(:disabled) {
-  color: #f87171;
-}
-
-.text-primary-underline {
-  color: #3b82f6;
-}
-.text-primary-underline:hover:not(:disabled) {
-  color: #60a5fa;
-}
-
-.text-muted-underline {
-  color: var(--color-text-secondary);
-}
-.text-muted-underline:hover:not(:disabled) {
-  color: var(--color-text-primary);
-}
-
-.assessment-row {
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-}
-
-.assessment-val {
-  color: var(--color-text-primary);
-  font-weight: 500;
-  margin-left: var(--space-1);
-}
+.rule-review-page { display: flex; flex-direction: column; gap: var(--space-4); height: calc(100dvh - 92px); min-height: 0; overflow: hidden; }
+.page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); }
+.header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.page-header h1 { margin: 2px 0 6px; font-size: 1.75rem; color: var(--color-text-primary); }
+.page-header > div > p:last-child { margin: 0; color: var(--color-text-secondary); }
+.eyebrow { margin: 0; color: var(--accent); font-size: .72rem; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }
+.header-count { min-width: 92px; padding: 10px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); text-align: center; background: var(--color-bg-elevated); }
+.header-count strong { display: block; font-size: 1.45rem; }.header-count span { color: var(--color-text-muted); font-size: .76rem; }
+.source-filter { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; border: 1px solid rgba(59,130,246,.28); border-radius: var(--radius-md); background: rgba(59,130,246,.06); font-size: .82rem; }
+.source-filter button { border: 0; background: transparent; color: var(--accent); cursor: pointer; font-weight: 650; }
+.status-tabs { display: flex; gap: 6px; padding: 4px; width: fit-content; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-elevated); }
+.status-tabs button { padding: 8px 14px; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--color-text-secondary); cursor: pointer; }
+.status-tabs button.active { background: var(--color-bg-active); color: var(--color-text-primary); box-shadow: inset 0 0 0 1px var(--color-border); }
+.bulk-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.review-layout { display: grid; grid-template-columns: minmax(290px, 340px) minmax(0, 1fr); gap: var(--space-4); flex: 1; min-height: 0; }
+.candidate-sidebar, .candidate-detail { min-height: 0; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-elevated); overflow: hidden; }
+.candidate-sidebar { display: flex; flex-direction: column; padding: var(--space-3); }.candidate-detail { min-width: 0; display: flex; flex-direction: column; }
+.candidate-list, .rule-document { flex: 1; height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.source-group { margin: 8px 3px 14px; padding: 8px; border: 1px solid hsl(var(--source-group-hue) 42% 62% / .14); border-radius: var(--radius-lg); background: hsl(var(--source-group-hue) 45% 52% / .028); }
+.source-group h2 { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin: 2px 3px 9px; color: var(--color-text-secondary); font-size: .72rem; line-height: 1.4; letter-spacing: .035em; }
+.source-group h2 span { min-width: 0; }.source-group h2 small { flex: 0 0 auto; color: var(--color-text-muted); font-size: .66rem; font-weight: 600; white-space: nowrap; }
+.source-rule-list { display: flex; flex-direction: column; gap: 6px; }
+.candidate-card { width: 100%; display: flex; flex-direction: column; gap: 9px; padding: 12px; margin: 0; text-align: left; border: 1px solid transparent; border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-bg-base) 98%, hsl(var(--source-group-hue) 45% 55%)); color: inherit; cursor: pointer; }
+.candidate-card:hover { border-color: var(--color-border); background: var(--color-bg-hover); }.candidate-card.selected { border-color: var(--accent); background: rgba(59,130,246,.07); }
+.candidate-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; font-size: .9rem; font-weight: 650; line-height: 1.4; color: var(--color-text-primary); }
+.candidate-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: var(--color-text-muted); font-size: .7rem; }
+.score-chip { color: #93c5fd; font-weight: 700; }.status-chip { display: inline-flex; width: fit-content; padding: 3px 8px; border-radius: 999px; font-size: .68rem; font-weight: 700; }
+.status-pending { color: #fbbf24; background: rgba(245,158,11,.12); }.status-approved { color: #34d399; background: rgba(16,185,129,.12); }.status-rejected { color: #f87171; background: rgba(239,68,68,.12); }
+.loading-state, .empty-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; min-height: 180px; padding: var(--space-5); text-align: center; color: var(--color-text-muted); }
+.empty-panel h3, .empty-panel p { margin: 0; }.empty-panel.compact { min-height: 320px; }.detail-empty, .detail-loading { height: 100%; min-height: 650px; }
+.spinner { width: 22px; height: 22px; border: 2px solid var(--color-border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+.rule-document { padding: clamp(16px, 2.5vw, 30px); }
+.rule-hero { padding: clamp(18px, 2vw, 26px); border: 1px solid #3730a3; border-radius: var(--radius-lg); background: rgba(30, 27, 75, .38); box-shadow: inset 4px 0 0 #7c3aed; }
+.hero-topline, .section-heading, .score-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.rule-code, .formula-version { color: var(--color-text-muted); font: 600 .68rem var(--font-family-mono), monospace; }
+.rule-hero h2 { margin: 14px 0 10px; color: var(--color-text-primary); font-size: clamp(1.3rem, 2vw, 1.75rem); line-height: 1.35; }
+.source-line { margin: 0; color: var(--color-text-secondary); font-size: .85rem; line-height: 1.5; }
+.content-card { margin-top: var(--space-4); padding: clamp(16px, 2vw, 22px); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-base); }
+.section-heading h3 { margin: 0; color: var(--color-text-primary); }.section-description { margin: 5px 0 0; color: var(--color-text-muted); font-size: .76rem; line-height: 1.45; }.rule-explanation { margin: 16px 0 0; padding: 13px 14px; border-left: 3px solid #818cf8; border-radius: 0 var(--radius-md) var(--radius-md) 0; background: rgba(49,46,129,.16); color: var(--color-text-primary); line-height: 1.6; }.relationship-flow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: stretch; margin-top: 18px; }
+.relationship-flow > div:not(.relationship-arrow) { padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.relationship-flow span { display: block; margin-bottom: 6px; color: var(--color-text-muted); font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }.relationship-flow strong { color: var(--color-text-primary); line-height: 1.45; }.relationship-arrow { align-self: center; color: var(--accent); font-size: 1.4rem; }
+.rule-reading-guide { display: grid; gap: 8px; margin: 15px 0 0; padding: 0; list-style: none; color: var(--color-text-secondary); font-size: .82rem; line-height: 1.5; }.rule-reading-guide li { padding-left: 15px; position: relative; }.rule-reading-guide li::before { content: '•'; position: absolute; left: 0; color: #818cf8; }.rule-reading-guide strong { color: var(--color-text-primary); }
+.assessment-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }.assessment-card h3 { font-size: 1.45rem; }.level-badge, .verified-badge { padding: 5px 9px; border-radius: 999px; font-size: .7rem; font-weight: 750; }.level-good, .verified-badge { color: #34d399; background: rgba(16,185,129,.12); }.level-moderate { color: #60a5fa; background: rgba(59,130,246,.12); }.level-caution { color: #fbbf24; background: rgba(245,158,11,.12); }
+.assessment-title { font-size: .95rem !important; }.score-number { display: block; margin-top: 5px; font-size: 1.65rem; line-height: 1; }.score-track { width: 100%; height: 9px; margin: 14px 0; border: 1px solid rgba(148,163,184,.16); border-radius: 999px; overflow: hidden; background: #111827; }.score-track span { display: block; min-width: 2px; height: 100%; border-radius: inherit; transition: width .25s ease; }.score-conclusion { margin: 0 0 7px; color: var(--color-text-primary); font-size: .8rem; line-height: 1.5; }.score-note { color: var(--color-text-muted); font-size: .76rem; line-height: 1.5; }
+.criteria-list { display: flex; flex-direction: column; margin: 16px 0 0; border-top: 1px solid var(--color-border); }.criterion-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }.criterion-row dt { display: flex; align-items: center; gap: 7px; color: var(--color-text-secondary); }.criterion-row dd { margin: 0; color: var(--color-text-primary); font-weight: 700; }.criterion-help { position: relative; }.criterion-help button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid var(--color-border); border-radius: 50%; background: transparent; color: var(--color-text-muted); cursor: pointer; font-size: .68rem; font-weight: 700; }.criterion-help > div { position: absolute; z-index: 20; top: 25px; left: 0; width: min(350px, 72vw); padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); box-shadow: 0 12px 30px rgba(0,0,0,.24); color: var(--color-text-secondary); font-size: .75rem; line-height: 1.45; }.criterion-help > div strong { color: var(--color-text-primary); }.criterion-help > div p { margin: 5px 0 0; }.criterion-help > div ul { margin: 7px 0 12px; padding-left: 20px; list-style: disc outside; }.criterion-help > div li { margin: 5px 0; padding-left: 2px; }.quality-blocked { display: flex; flex-direction: column; gap: 3px; margin-top: 15px; padding: 11px 13px; border: 1px solid rgba(239,68,68,.32); border-radius: var(--radius-md); color: #fca5a5; font-size: .78rem; }.quality-blocked span { color: var(--color-text-secondary); }
+.citation-list { display: flex; flex-direction: column; gap: 12px; margin-top: 17px; }.citation-item { padding: 15px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.citation-meta { display: flex; justify-content: space-between; gap: 10px; color: var(--color-text-muted); font-size: .7rem; }.citation-item blockquote { margin: 12px 0; padding-left: 14px; border-left: 3px solid var(--accent); color: var(--color-text-primary); font-size: .9rem; line-height: 1.65; }.context-button { padding: 0; border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: .76rem; }.context-text { margin: 12px 0 0; padding: 12px; border-radius: var(--radius-md); background: var(--color-bg-base); color: var(--color-text-secondary); font-size: .78rem; line-height: 1.55; white-space: pre-wrap; }
+.relationship-card { display: grid; gap: 9px; }.related-rule { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); color: inherit; text-align: left; cursor: pointer; }.related-rule:hover { border-color: rgba(129,140,248,.42); }.related-rule strong { min-width: 0; color: var(--color-text-primary); font-size: .8rem; line-height: 1.4; }.related-rule small { color: var(--color-text-muted); white-space: nowrap; }.relation-kind { padding: 3px 7px; border-radius: 999px; color: #a5b4fc; background: rgba(99,102,241,.1); font-size: .65rem; font-weight: 700; }.relation-kind--contradictory { color: #fca5a5; background: rgba(239,68,68,.1); }.relation-kind--reverse_direction { color: #fcd34d; background: rgba(245,158,11,.1); }
+.feedback-card { display: grid; gap: 12px; }.feedback-card .section-heading > strong { color: var(--color-text-primary); font-size: .8rem; }.feedback-bar { display: flex; width: 100%; height: 7px; overflow: hidden; border-radius: 999px; background: var(--color-bg-elevated); }.feedback-bar span { display: block; height: 100%; transition: width .25s ease; }.feedback-bar__yes { background: #34d399; }.feedback-bar__no { background: #f87171; }.feedback-bar__unsure { background: #94a3b8; }.feedback-reactions { display: flex; flex-wrap: wrap; gap: 8px; }.feedback-reactions span { padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-bg-elevated); color: var(--color-text-secondary); font-size: .72rem; }.feedback-reactions b { color: var(--color-text-primary); }.feedback-empty { margin: 0; color: var(--color-text-muted); font-size: .75rem; line-height: 1.5; }
+.probe-card { display: grid; gap: 13px; }.probe-facts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 0; }.probe-facts div { padding: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.probe-facts dt { color: var(--color-text-muted); font-size: .68rem; }.probe-facts dd { margin: 5px 0 0; color: var(--color-text-primary); font-size: .78rem; line-height: 1.45; }.probe-heading { color: var(--color-text-primary); font-size: .78rem; }.probe-questions { display: grid; gap: 7px; margin: 0; padding-left: 20px; color: var(--color-text-secondary); font-size: .78rem; line-height: 1.5; }
+.action-bar { position: sticky; bottom: -30px; display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: var(--space-5) -30px -30px; padding: 14px 30px; border-top: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-bg-elevated) 94%, transparent); backdrop-filter: blur(10px); }.action-bar strong, .action-bar span { display: block; }.action-bar span { margin-top: 3px; color: var(--color-text-muted); font-size: .72rem; }.action-buttons { display: flex; gap: 10px; }
+.modal-overlay { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.64); }.modal-container { width: min(440px,100%); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-elevated); box-shadow: 0 20px 60px rgba(0,0,0,.35); }.modal-header, .modal-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 18px; }.modal-header { border-bottom: 1px solid var(--color-border); }.modal-header h3 { margin: 0; }.modal-header button { border: 0; background: transparent; color: var(--color-text-muted); font-size: 1.5rem; cursor: pointer; }.modal-body { padding: 18px; color: var(--color-text-secondary); }.modal-body p { margin: 0; line-height: 1.55; }.modal-footer { justify-content: flex-end; border-top: 1px solid var(--color-border); }
+@media (max-width: 1050px) { .review-layout { grid-template-columns: 280px minmax(0,1fr); }.assessment-grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .rule-review-page { height: auto; min-height: calc(100dvh - 72px); overflow: visible; }.page-header { align-items: flex-start; flex-direction: column; }.header-actions { width: 100%; justify-content: flex-start; }.bulk-actions { justify-content: flex-start; }.header-count { display: none; }.review-layout { grid-template-columns: 1fr; }.candidate-list { height: 300px; min-height: 300px; }.rule-document { height: auto; min-height: 620px; }.relationship-flow, .probe-facts { grid-template-columns: 1fr; }.relationship-arrow { transform: rotate(90deg); justify-self: center; }.action-bar { position: static; flex-direction: column; align-items: stretch; margin: var(--space-5) 0 0; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); }.action-buttons { justify-content: flex-end; } }
 </style>

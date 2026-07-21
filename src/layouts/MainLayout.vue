@@ -132,7 +132,10 @@
                         </div>
                         <div class="notifications-dropdown__content">
                           <p class="notifications-dropdown__text">
-                            <span class="notifications-dropdown__name">{{ notif.senderId?.display_name }}</span>
+                            <span v-if="notif.type === 'dream_analysis'" class="notifications-dropdown__name">Oracle đã phân tích xong giấc mơ</span>
+                            <template v-else>
+                              <span class="notifications-dropdown__name">{{ notif.senderId?.display_name }}</span>
+                            </template>
                             <span v-if="notif.type === 'like'"> liked your dream</span>
                             <span v-else-if="notif.type === 'comment'"> commented on your dream</span>
                             <span v-else-if="notif.type === 'follow'"> followed you</span>
@@ -209,6 +212,8 @@ import SourceProgressModal from '@/components/common/SourceProgressModal.vue'
 import { useDreamStore } from '@/store/useDreamStore'
 import { useNotificationStore } from '@/store/useNotificationStore'
 import { useAuthStore } from '@/store/useAuthStore'
+import { useOracleStore } from '@/store/useOracleStore'
+import type { ApiDream, ApiNotification } from '@/api/types'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo } from '@/utils/timeAgo'
 import apiClient from '@/api/client'
@@ -219,6 +224,7 @@ const router = useRouter()
 const dreamStore = useDreamStore()
 const notificationStore = useNotificationStore()
 const authStore = useAuthStore()
+const oracleStore = useOracleStore()
 
 const avatarBg = computed(() => {
   return authStore.user?._id ? getAvatarBg(authStore.user._id) : '#262626'
@@ -248,9 +254,21 @@ function toggleNotifications() {
   }
 }
 
-async function handleNotificationClick(notif: any) {
+async function handleNotificationClick(notif: ApiNotification) {
   showNotifications.value = false
-  if (notif.type === 'follow') {
+  if (notif.type === 'dream_analysis') {
+    const targetPostId = notif.postId && typeof notif.postId === 'object' ? notif.postId._id : notif.postId
+    if (targetPostId) {
+      try {
+        const { data } = await apiClient.get<{ success: boolean; data: ApiDream }>(`/dreams/${targetPostId}`)
+        if (data.success && data.data.ai_status === 'completed') {
+          oracleStore.openCompletedDialog(data.data)
+        }
+      } catch (error) {
+        console.error('Failed to open completed Oracle analysis:', error)
+      }
+    }
+  } else if (notif.type === 'follow') {
     const userId = notif.senderId?._id || notif.senderId
     if (userId) {
       router.push(`/profile/${userId}`)

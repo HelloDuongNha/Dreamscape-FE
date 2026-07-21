@@ -3,77 +3,74 @@ import { ref } from 'vue'
 import type { ApiDream } from '@/api/types'
 import apiClient from '@/api/client'
 import { useDreamStore } from './useDreamStore'
+import { useNotificationStore } from './useNotificationStore'
 
 export const useOracleStore = defineStore('oracle', () => {
   const trackedDream = ref<ApiDream | null>(null)
   const isDialogVisible = ref(false)
   const isPinnedVisible = ref(false)
   const progress = ref(0)
+  const elapsedSeconds = ref(0)
   const statusMessage = ref('Oracle đang phân tích giấc mơ...')
   const completedDream = ref<ApiDream | null>(null)
   const failedDream = ref<ApiDream | null>(null)
 
   let pollInterval: ReturnType<typeof setInterval> | null = null
   let progressInterval: ReturnType<typeof setInterval> | null = null
+  let completionTimer: ReturnType<typeof setTimeout> | null = null
+  let localStartedAt = 0
 
   function startTracking(dream: ApiDream) {
     stopTracking()
 
     trackedDream.value = dream
+    if (dream.ai_status === 'completed') {
+      handleSuccess(dream)
+      return
+    }
+    if (dream.ai_status === 'failed') {
+      handleFailure(dream)
+      return
+    }
     isDialogVisible.value = true
     isPinnedVisible.value = false
-    progress.value = 0
-    statusMessage.value = 'Oracle đang phân tích giấc mơ...'
+    progress.value = Math.max(0, Math.min(99, dream.analysisMetadata?.progress || 0))
+    elapsedSeconds.value = 0
+    localStartedAt = dream.analysisMetadata?.startedAt
+      ? new Date(dream.analysisMetadata.startedAt).getTime()
+      : Date.now()
+    statusMessage.value = dream.analysisMetadata?.statusMessage || 'Oracle đang phân tích giấc mơ...'
     completedDream.value = null
     failedDream.value = null
 
-    // Simulated progress (stops at 90%)
-    startSimulatedProgress()
+    startElapsedClock()
 
     // Polling status every 2.5s
     startPolling(dream._id)
   }
 
-  function startSimulatedProgress() {
+  function startElapsedClock() {
     progressInterval = setInterval(() => {
-      if (progress.value < 20) {
-        progress.value += 4
-      } else if (progress.value < 50) {
-        progress.value += 3
-      } else if (progress.value < 80) {
-        progress.value += 2
-      } else if (progress.value < 90) {
-        progress.value += 1
-      }
+      elapsedSeconds.value = Math.max(0, Math.floor((Date.now() - localStartedAt) / 1000))
     }, 1000)
   }
 
   function startPolling(dreamId: string) {
-    const startTime = Date.now()
-    const maxPollTime = 110000 // 110 seconds max polling duration
-
     pollInterval = setInterval(async () => {
-      const elapsed = Date.now() - startTime
-      if (elapsed > maxPollTime) {
-        // Stop polling, perform one final refetch, then show failed state
-        clearTimers()
-        try {
-          const { data } = await apiClient.get<{ success: boolean; data: ApiDream }>(`/dreams/${dreamId}`)
-          if (data.success && data.data.ai_status === 'completed') {
-            handleSuccess(data.data)
-            return
-          }
-        } catch (err) {
-          console.warn('Final refetch failed:', err)
-        }
-        handleFailure()
-        return
-      }
-
       try {
         const { data } = await apiClient.get<{ success: boolean; data: ApiDream }>(`/dreams/${dreamId}`)
         if (data.success) {
           const currentDream = data.data
+          trackedDream.value = currentDream
+          const metadata = currentDream.analysisMetadata
+          if (metadata?.startedAt) {
+            const serverStartedAt = new Date(metadata.startedAt).getTime()
+            if (Number.isFinite(serverStartedAt)) localStartedAt = serverStartedAt
+          }
+          if (typeof metadata?.progress === 'number') {
+            progress.value = Math.max(progress.value, Math.min(99, metadata.progress))
+          }
+          if (metadata?.statusMessage) statusMessage.value = metadata.statusMessage
           // Update the dream in the main store so any feed card updates automatically
           const dreamStore = useDreamStore()
           const idx = dreamStore.dreams.findIndex(d => d._id === dreamId)
@@ -84,7 +81,7 @@ export const useOracleStore = defineStore('oracle', () => {
           if (currentDream.ai_status === 'completed') {
             handleSuccess(currentDream)
           } else if (currentDream.ai_status === 'failed') {
-            handleFailure()
+            handleFailure(currentDream)
           }
         }
       } catch (err) {
@@ -94,19 +91,31 @@ export const useOracleStore = defineStore('oracle', () => {
   }
 
   function handleSuccess(dream: ApiDream) {
+    const keepCompletionVisible = isDialogVisible.value
     progress.value = 100
+    trackedDream.value = dream
     completedDream.value = dream
-    isDialogVisible.value = false
-    isPinnedVisible.value = true // convert to completion pinned notification
     clearTimers()
+    void useNotificationStore().fetchNotifications()
+    if (!keepCompletionVisible) {
+      isDialogVisible.value = false
+      isPinnedVisible.value = true
+      scheduleTerminalDismiss()
+      return
+    }
+    isDialogVisible.value = true
+    isPinnedVisible.value = false
   }
 
-  function handleFailure() {
+  function handleFailure(dream?: ApiDream) {
+    clearCompletionTimer()
     progress.value = 0
-    failedDream.value = trackedDream.value
+    elapsedSeconds.value = 0
+    failedDream.value = dream || trackedDream.value
     isDialogVisible.value = false
     isPinnedVisible.value = true // convert to failed pinned notification
     clearTimers()
+    scheduleTerminalDismiss()
   }
 
   function clearTimers() {
@@ -116,8 +125,14 @@ export const useOracleStore = defineStore('oracle', () => {
     progressInterval = null
   }
 
+  function clearCompletionTimer() {
+    if (completionTimer) clearTimeout(completionTimer)
+    completionTimer = null
+  }
+
   function stopTracking() {
     clearTimers()
+    clearCompletionTimer()
     trackedDream.value = null
     isDialogVisible.value = false
     isPinnedVisible.value = false
@@ -126,18 +141,55 @@ export const useOracleStore = defineStore('oracle', () => {
     failedDream.value = null
   }
 
+  function scheduleTerminalDismiss() {
+    clearCompletionTimer()
+    completionTimer = setTimeout(() => {
+      isPinnedVisible.value = false
+      completionTimer = null
+    }, 3000)
+  }
+
+  /** Hide is a presentation action. It must never cancel polling for a job. */
+  function dismissPinned() {
+    isPinnedVisible.value = false
+    if (completedDream.value || failedDream.value) {
+      clearCompletionTimer()
+    }
+  }
+
   function minimizeDialog() {
+    clearCompletionTimer()
     isDialogVisible.value = false
-    if (trackedDream.value && trackedDream.value.ai_status === 'pending') {
+    if (trackedDream.value) {
       isPinnedVisible.value = true
+      if (completedDream.value || failedDream.value) scheduleTerminalDismiss()
     }
   }
 
   function openDialog() {
-    if (trackedDream.value && trackedDream.value.ai_status === 'pending') {
+    if (trackedDream.value) {
+      clearCompletionTimer()
       isDialogVisible.value = true
       isPinnedVisible.value = false
     }
+  }
+
+  function openCompletedDialog(dream: ApiDream) {
+    clearTimers()
+    clearCompletionTimer()
+    trackedDream.value = dream
+    completedDream.value = dream
+    failedDream.value = null
+    progress.value = 100
+    statusMessage.value = dream.analysisMetadata?.statusMessage || 'Phân tích hoàn tất.'
+    localStartedAt = dream.analysisMetadata?.startedAt
+      ? new Date(dream.analysisMetadata.startedAt).getTime()
+      : Date.now()
+    elapsedSeconds.value = typeof dream.analysisMetadata?.durationMs === 'number'
+      ? Math.max(0, Math.round(dream.analysisMetadata.durationMs / 1000))
+      : Math.max(0, Math.floor((Date.now() - localStartedAt) / 1000))
+    isDialogVisible.value = true
+    isPinnedVisible.value = false
   }
 
   return {
@@ -145,12 +197,15 @@ export const useOracleStore = defineStore('oracle', () => {
     isDialogVisible,
     isPinnedVisible,
     progress,
+    elapsedSeconds,
     statusMessage,
     completedDream,
     failedDream,
     startTracking,
     stopTracking,
+    dismissPinned,
     minimizeDialog,
     openDialog,
+    openCompletedDialog,
   }
 })

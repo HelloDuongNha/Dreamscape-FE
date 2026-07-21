@@ -836,6 +836,81 @@
             </AppButton>
 
             <div v-if="showDebugActions" class="reader-debug-actions">
+              <div class="reader-build-comparison">
+                <div class="reader-build-comparison__title">Lần dựng bản đọc</div>
+                <div v-if="latestStructuredBuild" :class="['reader-build-stat', { 'reader-build-stat--active': isStructuredReaderActive }]">
+                  <span>DOI / HTML / XML</span>
+                  <strong>{{ latestStructuredBuild.sectionCount }} section · {{ latestStructuredBuild.chunkCount }} chunk</strong>
+                </div>
+                <div v-if="latestPdfBuild" :class="['reader-build-stat', { 'reader-build-stat--active': isPdfReaderActive }]">
+                  <span>PDF · Docling</span>
+                  <strong>{{ latestPdfBuild.sectionCount }} section · {{ latestPdfBuild.chunkCount }} chunk</strong>
+                </div>
+                <div v-if="!latestStructuredBuild && !latestPdfBuild" class="reader-build-comparison__empty">
+                  Chưa có lịch sử dựng để so sánh. Lần chạy tiếp theo sẽ được ghi lại.
+                </div>
+              </div>
+
+              <div class="rule-analysis-summary">
+                <div class="reader-build-comparison__title">Lần phân tích luật</div>
+                <div v-if="ruleV3SummaryLoading" class="reader-build-comparison__empty">Đang tải kết quả…</div>
+                <template v-else-if="ruleV3Summary">
+                  <div v-if="ruleV3Summary.totalRuleCount > 0" class="rule-analysis-counts">
+                    <span class="rule-count rule-count--pending"><strong>{{ ruleV3Summary.counts.pending }}</strong> chờ duyệt</span>
+                    <span class="rule-count rule-count--approved"><strong>{{ ruleV3Summary.counts.verified }}</strong> đã duyệt</span>
+                    <span class="rule-count rule-count--rejected"><strong>{{ ruleV3Summary.counts.rejected }}</strong> từ chối</span>
+                  </div>
+                  <dl v-if="ruleV3Summary.latestRun" class="rule-run-facts">
+                    <div><dt>Kết quả</dt><dd :class="`run-status--${ruleV3Summary.latestRun.status}`">{{ ruleRunStatusLabel }}</dd></div>
+                    <div><dt>Thời gian</dt><dd>{{ formattedRuleRunDuration }}</dd></div>
+                    <div><dt>Chunk được phân tích</dt><dd>{{ ruleV3Summary.latestRun.targetChunkCount ?? 'Chưa ghi nhận' }}</dd></div>
+                    <div><dt>Chunk thực sự làm dẫn chứng</dt><dd>{{ ruleV3Summary.latestRun.evidenceChunkCount }}</dd></div>
+                    <div><dt>Ứng viên tạo mới / gộp</dt><dd>{{ ruleV3Summary.latestRun.savedCandidateCount }} / {{ ruleV3Summary.latestRun.mergedCandidateCount }}</dd></div>
+                    <div><dt>Đề xuất bị loại</dt><dd>{{ ruleV3Summary.latestRun.rejectedCandidateCount }}</dd></div>
+                  </dl>
+                  <button
+                    v-if="ruleV3Summary.runHistory.length"
+                    type="button"
+                    class="rule-history-toggle"
+                    @click="showRuleRunHistory = !showRuleRunHistory"
+                  >
+                    {{ showRuleRunHistory ? 'Ẩn lịch sử' : `Xem ${ruleV3Summary.runHistory.length} lần phân tích gần nhất` }}
+                  </button>
+                  <div v-if="showRuleRunHistory" class="rule-run-history">
+                    <details v-for="(run, index) in ruleV3Summary.runHistory" :key="run.runId" class="rule-run-history__item">
+                      <summary>
+                        <span>Lần {{ ruleV3Summary.runHistory.length - index }} · {{ formatRuleRunDate(run.startedAt) }}</span>
+                        <strong :class="`run-status--${run.status}`">{{ ruleRunStatusText(run.status) }}</strong>
+                      </summary>
+                      <dl>
+                        <div><dt>Thời gian</dt><dd>{{ formatRuleDuration(run.durationMs) }}</dd></div>
+                        <div><dt>Tiến độ batch</dt><dd>{{ run.processedBatches }}/{{ run.totalBatches }}</dd></div>
+                        <div><dt>Kết luận thô / đạt kiểm chứng</dt><dd>{{ run.rawCandidateCount }} / {{ run.verifiedCandidateCount }}</dd></div>
+                        <div><dt>Tạo mới / gộp / loại</dt><dd>{{ run.savedCandidateCount }} / {{ run.mergedCandidateCount }} / {{ run.rejectedCandidateCount }}</dd></div>
+                        <div><dt>Chunk mục tiêu / làm dẫn chứng</dt><dd>{{ run.targetChunkCount ?? '—' }} / {{ run.evidenceChunkCount ?? '—' }}</dd></div>
+                        <div v-if="run.status === 'failed'"><dt>Lý do dừng</dt><dd>{{ ruleRunFailureText(run.sanitizedErrorCode) }}</dd></div>
+                      </dl>
+                      <div v-if="run.rejectionDiagnostics.length" class="rule-run-rejections">
+                        <strong>Vì sao quy luật đề xuất bị loại</strong>
+                        <ul>
+                          <li v-for="(item, itemIndex) in run.rejectionDiagnostics" :key="`${item.batchId}-${itemIndex}`">
+                            <span>{{ item.safeMessage }}</span>
+                            <small v-if="item.proposedStatement">{{ item.proposedStatement }}</small>
+                            <small>Lô bằng chứng: {{ item.batchId }}</small>
+                          </li>
+                        </ul>
+                      </div>
+                    </details>
+                  </div>
+                  <div v-else class="reader-build-comparison__empty">Chưa có bản ghi lần chạy; chỉ hiển thị các quy luật đang liên kết với tài liệu.</div>
+                  <button v-if="ruleV3Summary.totalRuleCount > 0" type="button" class="rule-summary-link" @click="openRuleCandidatesForSource">
+                    Xem các quy luật của tài liệu
+                  </button>
+                  <div v-if="!ruleV3Summary.latestRun && ruleV3Summary.totalRuleCount === 0" class="reader-build-comparison__empty">Tài liệu chưa có lần phân tích Rule V3.</div>
+                </template>
+                <div v-else class="reader-build-comparison__empty">Không thể tải lịch sử phân tích Rule V3.</div>
+              </div>
+
               <AppButton
                 variant="secondary"
                 size="sm"
@@ -860,20 +935,19 @@
               </AppButton>
 
               <AppButton
-                v-if="source.readableInApp && source.fullTextStatus === 'imported'"
-                variant="secondary"
+                v-if="source.readableInApp"
+                variant="primary"
                 size="sm"
                 block
-                :loading="isCurrentlyExtracting"
-                @click="handleExtractCandidates"
+                :loading="isCurrentlyExtractingV3"
+                :disabled="isCurrentlyExtractingV3"
+                @click="handleRuleV3Extraction"
               >
-                Phân tích để lấy luật
+                {{ isCurrentlyExtractingV3 ? 'Đang phân tích Rule V3…' : 'Phân tích Rule V3' }}
               </AppButton>
+
             </div>
 
-            <div v-if="hasApprovedRules" class="tech-row" style="margin-top: var(--space-2); color: #10b981; font-size: 0.85rem; font-weight: 500;">
-              Tài liệu này đã đóng góp các quy luật được phê duyệt.
-            </div>
           </div>
         </div>
 
@@ -1017,6 +1091,18 @@
         @cancel="showReimportConfirm = false"
       />
 
+      <AppConfirm
+        v-model="showRuleExtractionConfirm"
+        :title="ruleExtractionConfirmTitle"
+        :message="ruleExtractionConfirmMessage"
+        :confirm-label="ruleExtractionConfirmLabel"
+        cancel-label="Hủy"
+        :danger="(ruleV3Summary?.totalRuleCount || 0) > 0"
+        :loading="isCurrentlyExtractingV3"
+        @confirm="confirmRuleV3Extraction"
+        @cancel="showRuleExtractionConfirm = false"
+      />
+
       <!-- Manual PDF Upload replacement confirmation -->
       <AppConfirm
         v-model="showUploadConfirm"
@@ -1123,9 +1209,12 @@ import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { getSourcePreview, reviewSource, getModerationSourcePdfInline, cacheModerationSourceOriginalPdf, uploadModerationSourcePdf, deleteModerationSourceOriginalPdf } from '@/api/moderationApi'
-import { getRuleCandidates } from '@/api/ruleCandidateApi'
-import { useExtractionStore } from '@/store/useExtractionStore'
+import {
+  getRuleV3SourceAnalysisSummary,
+  type RuleV3SourceAnalysisSummary,
+} from '@/api/ruleCandidateApi'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
+import { useExtractionStore } from '@/store/useExtractionStore'
 import AppButton from '@/components/common/AppButton.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 import {
@@ -1150,6 +1239,7 @@ const props = withDefaults(
 const router = useRouter()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
+const extractionStore = useExtractionStore()
 
 const resolvedSourceId = computed(() => props.sourceId || '')
 
@@ -1990,7 +2080,6 @@ const showOnlineUpdateWarning = ref(false)
 const isDeletingOriginalPdf = ref(false)
 const showDeletePdfConfirm = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
-const extractionStore = useExtractionStore()
 
 // Source Type and dynamic helpers
 const sourceType = computed(() => resolveSourceType(source.value))
@@ -3219,6 +3308,115 @@ const isModeratorUser = computed(() => {
 })
 
 const showDebugActions = ref(false)
+const isCurrentlyExtractingV3 = computed(() =>
+  extractionStore.sourceId === source.value?._id && extractionStore.status === 'pending'
+)
+
+const showRuleExtractionConfirm = ref(false)
+const ruleV3Summary = ref<RuleV3SourceAnalysisSummary | null>(null)
+const ruleV3SummaryLoading = ref(false)
+const showRuleRunHistory = ref(false)
+const ruleRunStatusLabel = computed(() => ({
+  pending: 'Đang chạy',
+  success: 'Hoàn thành',
+  failed: 'Thất bại'
+} as Record<string, string>)[ruleV3Summary.value?.latestRun?.status || ''] || 'Chưa xác định')
+
+const formattedRuleRunDuration = computed(() => {
+  const durationMs = ruleV3Summary.value?.latestRun?.durationMs
+  if (durationMs == null) return ruleV3Summary.value?.latestRun?.status === 'pending' ? 'Đang tính' : 'Chưa xác định'
+  return formatRuleDuration(durationMs)
+})
+
+function formatRuleDuration(durationMs: number | null) {
+  if (durationMs == null) return 'Chưa xác định'
+  const seconds = Math.round(durationMs / 1000)
+  if (seconds < 60) return `${seconds} giây`
+  const minutes = Math.floor(seconds / 60)
+  const remaining = seconds % 60
+  return remaining ? `${minutes} phút ${remaining} giây` : `${minutes} phút`
+}
+
+function formatRuleRunDate(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Chưa xác định' : date.toLocaleString('vi-VN')
+}
+
+function ruleRunStatusText(status: string) {
+  return ({ pending: 'Đang chạy', success: 'Hoàn thành', failed: 'Thất bại' } as Record<string, string>)[status] || status
+}
+
+function ruleRunFailureText(code: string | null) {
+  return ({
+    all_verified_candidates_rejected: 'Quy luật đã kiểm chứng không đáp ứng hợp đồng lưu trữ',
+    replacement_persistence_incomplete: 'Bộ thay thế lưu không đầy đủ; kết quả cũ đã được khôi phục',
+    provider_unavailable: 'Mô hình trích xuất không khả dụng',
+    provider_timeout: 'Mô hình phản hồi quá thời gian',
+    provider_schema_invalid: 'Mô hình trả về sai cấu trúc',
+    input_too_large: 'Lô văn bản vượt giới hạn an toàn',
+    extraction_failed: 'Lỗi hệ thống trong quá trình trích xuất'
+  } as Record<string, string>)[code || ''] || 'Chưa có mô tả an toàn cho lỗi này'
+}
+
+const ruleExtractionConfirmMessage = computed(() => {
+  const total = ruleV3Summary.value?.totalRuleCount || 0
+  const hasPriorRun = Boolean(ruleV3Summary.value?.latestRun)
+  if (!hasPriorRun) {
+    return 'Hệ thống sẽ phân tích toàn bộ phần nội dung phù hợp và tạo các quy luật có dẫn chứng được đối chiếu với bản đọc.'
+  }
+  if (total === 0) {
+    return 'Tài liệu đã từng được phân tích nhưng hiện chưa có quy luật nào. Hệ thống sẽ chạy lại toàn bộ phần nội dung phù hợp; không có dữ liệu quy luật nào cần xóa.'
+  }
+  return `Tài liệu hiện có ${total} quy luật ở mọi trạng thái. Khi tiếp tục, toàn bộ dẫn chứng và kết quả Rule V3 do tài liệu này đóng góp sẽ được thay thế bằng lần phân tích mới. Quy luật còn được tài liệu khác hỗ trợ vẫn được giữ lại.`
+})
+
+const ruleExtractionConfirmTitle = computed(() =>
+  ruleV3Summary.value?.latestRun ? 'Phân tích lại Rule V3' : 'Phân tích Rule V3'
+)
+
+const ruleExtractionConfirmLabel = computed(() => {
+  if ((ruleV3Summary.value?.totalRuleCount || 0) > 0) return 'Xóa kết quả cũ và phân tích lại'
+  return ruleV3Summary.value?.latestRun ? 'Phân tích lại' : 'Bắt đầu phân tích'
+})
+
+async function loadRuleV3Summary() {
+  if (!source.value?._id || (!isModeratorUser.value && props.actionMode !== 'moderation-preview')) return
+  ruleV3SummaryLoading.value = true
+  try {
+    const response = await getRuleV3SourceAnalysisSummary(source.value._id)
+    ruleV3Summary.value = response.data
+  } catch (error) {
+    console.error('Failed to load Rule V3 source summary:', error)
+    ruleV3Summary.value = null
+  } finally {
+    ruleV3SummaryLoading.value = false
+  }
+}
+
+function openRuleCandidatesForSource() {
+  if (!source.value?._id) return
+  router.push({ path: '/moderation/rule-candidates', query: { sourceId: source.value._id } })
+}
+
+function handleRuleV3Extraction() {
+  if (!source.value?._id || isCurrentlyExtractingV3.value) return
+  showRuleExtractionConfirm.value = true
+}
+
+async function confirmRuleV3Extraction() {
+  if (!source.value?._id || isCurrentlyExtractingV3.value) return
+  showRuleExtractionConfirm.value = false
+  const latestRun = ruleV3Summary.value?.latestRun
+  const historicalSecondsPerBatch = latestRun?.durationMs && latestRun.processedBatches > 0
+    ? latestRun.durationMs / 1000 / latestRun.processedBatches
+    : null
+  await extractionStore.startExtraction(
+    source.value._id,
+    source.value.title || 'Tài liệu học thuật',
+    Boolean(latestRun),
+    historicalSecondsPerBatch
+  )
+}
 const readerProvenance = computed(() => String(
   source.value?.extractionMethod || smartReaderSourceType.value || extractionEngine.value || ''
 ).toLowerCase())
@@ -3230,6 +3428,16 @@ const isPdfReaderActive = computed(() =>
   ['pdf_text', 'ocr', 'mixed'].includes(readerProvenance.value) ||
   /docling|uploaded_pdf|pymupdf|pdf_parse/.test(readerProvenance.value)
 )
+
+const readerBuildSnapshots = computed(() => Array.isArray(source.value?.readerBuildSnapshots)
+  ? [...source.value.readerBuildSnapshots].sort((a: any, b: any) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime())
+  : [])
+const latestStructuredBuild = computed(() => readerBuildSnapshots.value.find((item: any) =>
+  /jats|xml|html|plos|frontiers|pmc/i.test(`${item.engine} ${item.sourceType}`)
+) || null)
+const latestPdfBuild = computed(() => readerBuildSnapshots.value.find((item: any) =>
+  /docling|pdf|ocr/i.test(`${item.engine} ${item.sourceType}`)
+) || null)
 
 const hasImportCandidate = computed(() => {
   if (!source.value) return false
@@ -3261,40 +3469,6 @@ async function handleImport() {
     }
   }
 }
-
-const hasPendingCandidates = ref(false)
-const hasApprovedRules = ref(false)
-const isCurrentlyExtracting = computed(() => extractionStore.sourceId === source.value?._id && extractionStore.status === 'pending')
-
-async function checkPendingCandidates() {
-  if (source.value) {
-    try {
-      const pendingRes = await getRuleCandidates({ status: 'pending', academicSourceId: source.value._id })
-      const editNeededRes = await getRuleCandidates({ status: 'needs_edit', academicSourceId: source.value._id })
-      hasPendingCandidates.value = (pendingRes.data || []).length + (editNeededRes.data || []).length > 0
-    } catch (e) {
-      console.error('Failed to check pending candidates:', e)
-    }
-  }
-}
-
-async function checkApprovedRules() {
-  if (source.value) {
-    try {
-      const approvedRes = await getRuleCandidates({ status: 'approved', academicSourceId: source.value._id })
-      hasApprovedRules.value = (approvedRes.data || []).length > 0
-    } catch (e) {
-      console.error('Failed to check approved rules:', e)
-    }
-  }
-}
-
-watch(() => isCurrentlyExtracting.value, async (newVal, oldVal) => {
-  if (oldVal === true && newVal === false) {
-    await checkPendingCandidates()
-    await checkApprovedRules()
-  }
-})
 
 const showReimportConfirm = ref(false)
 const isCurrentlyReimporting = ref(false)
@@ -3415,16 +3589,6 @@ async function handleModerationReject() {
   }
 }
 
-async function handleExtractCandidates() {
-  if (source.value) {
-    if (hasPendingCandidates.value) {
-      router.push({ path: '/moderation/rule-candidates', query: { sourceId: source.value._id } })
-      return
-    }
-    extractionStore.startExtraction(source.value._id, source.value.title || 'Tài liệu')
-  }
-}
-
 const statusLabel = computed(() => {
   if (!source.value) return 'Chưa tạo'
   switch (source.value.chunkBuildStatus) {
@@ -3531,8 +3695,6 @@ async function fetchSource() {
       source.value = await getApprovedSourceById(id)
       if (source.value) {
         initOriginalDocState()
-        await checkPendingCandidates()
-        await checkApprovedRules()
         if (source.value.readableInApp) {
           await fetchAllReaderData()
         } else if (getOriginalPdfUrl(source.value)) {
@@ -3541,6 +3703,7 @@ async function fetchSource() {
         }
       }
     }
+    if (source.value) await loadRuleV3Summary()
   } catch (err: any) {
     hasError.value = true
     const errMsg = err.response?.data?.message || err.message || 'Không thể tải thông tin tài liệu.'
@@ -3607,6 +3770,19 @@ watch([currentPageIndex, readerPages, activeTab, fontSize], () => {
   }
 }, { immediate: true })
 
+watch(
+  () => [extractionStore.sourceId, extractionStore.status] as const,
+  ([activeSourceId, extractionStatus], [previousSourceId, previousStatus]) => {
+    if (
+      activeSourceId === source.value?._id &&
+      ['success', 'failed'].includes(extractionStatus) &&
+      (previousStatus !== extractionStatus || previousSourceId !== activeSourceId)
+    ) {
+      void loadRuleV3Summary()
+    }
+  }
+)
+
 function handleResize() {
   if (activeTab.value === 'smart') {
     updateTableSizingClasses()
@@ -3634,6 +3810,26 @@ onUnmounted(() => {
   border-radius: var(--radius-md, 6px);
   background: rgba(255, 255, 255, 0.02);
 }
+
+.reader-build-comparison { display: grid; gap: 7px; padding: 10px; border: 1px solid #2f3744; border-radius: 9px; background: rgba(15, 23, 42, .5); }
+.reader-build-comparison__title { color: #94a3b8; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.reader-build-stat { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 8px; border: 1px solid transparent; border-radius: 7px; color: var(--color-text-muted); font-size: 11px; }
+.reader-build-stat strong { color: var(--color-text-primary); font-size: 11px; white-space: nowrap; }
+.reader-build-stat--active { border-color: #10b981; background: rgba(16, 185, 129, .08); }
+.reader-build-comparison__empty { color: var(--color-text-muted); font-size: 11px; line-height: 1.45; }
+.rule-analysis-summary { display: grid; gap: 9px; padding: 10px; border: 1px solid #312e81; border-radius: 9px; background: rgba(30, 27, 75, .28); }
+.rule-analysis-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.rule-count { display: flex; flex-direction: column; gap: 2px; padding: 7px 5px; border-radius: 7px; background: rgba(15, 23, 42, .64); color: #94a3b8; text-align: center; font-size: 9px; }
+.rule-count strong { font-size: 14px; }.rule-count--pending strong { color: #fbbf24; }.rule-count--approved strong { color: #34d399; }.rule-count--rejected strong { color: #f87171; }
+.rule-run-facts { display: grid; gap: 5px; margin: 0; }
+.rule-run-facts div { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; }.rule-run-facts dt { color: #94a3b8; }.rule-run-facts dd { margin: 0; color: #e2e8f0; font-weight: 650; text-align: right; }
+.run-status--success { color: #34d399 !important; }.run-status--failed { color: #f87171 !important; }.run-status--pending { color: #fbbf24 !important; }
+.rule-summary-link { padding: 7px 8px; border: 1px solid #4338ca; border-radius: 7px; background: rgba(67, 56, 202, .14); color: #c7d2fe; cursor: pointer; font-size: 10px; font-weight: 650; }.rule-summary-link:hover { background: rgba(67, 56, 202, .24); }
+.rule-history-toggle { padding: 6px 0; border: 0; background: transparent; color: #a5b4fc; cursor: pointer; text-align: left; font-size: 10px; font-weight: 650; }
+.rule-run-history { display: grid; gap: 6px; max-height: 280px; overflow-y: auto; padding-right: 3px; }
+.rule-run-history__item { border: 1px solid #30364a; border-radius: 7px; background: rgba(15,23,42,.54); font-size: 10px; }.rule-run-history__item summary { display: flex; justify-content: space-between; gap: 8px; padding: 8px; cursor: pointer; color: #cbd5e1; }.rule-run-history__item dl { display: grid; gap: 4px; margin: 0; padding: 0 8px 8px; }.rule-run-history__item dl div { display: flex; justify-content: space-between; gap: 8px; }.rule-run-history__item dt { color: #94a3b8; }.rule-run-history__item dd { margin: 0; color: #e2e8f0; text-align: right; }
+.rule-run-rejections { margin: 0 8px 8px; padding: 8px; border-left: 2px solid #f59e0b; background: rgba(120,53,15,.12); color: #fcd34d; }.rule-run-rejections ul { display: grid; gap: 7px; margin: 6px 0 0; padding-left: 15px; }.rule-run-rejections span, .rule-run-rejections small { display: block; }.rule-run-rejections small { margin-top: 2px; color: #cbd5e1; line-height: 1.35; }
+
 
 :deep(.reader-debug-action--active) {
   border-color: var(--color-primary, #ffffff) !important;

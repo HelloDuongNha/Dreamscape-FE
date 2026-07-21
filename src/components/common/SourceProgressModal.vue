@@ -43,6 +43,7 @@
               :step-text="sourceProgressStore.stepText"
               :detail-text="sourceProgressStore.stageDetail"
               :elapsed-seconds="sourceProgressStore.elapsedSeconds"
+              :estimated-remaining-seconds="sourceProgressStore.estimatedRemainingSeconds"
             />
           </div>
         </div>

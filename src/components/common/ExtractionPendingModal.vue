@@ -14,7 +14,7 @@
           <!-- Modal header -->
           <div class="modal-header">
             <div class="modal-title-area">
-              <span class="modal-title-text">Phân tích tài liệu</span>
+              <span class="modal-title-text">Phân tích Rule V3</span>
             </div>
 
             <div class="modal-header__right">
@@ -34,7 +34,7 @@
           <div class="modal-body-content">
             <div class="modal-source-info">
               <h3 class="source-title-heading">{{ extractionStore.sourceTitle }}</h3>
-              <p class="source-subtitle">Đang xây dựng dữ liệu phân tích và trích xuất các quy luật học thuật từ tài liệu...</p>
+              <p class="source-subtitle">Hệ thống đang xử lý toàn bộ tài liệu, đối chiếu trích dẫn và gộp các kết luận trùng nhau.</p>
             </div>
 
             <!-- Pending Loading Content -->
