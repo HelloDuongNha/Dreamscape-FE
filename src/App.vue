@@ -20,7 +20,12 @@
       <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
       </svg>
-      {{ settingsStore.toast.message }}
+      <template v-if="settingsStore.toast.content.kind === 'key'">
+        {{ t(settingsStore.toast.content.key, settingsStore.toast.content.params as any) }}
+      </template>
+      <template v-else>
+        {{ settingsStore.toast.content.text }}
+      </template>
     </div>
   </Transition>
 
@@ -29,15 +34,34 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useChatStore } from '@/store/useChatStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { useLocaleStore } from '@/store/useLocaleStore'
 import MessageToastContainer from '@/components/common/MessageToastContainer.vue'
 
-const authStore = useAuthStore()   // also triggers socket connect if token present
+const { t } = useI18n()
+const route = useRoute()
+const authStore = useAuthStore()
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
+const localeStore = useLocaleStore()
+
+// Watch both current route titleKey and localeStore.currentLocale to reactively update document.title
+watch(
+  [() => route.meta.titleKey, () => localeStore.currentLocale],
+  ([titleKey]) => {
+    if (titleKey) {
+      document.title = t(titleKey as string)
+    } else {
+      document.title = 'DreamScape'
+    }
+  },
+  { immediate: true }
+)
 
 onMounted(async () => {
   // Only fetch if the user is authenticated — avoids pointless 401 calls

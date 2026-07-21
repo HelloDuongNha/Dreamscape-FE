@@ -1,5 +1,5 @@
 <template>
-  <div class="profile-tabs" role="tablist" :aria-label="'Profile sections'">
+  <div class="profile-tabs" role="tablist" :aria-label="t('profile.tabsAriaLabel')">
     <button
       v-for="tab in tabs"
       :key="tab.id"
@@ -17,16 +17,21 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
 export type TabId = 'posts' | 'replies' | 'likes'
 
 defineProps<{ activeTab: TabId }>()
 defineEmits<{ change: [id: TabId] }>()
 
-const tabs: { id: TabId; label: string }[] = [
-  { id: 'posts',   label: 'Posts'   },
-  { id: 'replies', label: 'Replies' },
-  { id: 'likes',   label: 'Likes'   },
-]
+const { t } = useI18n()
+
+const tabs = computed<{ id: TabId; label: string }[]>(() => [
+  { id: 'posts',   label: t('profile.dreamsTab')   },
+  { id: 'replies', label: t('profile.repliesTab') },
+  { id: 'likes',   label: t('profile.likesTab')   },
+])
 </script>
 
 <style scoped>

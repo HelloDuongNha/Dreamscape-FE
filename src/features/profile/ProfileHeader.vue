@@ -11,6 +11,7 @@
           class="profile-header__avatar"
           :style="{ background: avatarBg }"
           :aria-label="user.display_name"
+          translate="no"
         >
           {{ initials }}
         </div>
@@ -20,7 +21,7 @@
           v-if="streak > 0"
           class="profile-header__streak-flame"
           :style="{ backgroundColor: flameColor }"
-          :title="`${streak} day streak`"
+          :title="t('profile.streakTitle', { count: streak })"
         >
           <svg
             viewBox="0 0 24 24"
@@ -46,11 +47,11 @@
             size="sm"
             @click="startEdit"
           >
-            Edit profile
+            {{ t('profile.editProfileBtn') }}
           </AppButton>
           <template v-else>
-            <AppButton id="save-profile-btn" variant="primary" size="sm" :disabled="isSaving" @click="saveEdit">Save</AppButton>
-            <AppButton id="cancel-edit-btn" variant="ghost" size="sm" :disabled="isSaving" @click="cancelEdit">Cancel</AppButton>
+            <AppButton id="save-profile-btn" variant="primary" size="sm" :disabled="isSaving" @click="saveEdit">{{ t('profile.saveBtn') }}</AppButton>
+            <AppButton id="cancel-edit-btn" variant="ghost" size="sm" :disabled="isSaving" @click="cancelEdit">{{ t('profile.cancelBtn') }}</AppButton>
           </template>
         </template>
 
@@ -63,7 +64,7 @@
             :disabled="isTogglingFollow"
             @click="toggleFollow"
           >
-            {{ isFollowing ? 'Following' : 'Follow' }}
+            {{ isFollowing ? t('profile.followingLabel') : t('profile.followBtn') }}
           </AppButton>
           <AppButton
             id="message-btn"
@@ -71,7 +72,7 @@
             size="sm"
             @click="openMessage"
           >
-            Message
+            {{ t('profile.messageBtn') }}
           </AppButton>
         </template>
       </div>
@@ -86,10 +87,11 @@
             id="edit-display-name"
             v-model="editName"
             class="profile-header__edit-input profile-header__edit-input--name"
-            placeholder="Display name"
+            :placeholder="t('profile.displayNamePlaceholder')"
             maxlength="50"
           />
-          <span v-if="nameError" class="profile-header__error">{{ nameError }}</span>
+          <span v-if="nameError" class="profile-header__error">{{ t(nameError.key) }}</span>
+          <span v-else-if="backendNameError" class="profile-header__error">{{ backendNameError }}</span>
         </div>
         <div class="profile-header__edit-field">
           <div class="profile-header__username-wrapper">
@@ -98,23 +100,24 @@
               id="edit-username"
               v-model="editUsernameWithoutAt"
               class="profile-header__edit-input profile-header__edit-input--handle"
-              placeholder="username"
+              :placeholder="t('profile.usernamePlaceholder')"
               maxlength="29"
             />
           </div>
-          <span v-if="usernameError" class="profile-header__error">{{ usernameError }}</span>
+          <span v-if="usernameError" class="profile-header__error">{{ t(usernameError.key) }}</span>
+          <span v-else-if="backendUsernameError" class="profile-header__error">{{ backendUsernameError }}</span>
         </div>
       </template>
 
       <!-- Read-only -->
       <template v-else>
-        <h1 class="profile-header__name">{{ user.display_name }}</h1>
-        <span class="profile-header__handle">{{ user.username }}</span>
+        <h1 class="profile-header__name" translate="no">{{ user.display_name }}</h1>
+        <span class="profile-header__handle" translate="no">{{ user.username }}</span>
       </template>
     </div>
 
     <!-- Bio -->
-    <p v-if="user.bio && !editing" class="profile-header__bio">{{ user.bio }}</p>
+    <p v-if="user.bio && !editing" class="profile-header__bio" translate="no">{{ user.bio }}</p>
 
     <!-- Rank Badge -->
     <div v-if="!editing" class="profile-header__rank-badge-container">
@@ -122,21 +125,21 @@
         class="profile-header__rank-badge"
         :style="{ backgroundColor: rankColor }"
       >
-        <span class="profile-header__rank-text">{{ rankTitle }}</span>
+        <span class="profile-header__rank-text">{{ rankTitleDisplay }}</span>
         <div class="profile-header__badge-shine" />
       </div>
     </div>
 
     <!-- Joined Date -->
     <div v-if="user.createdAt && !editing" class="profile-header__joined">
-      <span>Joined {{ formattedJoinedDate }}</span>
+      <span>{{ t('profile.joinedText', { date: formattedJoinedDate }) }}</span>
     </div>
 
     <!-- Stats row -->
     <div class="profile-header__stats">
       <div class="profile-header__stat">
         <span class="profile-header__stat-value">{{ dreamCount }}</span>
-        <span class="profile-header__stat-label">Posts</span>
+        <span class="profile-header__stat-label">{{ t('profile.dreamsLabel') }}</span>
       </div>
       <div class="profile-header__stat-divider" aria-hidden="true" />
       <div
@@ -147,7 +150,7 @@
         @keydown.enter="emit('open-followers', 'followers')"
       >
         <span class="profile-header__stat-value">{{ user.followers ? user.followers.length : (user.follower_count || 0) }}</span>
-        <span class="profile-header__stat-label">Followers</span>
+        <span class="profile-header__stat-label">{{ t('profile.followersLabel') }}</span>
       </div>
       <div class="profile-header__stat-divider" aria-hidden="true" />
       <div
@@ -158,12 +161,12 @@
         @keydown.enter="emit('open-followers', 'following')"
       >
         <span class="profile-header__stat-value">{{ user.following ? user.following.length : 0 }}</span>
-        <span class="profile-header__stat-label">Following</span>
+        <span class="profile-header__stat-label">{{ t('profile.followingLabel') }}</span>
       </div>
       <div class="profile-header__stat-divider" aria-hidden="true" />
       <div class="profile-header__stat">
         <span class="profile-header__stat-value">{{ approvedSourceCount || 0 }}</span>
-        <span class="profile-header__stat-label">Đóng góp tài liệu</span>
+        <span class="profile-header__stat-label">{{ t('profile.contributionsLabel') }}</span>
       </div>
     </div>
 
@@ -173,11 +176,13 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRouter }     from 'vue-router'
+import { useI18n }       from 'vue-i18n'
 import AppButton         from '@/components/common/AppButton.vue'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import type { User }     from '@/data/mockUsers'
 import { useAuthStore }  from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { useLocaleStore }   from '@/store/useLocaleStore'
 import apiClient from '@/api/client'
 
 const props = defineProps<{
@@ -192,21 +197,17 @@ const emit = defineEmits<{
   (e: 'open-followers', tab: 'followers' | 'following'): void
 }>()
 
-const formattedJoinedDate = computed(() => {
-  if (!props.user.createdAt) return ''
-  const date = new Date(props.user.createdAt)
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ]
-  const month = monthNames[date.getMonth()]
-  const year = date.getFullYear()
-  return `${month} ${year}`
-})
-
+const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const localeStore = useLocaleStore()
+
+const formattedJoinedDate = computed(() => {
+  if (!props.user.createdAt) return ''
+  const date = new Date(props.user.createdAt)
+  return new Intl.DateTimeFormat(localeStore.currentLocale, { month: 'long', year: 'numeric' }).format(date)
+})
 
 // ── Computed ──────────────────────────────────────────────────────
 const initials  = computed(() => getInitials(props.user.display_name))
@@ -219,21 +220,58 @@ const streak = computed(() => {
   return props.user.streakCount ?? 0
 })
 
-const rankTitle = computed(() => {
+type RankCode =
+  | 'new_dreamer'
+  | 'beginning_dreamer'
+  | 'interpretation_master'
+  | 'dream_manipulator'
+  | 'solitary_star_traveler'
+  | 'reality_creator'
+
+const rankMap: Record<string, RankCode> = {
+  'Đấng Sáng Tạo Thực Tại': 'reality_creator',
+  'Độc Hành Tinh Không': 'solitary_star_traveler',
+  'Kẻ Thao Túng Giấc Mơ': 'dream_manipulator',
+  'Bậc Thầy Giải Mã': 'interpretation_master',
+  'Người Bắt Đầu Mơ': 'beginning_dreamer',
+  'Nhà Mơ Mộng Mới': 'new_dreamer',
+}
+
+const rawRank = computed(() => {
   if (props.isMe) {
-    return authStore.user?.currentRank || 'Nhà Mơ Mộng Mới'
+    return authStore.user?.currentRank || ''
   }
-  return props.user.currentRank || 'Nhà Mơ Mộng Mới'
+  return props.user.currentRank || ''
+})
+
+const isKnownRank = computed(() => {
+  const r = rawRank.value
+  return r ? Object.prototype.hasOwnProperty.call(rankMap, r) : false
+})
+
+const rankCode = computed<RankCode>(() => {
+  const r = rawRank.value
+  if (!r) return 'new_dreamer'
+  return rankMap[r] ?? 'new_dreamer'
+})
+
+const rankTitleDisplay = computed(() => {
+  const r = rawRank.value
+  if (!r) return t('profile.ranks.new_dreamer')
+  if (isKnownRank.value) {
+    return t(`profile.ranks.${rankCode.value}`)
+  }
+  return r // display unknown backend rank value unchanged
 })
 
 const rankColor = computed(() => {
-  const title = rankTitle.value
-  if (title === 'Đấng Sáng Tạo Thực Tại') return '#EF4444'
-  if (title === 'Độc Hành Tinh Không') return '#A855F7'
-  if (title === 'Kẻ Thao Túng Giấc Mơ') return '#06B6D4'
-  if (title === 'Bậc Thầy Giải Mã') return '#F59E0B'
-  if (title === 'Người Bắt Đầu Mơ') return '#94A3B8'
-  return '#B45309' // 'Nhà Mơ Mộng Mới'
+  const code = rankCode.value
+  if (code === 'reality_creator') return '#EF4444'
+  if (code === 'solitary_star_traveler') return '#A855F7'
+  if (code === 'dream_manipulator') return '#06B6D4'
+  if (code === 'interpretation_master') return '#F59E0B'
+  if (code === 'beginning_dreamer') return '#94A3B8'
+  return '#B45309' // new_dreamer
 })
 
 const flameColor = computed(() => {
@@ -255,12 +293,15 @@ const isFollowing = computed(() => {
 const editing = ref(false)
 const editName = ref(props.user.display_name)
 const editUsernameWithoutAt = ref('')
-const nameError = ref('')
-const usernameError = ref('')
+const nameError = ref<{ key: string } | null>(null)
+const usernameError = ref<{ key: string } | null>(null)
+const backendNameError = ref<string | null>(null)
+const backendUsernameError = ref<string | null>(null)
 const isSaving = ref(false)
 
 watch(editUsernameWithoutAt, (newVal) => {
-  usernameError.value = ''
+  usernameError.value = null
+  backendUsernameError.value = null
   const sanitized = newVal.replace(/[^a-zA-Z0-9_]/g, '')
   if (sanitized !== newVal) {
     editUsernameWithoutAt.value = sanitized
@@ -268,7 +309,8 @@ watch(editUsernameWithoutAt, (newVal) => {
 })
 
 watch(editName, () => {
-  nameError.value = ''
+  nameError.value = null
+  backendNameError.value = null
 })
 
 function startEdit() {
@@ -276,14 +318,18 @@ function startEdit() {
   editUsernameWithoutAt.value = props.user.username.startsWith('@')
     ? props.user.username.slice(1)
     : props.user.username
-  nameError.value = ''
-  usernameError.value = ''
+  nameError.value = null
+  usernameError.value = null
+  backendNameError.value = null
+  backendUsernameError.value = null
   editing.value = true
 }
 
 async function saveEdit() {
-  nameError.value = ''
-  usernameError.value = ''
+  nameError.value = null
+  usernameError.value = null
+  backendNameError.value = null
+  backendUsernameError.value = null
 
   const nameVal = editName.value.trim()
   const usernameVal = editUsernameWithoutAt.value.trim()
@@ -291,20 +337,20 @@ async function saveEdit() {
   let hasError = false
 
   if (!nameVal) {
-    nameError.value = 'Display name cannot be empty.'
+    nameError.value = { key: 'errors.displayNameEmpty' }
     hasError = true
   }
 
   if (!usernameVal) {
-    usernameError.value = 'Username cannot be empty.'
+    usernameError.value = { key: 'errors.usernameEmpty' }
     hasError = true
   } else {
     const handleRegex = /^[a-zA-Z0-9_]+$/
     if (!handleRegex.test(usernameVal)) {
-      usernameError.value = 'Username can only contain letters, numbers, and underscores.'
+      usernameError.value = { key: 'errors.usernameInvalid' }
       hasError = true
     } else if (usernameVal.length < 2 || usernameVal.length > 29) {
-      usernameError.value = 'Username must be between 2 and 29 characters.'
+      usernameError.value = { key: 'errors.usernameLength' }
       hasError = true
     }
   }
@@ -322,6 +368,7 @@ async function saveEdit() {
       authStore.updateCurrentUser(data.user)
       emit('updated', data.user)
       editing.value = false
+      settingsStore.showToastKey('toasts.profileSavedSuccess', undefined, 'success')
     }
   } catch (err: any) {
     const response = err.response
@@ -332,17 +379,17 @@ async function saveEdit() {
 
       if (status === 409 || status === 400) {
         if (field === 'username') {
-          usernameError.value = msg
+          backendUsernameError.value = msg
         } else if (field === 'display_name') {
-          nameError.value = msg
+          backendNameError.value = msg
         } else {
-          usernameError.value = msg
+          backendUsernameError.value = msg
         }
       } else {
-        usernameError.value = msg
+        backendUsernameError.value = msg
       }
     } else {
-      usernameError.value = 'Network error. Please try again.'
+      usernameError.value = { key: 'errors.networkError' }
     }
   } finally {
     isSaving.value = false
@@ -363,13 +410,14 @@ async function toggleFollow() {
     const { data } = await apiClient.post(`/users/${props.user._id}/follow`)
     if (data.success) {
       emit('updated', data.user)
-      settingsStore.showToast(
-        data.following ? `Followed ${props.user.display_name}.` : `Unfollowed ${props.user.display_name}.`,
+      settingsStore.showToastKey(
+        data.following ? 'toasts.followSuccess' : 'toasts.unfollowSuccess',
+        { name: props.user.display_name },
         'success'
       )
     }
   } catch (err) {
-    settingsStore.showToast('Failed to update follow status.', 'error')
+    settingsStore.showToastKey('errors.followStatusFailed', undefined, 'error')
   } finally {
     isTogglingFollow.value = false
   }

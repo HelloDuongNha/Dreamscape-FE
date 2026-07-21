@@ -6,33 +6,33 @@
       <!-- Avatar link: .stop prevents bubbling to any parent click handlers -->
       <div
         class="dream-card__avatar-link"
-        :aria-label="`View ${user.display_name}'s profile`"
+        :aria-label="t('home.viewProfileAria', { name: user.display_name })"
         role="link"
         style="cursor: pointer"
       >
-        <div class="dream-card__avatar" :style="{ background: avatarBg }" @click.stop="navigateToProfile">
+        <div class="dream-card__avatar" :style="{ background: avatarBg }" translate="no" @click.stop="navigateToProfile">
           {{ initials }}
         </div>
       </div>
 
       <div class="dream-card__meta">
         <div class="dream-card__name-row">
-          <span class="dream-card__name" role="link" style="cursor: pointer" @click.stop="navigateToProfile">{{ user.display_name }}</span>
-          <span class="dream-card__username" role="link" style="cursor: pointer" @click.stop="navigateToProfile">{{ user.username }}</span>
+          <span class="dream-card__name" role="link" style="cursor: pointer" translate="no" @click.stop="navigateToProfile">{{ user.display_name }}</span>
+          <span class="dream-card__username" role="link" style="cursor: pointer" translate="no" @click.stop="navigateToProfile">{{ user.username }}</span>
         </div>
         <span class="dream-card__time">{{ timestamp }}</span>
       </div>
 
       <div class="dream-card__badges">
-        <span v-if="!dream.is_public" class="dream-card__private-badge" title="Private">
+        <span v-if="!dream.is_public" class="dream-card__private-badge" :title="t('home.privateBadgeTitle')">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          Private
+          {{ t('home.private') }}
         </span>
         <!-- "Edited" badge — visible when edit_history has at least one entry -->
-        <span v-if="isEdited" class="dream-card__edited-badge" title="This post has been edited">
-          Edited
+        <span v-if="isEdited" class="dream-card__edited-badge" :title="t('home.editedTitle')">
+          {{ t('home.edited') }}
         </span>
-        <span class="dream-card__mood" :class="`dream-card__mood--${moodClass}`">
+        <span class="dream-card__mood" :class="`dream-card__mood--${moodClass}`" translate="no">
           {{ dream.mood_tag }}
         </span>
       </div>
@@ -42,14 +42,14 @@
         v-if="isOwner"
         :options="menuOptions"
         align="right"
-        label="Post options"
+        :label="t('home.postOptions')"
         @select="handleMenuSelect"
       >
         <template #trigger="{ toggle }">
           <button
             :id="`post-menu-btn-${dream._id}`"
             class="dream-card__menu-btn"
-            aria-label="Post options"
+            :aria-label="t('home.postOptions')"
             aria-haspopup="true"
             @click.stop="toggle"
           >
@@ -73,7 +73,8 @@
           class="dream-card__edit-textarea"
           maxlength="2000"
           rows="4"
-          :aria-label="`Edit dream content for ${dream._id}`"
+          :aria-label="t('home.editDreamAria')"
+          translate="no"
         />
         <div class="dream-card__edit-actions">
           <span class="dream-card__edit-count">{{ editContent.length }} / 2000</span>
@@ -82,26 +83,26 @@
             class="dream-card__edit-btn dream-card__edit-btn--cancel"
             :disabled="isSaving"
             @click="cancelEdit"
-          >Cancel</button>
+          >{{ t('home.cancel') }}</button>
           <button
             :id="`edit-save-${dream._id}`"
             class="dream-card__edit-btn dream-card__edit-btn--save"
             :disabled="isSaving || !editContent.trim()"
             @click="saveEdit"
-          >{{ isSaving ? 'Saving…' : 'Save' }}</button>
+          >{{ isSaving ? t('home.saving') : t('home.save') }}</button>
         </div>
       </template>
 
       <!-- Normal read mode -->
       <template v-else>
         <p class="dream-card__content" @click="openModal">
-          <span>{{ displayContent }}</span>
+          <span translate="no">{{ displayContent }}</span>
           <button
             v-if="isTruncated"
             class="dream-card__see-more"
-            :aria-label="`Read full dream by ${user.display_name}`"
+            :aria-label="t('home.readFullDreamAria', { name: user.display_name })"
             @click.stop="openModal"
-          >...Xem thêm</button>
+          >…{{ t('home.seeMore') }}</button>
         </p>
       </template>
     </div>
@@ -117,18 +118,18 @@
       />
       <div v-else-if="dream.ai_status === 'pending'" class="dream-card__status-pending">
         <div class="spinner-small" aria-hidden="true"></div>
-        <span>Oracle đang phân tích...</span>
+        <span>{{ t('home.oracleAnalyzing') }}</span>
       </div>
       <div v-else-if="dream.ai_status === 'failed'" class="dream-card__status-failed">
         <span class="warning-icon" aria-hidden="true">⚠️</span>
-        <span class="error-msg-text">Oracle chưa thể phân tích bài này</span>
+        <span class="error-msg-text">{{ t('home.oracleFailed') }}</span>
         <button
           v-if="isOwner"
           type="button"
           class="retry-btn"
           @click.stop="retryAnalysis(dream._id)"
         >
-          Thử lại
+          {{ t('home.retry') }}
         </button>
       </div>
     </div>
@@ -140,7 +141,7 @@
         :id="`like-btn-${dream._id}`"
         class="dream-card__action"
         :class="{ 'dream-card__action--liked': isLiked }"
-        :aria-label="isLiked ? `Unlike — ${dream.likes_count} likes` : `Like — ${dream.likes_count} likes`"
+        :aria-label="isLiked ? t('home.unlikeCountAria', { count: dream.likes_count }) : t('home.likeCountAria', { count: dream.likes_count })"
         :disabled="isLiking"
         @click.stop="handleLike"
       >
@@ -159,7 +160,7 @@
       <button
         :id="`comment-btn-${dream._id}`"
         class="dream-card__action"
-        :aria-label="`Comment — ${dream.comments_count} comments`"
+        :aria-label="t('home.commentCountAria', { count: dream.comments_count })"
         @click.stop="openModal"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -172,9 +173,9 @@
     <!-- ── Delete confirmation modal ── -->
     <AppConfirm
       v-model="showDeleteConfirm"
-      title="Delete dream?"
-      message="This action is permanent. Your dream and its Oracle analysis will be removed."
-      confirm-label="Delete"
+      :title="t('home.deleteDreamTitle')"
+      :message="t('home.deleteDreamMessage')"
+      :confirm-label="t('home.delete')"
       :danger="true"
       :loading="isDeleting"
       @confirm="confirmDelete"
@@ -185,6 +186,7 @@
 
 <script setup lang="ts">
 import { ref, computed }     from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { timeAgo }           from '@/utils/timeAgo'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
@@ -192,6 +194,7 @@ import { usePostStore }      from '@/store/usePostStore'
 import { useDreamStore }     from '@/store/useDreamStore'
 import { useAuthStore }      from '@/store/useAuthStore'
 import { useOracleStore }    from '@/store/useOracleStore'
+import { useLocaleStore }    from '@/store/useLocaleStore'
 import apiClient             from '@/api/client'
 import AppDropdown           from '@/components/common/AppDropdown.vue'
 import AppConfirm            from '@/components/common/AppConfirm.vue'
@@ -201,6 +204,8 @@ import type { ApiDream }     from '@/api/types'
 import type { User }         from '@/data/mockUsers'
 
 const oracleStore = useOracleStore()
+const localeStore = useLocaleStore()
+const { t } = useI18n({ useScope: 'global' })
 
 async function retryAnalysis(dreamId: string) {
   try {
@@ -243,7 +248,7 @@ const authStore  = useAuthStore()
 
 const initials  = computed(() => getInitials(props.user.display_name))
 const avatarBg  = computed(() => getAvatarBg(props.user._id))
-const timestamp = computed(() => timeAgo(props.dream.created_at))
+const timestamp = computed(() => timeAgo(props.dream.created_at, localeStore.currentLocale))
 
 const isOwner = computed(() => {
   const userId = typeof props.dream.userId === 'object' && props.dream.userId !== null
@@ -297,12 +302,12 @@ const analysis = computed(() => props.dream.ai_result ?? props.dream.aiAnalysis 
 
 const menuOptions = computed((): DropdownOption[] => [
   {
-    label: 'Edit Post',
+    label: t('home.editPost'),
     value: 'edit',
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
   },
   {
-    label: props.dream.privacy === 'private' ? 'Make Public' : 'Make Private',
+    label: props.dream.privacy === 'private' ? t('home.makePublic') : t('home.makePrivate'),
     value: 'privacy',
     icon:  props.dream.privacy === 'private'
       ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
@@ -310,7 +315,7 @@ const menuOptions = computed((): DropdownOption[] => [
   },
   { divider: true } as any,
   {
-    label:  'Delete',
+    label:  t('home.delete'),
     value:  'delete',
     danger: true,
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,

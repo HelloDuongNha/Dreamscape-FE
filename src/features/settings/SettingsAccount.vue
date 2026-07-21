@@ -1,21 +1,21 @@
 <template>
   <div class="settings-section">
-    <h2 class="settings-section__title">Account Center</h2>
-    <p class="settings-section__desc">Manage your personal information and public profile details.</p>
+    <h2 class="settings-section__title">{{ t('settings.accountHeading') }}</h2>
+    <p class="settings-section__desc">{{ t('settings.accountDesc') }}</p>
 
     <!-- Display Name -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Display Name</h3>
-        <p class="settings-block__hint">Visible to other users. No HTML or special characters allowed.</p>
+        <h3 class="settings-block__label">{{ t('settings.displayNameLabel') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.displayNameHint') }}</p>
       </div>
       <div class="settings-block__field settings-block__field--col">
         <AppInput
           id="account-display-name"
           v-model="displayName"
-          label="Display Name"
-          placeholder="Your display name"
-          :error="nameError"
+          :label="t('settings.displayNameLabel')"
+          :placeholder="t('settings.displayNamePlaceholder')"
+          :error="nameErrorDisplay"
           maxlength="50"
         />
         <div class="settings-block__actions">
@@ -26,7 +26,7 @@
             :disabled="!!nameError || !displayName.trim() || displayName.trim() === originalName || isSavingName"
             @click="saveName"
           >
-            {{ isSavingName ? 'Saving...' : 'Save' }}
+            {{ isSavingName ? t('settings.updatingBtn') : t('settings.saveBtn') }}
           </AppButton>
         </div>
       </div>
@@ -35,17 +35,17 @@
     <!-- Username -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Username</h3>
-        <p class="settings-block__hint">Your unique @handle. Only letters, numbers, and underscores.</p>
+        <h3 class="settings-block__label">{{ t('settings.usernameLabel') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.usernameHint') }}</p>
       </div>
       <div class="settings-block__field settings-block__field--col">
         <AppInput
           id="account-username"
           v-model="username"
-          label="Username"
+          :label="t('settings.usernameLabel')"
           prefix-icon="@"
-          placeholder="username"
-          :error="usernameError"
+          :placeholder="t('settings.usernamePlaceholder')"
+          :error="usernameErrorDisplay"
           maxlength="30"
         />
         <div class="settings-block__actions">
@@ -56,7 +56,7 @@
             :disabled="!!usernameError || !username.trim() || username.trim() === originalUsername || isSavingUsername"
             @click="saveUsername"
           >
-            {{ isSavingUsername ? 'Saving...' : 'Save' }}
+            {{ isSavingUsername ? t('settings.updatingBtn') : t('settings.saveBtn') }}
           </AppButton>
         </div>
       </div>
@@ -65,14 +65,14 @@
     <!-- Birth Information -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Birth Information</h3>
-        <p class="settings-block__hint">Provide your birth coordinates. Date is required, hour is optional.</p>
+        <h3 class="settings-block__label">{{ t('settings.birthHeading') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.birthHint') }}</p>
       </div>
       
       <div class="settings-block__field settings-block__field--col">
         <div class="birth-form-grid">
           <div class="birth-input-group">
-            <label for="birth-date-input" class="birth-input-label">Birth Date *</label>
+            <label for="birth-date-input" class="birth-input-label">{{ t('settings.birthDateLabel') }}</label>
             <div class="relative-container">
               <input
                 id="birth-date-input"
@@ -93,7 +93,7 @@
           </div>
           
           <div class="birth-input-group">
-            <label for="birth-hour-input" class="birth-input-label">Birth Hour (Optional)</label>
+            <label for="birth-hour-input" class="birth-input-label">{{ t('settings.birthHourLabel') }}</label>
             <div class="relative-container">
               <input
                 id="birth-hour-input"
@@ -107,7 +107,7 @@
                   type="button"
                   class="clear-trigger-btn"
                   @click="birthHour = ''"
-                  aria-label="Clear birth hour"
+                  :aria-label="t('settings.clearHourAria')"
                 >
                   &times;
                 </button>
@@ -128,7 +128,7 @@
             :disabled="!birthDate || (birthDate === originalBirthDate && birthHour === originalBirthHour) || isSavingBirth"
             @click="saveBirthInfo"
           >
-            {{ isSavingBirth ? 'Saving...' : 'Save' }}
+            {{ isSavingBirth ? t('settings.updatingBtn') : t('settings.saveBtn') }}
           </AppButton>
         </div>
       </div>
@@ -137,17 +137,17 @@
     <!-- Bio -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Bio</h3>
-        <p class="settings-block__hint">Shown on your public profile. Max 160 characters, no HTML.</p>
+        <h3 class="settings-block__label">{{ t('settings.bioLabel') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.bioHint') }}</p>
       </div>
       <div class="settings-block__field settings-block__field--col">
         <AppInput
           id="account-bio"
           v-model="bio"
           type="textarea"
-          label="Bio"
-          placeholder="Describe your dream world..."
-          :error="bioError"
+          :label="t('settings.bioLabel')"
+          :placeholder="t('settings.bioPlaceholder')"
+          :error="bioErrorDisplay"
           :rows="3"
           maxlength="160"
         />
@@ -160,7 +160,7 @@
             :disabled="!!bioError || bio.trim() === originalBio || isSavingBio"
             @click="saveBio"
           >
-            {{ isSavingBio ? 'Saving...' : 'Save bio' }}
+            {{ isSavingBio ? t('settings.savingBioBtn') : t('settings.saveBioBtn') }}
           </AppButton>
         </div>
       </div>
@@ -170,12 +170,14 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n }              from 'vue-i18n'
 import AppInput                  from '@/components/common/AppInput.vue'
 import AppButton                 from '@/components/common/AppButton.vue'
 import { useAuthStore }          from '@/store/useAuthStore'
 import { useSettingsStore }      from '@/store/useSettingsStore'
 import apiClient                 from '@/api/client'
 
+const { t } = useI18n()
 const authStore     = useAuthStore()
 const settingsStore = useSettingsStore()
 
@@ -194,50 +196,76 @@ const originalBio      = computed(() => authStore.myUser?.bio ?? '')
 const originalBirthDate = computed(() => authStore.myUser?.birth_date ?? '')
 const originalBirthHour = computed(() => authStore.myUser?.birth_hour ?? '')
 
+interface ApiErrorStruct {
+  key?: string
+  raw?: string
+}
+
 // API errors state
-const apiNameError = ref('')
-const apiUsernameError = ref('')
-const apiBioError = ref('')
+const apiNameError = ref<ApiErrorStruct | null>(null)
+const apiUsernameError = ref<ApiErrorStruct | null>(null)
+const apiBioError = ref<ApiErrorStruct | null>(null)
 
 // Clear API errors on user input change
-watch(displayName, () => { apiNameError.value = '' })
+watch(displayName, () => { apiNameError.value = null })
 
 watch(username, (newVal) => {
-  apiUsernameError.value = ''
+  apiUsernameError.value = null
   const sanitized = newVal.replace(/[^a-zA-Z0-9_]/g, '')
   if (sanitized !== newVal) {
     username.value = sanitized
   }
 })
 
-watch(bio, () => { apiBioError.value = '' })
+watch(bio, () => { apiBioError.value = null })
 
 // ── Validation helpers ─────────────────────────────────────────────
 const INJECTION_RE = /[<>"'`;&|{}()\\]/   // block HTML/script injection
 const USERNAME_RE  = /^[a-zA-Z0-9_]+$/    // only letters, numbers, and underscores (no dots)
 
-const nameError = computed<string>(() => {
-  if (apiNameError.value) return apiNameError.value
+const nameError = computed<{ key: string } | null>(() => {
+  if (apiNameError.value) return null
   const v = displayName.value.trim()
-  if (!v)                  return 'Display name cannot be empty.'
-  if (v.length < 2)        return 'Must be at least 2 characters.'
-  if (INJECTION_RE.test(v)) return 'Special characters like < > " \' ; are not allowed.'
+  if (!v)                  return { key: 'errors.displayNameEmpty' }
+  if (v.length < 2)        return { key: 'errors.displayNameTooShort' }
+  if (INJECTION_RE.test(v)) return { key: 'errors.injectionBlocked' }
+  return null
+})
+const nameErrorDisplay = computed(() => {
+  if (nameError.value) return t(nameError.value.key)
+  if (apiNameError.value) {
+    return apiNameError.value.key ? t(apiNameError.value.key) : (apiNameError.value.raw || '')
+  }
   return ''
 })
 
-const usernameError = computed<string>(() => {
-  if (apiUsernameError.value) return apiUsernameError.value
+const usernameError = computed<{ key: string } | null>(() => {
+  if (apiUsernameError.value) return null
   const v = username.value.trim()
-  if (!v)                    return 'Username cannot be empty.'
-  if (v.length < 2 || v.length > 29) return 'Username must be between 2 and 29 characters.'
-  if (!USERNAME_RE.test(v))  return 'Only letters, numbers, and underscores allowed.'
+  if (!v)                    return { key: 'errors.usernameEmpty' }
+  if (v.length < 2 || v.length > 29) return { key: 'errors.usernameLength' }
+  if (!USERNAME_RE.test(v))  return { key: 'errors.usernameInvalid' }
+  return null
+})
+const usernameErrorDisplay = computed(() => {
+  if (usernameError.value) return t(usernameError.value.key)
+  if (apiUsernameError.value) {
+    return apiUsernameError.value.key ? t(apiUsernameError.value.key) : (apiUsernameError.value.raw || '')
+  }
   return ''
 })
 
-const bioError = computed<string>(() => {
-  if (apiBioError.value) return apiBioError.value
+const bioError = computed<{ key: string } | null>(() => {
+  if (apiBioError.value) return null
   const v = bio.value
-  if (INJECTION_RE.test(v))  return 'Special characters like < > " \' ; are not allowed.'
+  if (INJECTION_RE.test(v))  return { key: 'errors.injectionBlocked' }
+  return null
+})
+const bioErrorDisplay = computed(() => {
+  if (bioError.value) return t(bioError.value.key)
+  if (apiBioError.value) {
+    return apiBioError.value.key ? t(apiBioError.value.key) : (apiBioError.value.raw || '')
+  }
   return ''
 })
 
@@ -245,7 +273,7 @@ const isSavingName = ref(false)
 async function saveName() {
   if (nameError.value) return
   if (displayName.value.trim() === originalName.value) {
-    settingsStore.showToast('No changes to save.', 'error')
+    settingsStore.showToastKey('settings.noChangesToast', undefined, 'error')
     return
   }
   isSavingName.value = true
@@ -255,16 +283,17 @@ async function saveName() {
     })
     if (data.success) {
       authStore.updateCurrentUser(data.user)
-      settingsStore.showToast('Display name updated successfully.', 'success')
+      settingsStore.showToastKey('toasts.displayNameUpdatedSuccess', undefined, 'success')
     }
   } catch (err: any) {
     const response = err.response
     if (response) {
-      apiNameError.value = response.data?.message || 'Failed to update display name.'
+      const msg = response.data?.message
+      apiNameError.value = msg ? { raw: msg } : { key: 'errors.saveNameFailed' }
     } else {
-      apiNameError.value = 'Network error.'
+      apiNameError.value = { key: 'errors.networkError' }
     }
-    settingsStore.showToast('Failed to update display name.', 'error')
+    settingsStore.showToastKey('errors.saveNameFailed', undefined, 'error')
   } finally {
     isSavingName.value = false
   }
@@ -274,7 +303,7 @@ const isSavingUsername = ref(false)
 async function saveUsername() {
   if (usernameError.value) return
   if (username.value.trim() === originalUsername.value) {
-    settingsStore.showToast('No changes to save.', 'error')
+    settingsStore.showToastKey('settings.noChangesToast', undefined, 'error')
     return
   }
   isSavingUsername.value = true
@@ -284,16 +313,17 @@ async function saveUsername() {
     })
     if (data.success) {
       authStore.updateCurrentUser(data.user)
-      settingsStore.showToast('Username updated successfully.', 'success')
+      settingsStore.showToastKey('toasts.usernameUpdatedSuccess', undefined, 'success')
     }
   } catch (err: any) {
     const response = err.response
     if (response) {
-      apiUsernameError.value = response.data?.message || 'Failed to update username.'
+      const msg = response.data?.message
+      apiUsernameError.value = msg ? { raw: msg } : { key: 'errors.saveUsernameFailed' }
     } else {
-      apiUsernameError.value = 'Network error.'
+      apiUsernameError.value = { key: 'errors.networkError' }
     }
-    settingsStore.showToast('Failed to update username.', 'error')
+    settingsStore.showToastKey('errors.saveUsernameFailed', undefined, 'error')
   } finally {
     isSavingUsername.value = false
   }
@@ -303,7 +333,7 @@ const isSavingBio = ref(false)
 async function saveBio() {
   if (bioError.value) return
   if (bio.value.trim() === originalBio.value) {
-    settingsStore.showToast('No changes to save.', 'error')
+    settingsStore.showToastKey('settings.noChangesToast', undefined, 'error')
     return
   }
   isSavingBio.value = true
@@ -313,16 +343,17 @@ async function saveBio() {
     })
     if (data.success) {
       authStore.updateCurrentUser(data.user)
-      settingsStore.showToast('Bio updated successfully.', 'success')
+      settingsStore.showToastKey('toasts.bioUpdatedSuccess', undefined, 'success')
     }
   } catch (err: any) {
     const response = err.response
     if (response) {
-      apiBioError.value = response.data?.message || 'Failed to update bio.'
+      const msg = response.data?.message
+      apiBioError.value = msg ? { raw: msg } : { key: 'errors.saveBioFailed' }
     } else {
-      apiBioError.value = 'Network error.'
+      apiBioError.value = { key: 'errors.networkError' }
     }
-    settingsStore.showToast('Failed to update bio.', 'error')
+    settingsStore.showToastKey('errors.saveBioFailed', undefined, 'error')
   } finally {
     isSavingBio.value = false
   }
@@ -338,7 +369,7 @@ watch(() => authStore.myUser?.birth_hour, (newVal) => {
 const isSavingBirth = ref(false)
 async function saveBirthInfo() {
   if (!birthDate.value) {
-    settingsStore.showToast('Birth date is required.', 'error')
+    settingsStore.showToastKey('errors.birthDateRequired', undefined, 'error')
     return
   }
   isSavingBirth.value = true
@@ -349,12 +380,16 @@ async function saveBirthInfo() {
     })
     if (data.success) {
       authStore.updateCurrentUser(data.user)
-      settingsStore.showToast('Birth information updated successfully.', 'success')
+      settingsStore.showToastKey('toasts.birthUpdatedSuccess', undefined, 'success')
     }
   } catch (err: any) {
     const response = err.response
-    const msg = response?.data?.message || 'Failed to update birth information.'
-    settingsStore.showToast(msg, 'error')
+    const msg = response?.data?.message
+    if (msg) {
+      settingsStore.showToast(msg, 'error')
+    } else {
+      settingsStore.showToastKey('errors.saveBirthFailed', undefined, 'error')
+    }
   } finally {
     isSavingBirth.value = false
   }

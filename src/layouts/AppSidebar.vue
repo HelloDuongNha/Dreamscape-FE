@@ -2,7 +2,7 @@
   <nav
     :class="['sidebar', { 'sidebar--collapsed': collapsed }]"
     role="navigation"
-    aria-label="Main navigation"
+    :aria-label="t('navigation.mainNav')"
   >
     <!-- Logo mark -->
     <div class="sidebar__logo">
@@ -41,7 +41,7 @@
             v-if="item.badge"
             class="sidebar__badge"
             :class="{ 'sidebar__badge--collapsed': collapsed }"
-            :aria-label="`${item.badge} unread`"
+            :aria-label="t('navigation.unreadCount', { count: item.badge })"
           >
             {{ item.badge > 9 ? '9+' : item.badge }}
           </span>
@@ -57,8 +57,8 @@
         to="/profile"
         id="sidebar-nav-profile"
         :class="['sidebar__nav-item', { 'sidebar__nav-item--active': isActive('/profile') }]"
-        :title="collapsed ? 'Profile' : undefined"
-        :aria-label="collapsed ? 'Profile' : undefined"
+        :title="collapsed ? t('navigation.profile') : undefined"
+        :aria-label="collapsed ? t('navigation.profile') : undefined"
         :aria-current="isActive('/profile') ? 'page' : undefined"
       >
         <div class="sidebar__nav-icon-container">
@@ -69,7 +69,7 @@
             </svg>
           </span>
         </div>
-        <span class="sidebar__nav-label" :class="{ 'sidebar__nav-label--collapsed': collapsed }">Profile</span>
+        <span class="sidebar__nav-label" :class="{ 'sidebar__nav-label--collapsed': collapsed }">{{ t('navigation.profile') }}</span>
       </RouterLink>
 
       <!-- Settings -->
@@ -77,8 +77,8 @@
         to="/settings/account"
         id="sidebar-nav-settings"
         :class="['sidebar__nav-item', { 'sidebar__nav-item--active': isSettingsActive }]"
-        :title="collapsed ? 'Settings' : undefined"
-        :aria-label="collapsed ? 'Settings' : undefined"
+        :title="collapsed ? t('navigation.settings') : undefined"
+        :aria-label="collapsed ? t('navigation.settings') : undefined"
         :aria-current="isSettingsActive ? 'page' : undefined"
       >
         <div class="sidebar__nav-icon-container">
@@ -89,15 +89,15 @@
             </svg>
           </span>
         </div>
-        <span class="sidebar__nav-label" :class="{ 'sidebar__nav-label--collapsed': collapsed }">Settings</span>
+        <span class="sidebar__nav-label" :class="{ 'sidebar__nav-label--collapsed': collapsed }">{{ t('navigation.settings') }}</span>
       </RouterLink>
 
       <!-- Logout -->
       <button
         id="sidebar-logout-btn"
         class="sidebar__collapse-btn sidebar__logout-btn"
-        :title="collapsed ? 'Logout' : undefined"
-        :aria-label="collapsed ? 'Logout' : undefined"
+        :title="collapsed ? t('navigation.logout') : undefined"
+        :aria-label="collapsed ? t('navigation.logout') : undefined"
         @click="handleLogout"
       >
         <div class="sidebar__nav-icon-container">
@@ -109,15 +109,15 @@
             </svg>
           </span>
         </div>
-        <span class="sidebar__collapse-label" :class="{ 'sidebar__collapse-label--collapsed': collapsed }">Logout</span>
+        <span class="sidebar__collapse-label" :class="{ 'sidebar__collapse-label--collapsed': collapsed }">{{ t('navigation.logout') }}</span>
       </button>
 
       <!-- Collapse toggle -->
       <button
         id="sidebar-collapse-btn"
         class="sidebar__collapse-btn"
-        :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-        :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :aria-label="collapsed ? t('navigation.expandSidebar') : t('navigation.collapseSidebar')"
+        :title="collapsed ? t('navigation.expandSidebar') : t('navigation.collapseSidebar')"
         @click="$emit('toggle')"
       >
         <div class="sidebar__nav-icon-container">
@@ -136,7 +136,7 @@
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </div>
-        <span class="sidebar__collapse-label" :class="{ 'sidebar__collapse-label--collapsed': collapsed }">Collapse</span>
+        <span class="sidebar__collapse-label" :class="{ 'sidebar__collapse-label--collapsed': collapsed }">{{ t('navigation.collapseLabel') }}</span>
       </button>
     </div>
   </nav>
@@ -144,6 +144,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useChatStore } from '@/store/useChatStore'
@@ -151,6 +152,7 @@ import { useChatStore } from '@/store/useChatStore'
 withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
 defineEmits<{ toggle: [] }>()
 
+const { t }     = useI18n()
 const route     = useRoute()
 const router    = useRouter()
 const authStore = useAuthStore()
@@ -169,35 +171,35 @@ const navItems = computed(() => {
     {
       id:    'home',
       to:    '/',
-      label: 'Home',
+      label: t('navigation.home'),
       badge: undefined as number | undefined,
       icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
     },
     {
       id:    'oracle',
       to:    '/oracle',
-      label: 'Oracle',
+      label: t('navigation.oracle'),
       badge: undefined as number | undefined,
       icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
     },
     {
       id:    'messages',
       to:    '/messages',
-      label: 'Messages',
+      label: t('navigation.messages'),
       badge: chatStore.totalUnread > 0 ? chatStore.totalUnread : undefined,
       icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
     },
     {
       id:    'achievements',
       to:    '/achievements',
-      label: 'Achievements',
+      label: t('navigation.achievements'),
       badge: undefined as number | undefined,
       icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>`,
     },
     {
       id:    'library',
       to:    '/library',
-      label: 'Thư viện',
+      label: t('navigation.library'),
       badge: undefined as number | undefined,
       icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
     },
@@ -211,14 +213,14 @@ const navItems = computed(() => {
     items.push({
       id:    'moderation-sources',
       to:    '/moderation/sources',
-      label: 'Duyệt nguồn',
+      label: t('navigation.moderationSources'),
       badge: undefined,
       icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
     })
     items.push({
       id:    'moderation-rule-candidates',
       to:    '/moderation/rule-candidates',
-      label: 'Ứng viên quy luật',
+      label: t('navigation.ruleReview'),
       badge: undefined,
       icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
     })

@@ -2,20 +2,20 @@
   <div class="settings-section">
     <div class="library-header-row">
       <div class="library-header-left">
-        <h2 class="settings-section__title">Thư viện</h2>
+        <h2 class="settings-section__title">{{ t('library.title') }}</h2>
         <p class="settings-section__desc">
-          Đọc và tra cứu tài liệu nghiên cứu, sách tham khảo, và các nguồn dữ liệu khoa học đã được xác thực về giấc mơ.
+          {{ t('library.description') }}
         </p>
       </div>
       <div class="library-header-right">
         <!-- Moderator Link -->
         <RouterLink v-if="isModeratorUser" to="/moderation/sources" class="moderator-btn-link">
           <AppButton variant="secondary" size="sm">
-            Duyệt nguồn
+            {{ t('library.moderateSources') }}
           </AppButton>
         </RouterLink>
         <AppButton id="open-wizard-btn" variant="primary" size="sm" @click="openWizard">
-          + Đóng góp
+          {{ t('library.contribute') }}
         </AppButton>
       </div>
     </div>
@@ -26,7 +26,7 @@
         <AppInput
           id="catalog-search-input"
           v-model="searchQuery"
-          placeholder="Tìm kiếm tiêu đề, tác giả, DOI, tạp chí..."
+          :placeholder="t('library.searchPlaceholder')"
           maxlength="100"
         />
       </div>
@@ -49,21 +49,21 @@
       <!-- Loading State -->
       <div v-if="isLoadingSources" class="catalog-loading">
         <span class="spinner"></span>
-        <p>Đang tải danh sách tài liệu...</p>
+        <p>{{ t('library.loadingList') }}</p>
       </div>
 
       <!-- Error State -->
       <div v-else-if="hasErrorSources" class="catalog-error">
-        <p>Không thể tải danh sách tài liệu học thuật.</p>
-        <AppButton variant="secondary" size="sm" @click="fetchApprovedSources">Tải lại</AppButton>
+        <p>{{ t('library.loadListError') }}</p>
+        <AppButton variant="secondary" size="sm" @click="fetchApprovedSources">{{ t('library.retry') }}</AppButton>
       </div>
 
       <!-- Empty State -->
       <div v-else-if="filteredSources.length === 0" class="catalog-empty">
         <div class="catalog-empty__icon" aria-hidden="true"></div>
-        <h4 class="catalog-empty__title">Không tìm thấy tài liệu</h4>
+        <h4 class="catalog-empty__title">{{ t('library.emptyTitle') }}</h4>
         <p class="catalog-empty__desc">
-          {{ searchQuery ? 'Không có tài liệu nào phù hợp với từ khóa của bạn.' : 'Thư viện chưa có tài liệu nào thuộc danh mục này.' }}
+          {{ searchQuery ? t('library.emptySearch') : t('library.emptyCategory') }}
         </p>
       </div>
 
@@ -77,36 +77,36 @@
         >
           <!-- Cover placeholder illustration area -->
           <div class="book-cover-placeholder">
-            <span class="book-cover-tag">{{ source.metadata?.category || 'Nguồn học thuật' }}</span>
+            <span class="book-cover-tag" translate="no">{{ source.metadata?.category || t('library.academicSource') }}</span>
           </div>
 
           <!-- Title -->
           <h4 class="catalog-card__title">
-            {{ source.title || 'Tài liệu không có tiêu đề' }}
+            <span translate="no">{{ source.title || t('library.untitled') }}</span>
           </h4>
           
           <!-- Metadata details -->
           <div class="catalog-card__meta">
             <div v-if="source.authors && source.authors.length > 0" class="meta-row">
-              <span class="meta-label">Tác giả:</span>
-              <span class="meta-value">{{ source.authors.join(', ') }}</span>
+              <span class="meta-label">{{ t('library.labels.authors') }}</span>
+              <span class="meta-value" translate="no">{{ source.authors.join(', ') }}</span>
             </div>
             <div v-if="source.year" class="meta-row">
-              <span class="meta-label">Năm XB:</span>
+              <span class="meta-label">{{ t('library.labels.yearShort') }}</span>
               <span class="meta-value">{{ source.year }}</span>
             </div>
             <div v-if="source.journal" class="meta-row">
-              <span class="meta-label">Tạp chí / Nhà XB:</span>
-              <span class="meta-value">{{ source.journal }}</span>
+              <span class="meta-label">{{ t('library.labels.journal') }}</span>
+              <span class="meta-value" translate="no">{{ source.journal }}</span>
             </div>
             <div class="meta-row">
-              <span class="meta-label">Định danh:</span>
-              <span class="meta-value code-font">{{ source.doi ? `DOI: ${source.doi}` : ((source.sourceOrigin === 'uploaded_pdf' || !!source.originalFile) ? 'Tệp PDF được tải lên' : 'Liên kết nguồn') }}</span>
+              <span class="meta-label">{{ t('library.labels.identifier') }}</span>
+              <span class="meta-value code-font" translate="no">{{ source.doi ? `DOI: ${source.doi}` : ((source.sourceOrigin === 'uploaded_pdf' || !!source.originalFile) ? t('library.uploadedPdf') : t('library.sourceLink')) }}</span>
             </div>
             <div v-if="source.url && !(source.sourceOrigin === 'uploaded_pdf' || !!source.originalFile)" class="meta-row">
-              <span class="meta-label">Liên kết:</span>
+              <span class="meta-label">{{ t('library.labels.link') }}</span>
               <a :href="source.url" target="_blank" rel="noopener noreferrer" class="meta-link" @click.stop>
-                Xem tài liệu gốc ↗
+                {{ t('library.viewOriginal') }}
               </a>
             </div>
           </div>
@@ -124,20 +124,20 @@
             <div class="progress-bar-bg">
               <div class="progress-bar-fill" :style="{ width: `${source.progress}%` }"></div>
             </div>
-            <span class="progress-text">Đã đọc {{ source.progress }}%</span>
+            <span class="progress-text">{{ t('library.readProgress', { progress: source.progress }) }}</span>
           </div>
 
           <!-- Muted Footnote & Moderator Action -->
           <div class="catalog-card__footer-container" style="display: flex; justify-content: space-between; align-items: center; margin-top: var(--space-4);">
             <div class="catalog-card__footer-note" style="margin-top: 0;">
-              Xem chi tiết tài liệu
+              {{ t('library.viewDetails') }}
             </div>
             <button
               v-if="isModeratorUser"
               class="delete-source-btn"
               style="background: transparent; border: none; color: #ed4956; padding: 4px; cursor: pointer; display: flex; align-items: center; transition: opacity 0.2s;"
               @click.stop="promptDelete(source)"
-              title="Xóa tài liệu"
+              :title="t('library.deleteDocument')"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
@@ -157,17 +157,17 @@
           class="pagination-btn"
           @click="changePage(pagination.page - 1)"
         >
-          Trước
+          {{ t('library.pagination.previous') }}
         </button>
         <span class="pagination-info">
-          Trang {{ pagination.page }} / {{ pagination.pages }} (Tổng: {{ pagination.total }})
+          {{ t('library.pagination.summary', { page: pagination.page, pages: pagination.pages, total: formatNumber(pagination.total) }) }}
         </span>
         <button
           :disabled="pagination.page === pagination.pages"
           class="pagination-btn"
           @click="changePage(pagination.page + 1)"
         >
-          Sau
+          {{ t('library.pagination.next') }}
         </button>
       </div>
     </div>
@@ -182,7 +182,7 @@
           class="modal-overlay"
           role="dialog"
           aria-modal="true"
-          aria-label="Đóng góp tài liệu học thuật"
+          :aria-label="t('library.wizard.aria')"
           @click.self="closeWizard"
         >
           <div class="modal-container" tabindex="-1">
@@ -192,7 +192,7 @@
                 <button
                   v-if="step > 1"
                   class="modal-back-btn"
-                  aria-label="Quay lại"
+                  :aria-label="t('library.wizard.back')"
                   @click="goBack"
                 >
                   ←
@@ -204,7 +204,7 @@
               <button
                 id="modal-close-btn"
                 class="modal-close-btn"
-                aria-label="Đóng"
+                :aria-label="t('library.wizard.close')"
                 @click="closeWizard"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
@@ -218,25 +218,25 @@
               <!-- Step 1: Selection -->
               <div v-if="step === 1" class="wizard-step-1">
                 <p class="step-desc" style="margin-bottom: var(--space-3); font-weight: var(--font-weight-medium); color: var(--color-text-secondary);">
-                  Tài liệu đóng góp sẽ được lưu dưới dạng yêu cầu chờ duyệt. Sau khi được kiểm duyệt bởi điều hành viên, tài liệu sẽ xuất hiện tại danh mục Thư viện chính thức.
+                  {{ t('library.wizard.pendingNotice') }}
                 </p>
-                <p class="step-desc">Chọn hình thức tài liệu bạn muốn đóng góp:</p>
+                <p class="step-desc">{{ t('library.wizard.chooseType') }}</p>
                 <div class="wizard-options">
                   <button class="wizard-option" @click="selectType('doi')">
-                    <span class="wizard-option__title">DOI hoặc PMCID</span>
-                    <span class="wizard-option__desc">Dùng cho bài báo khoa học (mã DOI hoặc PMC ID).</span>
+                    <span class="wizard-option__title">{{ t('library.wizard.doiTitle') }}</span>
+                    <span class="wizard-option__desc">{{ t('library.wizard.doiDesc') }}</span>
                   </button>
                   <button class="wizard-option" @click="selectType('url')">
-                    <span class="wizard-option__title">Liên kết bài viết (URL)</span>
-                    <span class="wizard-option__desc">Dùng cho trang web bài viết hoặc PDF online.</span>
+                    <span class="wizard-option__title">{{ t('library.wizard.urlTitle') }}</span>
+                    <span class="wizard-option__desc">{{ t('library.wizard.urlDesc') }}</span>
                   </button>
                   <button class="wizard-option" @click="selectType('pdf')">
-                    <span class="wizard-option__title">Tải lên tệp PDF</span>
-                    <span class="wizard-option__desc">Tải lên tệp PDF toàn văn trực tiếp từ máy (tối đa {{ PDF_MAX_FILE_SIZE_LABEL }}).</span>
+                    <span class="wizard-option__title">{{ t('library.wizard.pdfTitle') }}</span>
+                    <span class="wizard-option__desc">{{ t('library.wizard.pdfDesc', { maxSize: PDF_MAX_FILE_SIZE_LABEL }) }}</span>
                   </button>
                   <button class="wizard-option" @click="selectType('isbn')">
-                    <span class="wizard-option__title">ISBN / Sách</span>
-                    <span class="wizard-option__desc">Nhập mã ISBN để đóng góp thông tin sách học thuật.</span>
+                    <span class="wizard-option__title">{{ t('library.wizard.isbnTitle') }}</span>
+                    <span class="wizard-option__desc">{{ t('library.wizard.isbnDesc') }}</span>
                   </button>
                 </div>
               </div>
@@ -250,7 +250,7 @@
                     id="input-doi"
                     v-model="doi"
                     :label="/^PMC\d+$/i.test(doi.trim()) ? 'PMCID' : 'DOI'"
-                    :placeholder="/^PMC\d+$/i.test(doi.trim()) ? 'Ví dụ: PMC11911046' : 'Ví dụ: 10.3389/fpsyg.2016.00332'"
+                    :placeholder="t('library.wizard.example', { value: /^PMC\d+$/i.test(doi.trim()) ? 'PMC11911046' : '10.3389/fpsyg.2016.00332' })"
                     :error="doiError"
                     maxlength="100"
                     required
@@ -261,8 +261,8 @@
                     v-if="contribType === 'url'"
                     id="input-url"
                     v-model="url"
-                    label="Link tài liệu"
-                    placeholder="Ví dụ: https://example.com/sleep-study.pdf"
+                    :label="t('library.wizard.urlLabel')"
+                    :placeholder="t('library.wizard.example', { value: 'https://example.com/sleep-study.pdf' })"
                     :error="urlError"
                     maxlength="500"
                     required
@@ -274,7 +274,7 @@
                     id="input-isbn"
                     v-model="isbn"
                     label="ISBN"
-                    placeholder="Ví dụ: 978-0-19-852442-7 hoặc 019852442X"
+                    :placeholder="t('library.wizard.example', { value: '978-0-19-852442-7 / 019852442X' })"
                     :error="isbnError"
                     maxlength="50"
                     required
@@ -283,7 +283,7 @@
                   <!-- PDF upload selection & optional fields -->
                   <div v-if="contribType === 'pdf'" class="pdf-upload-fields">
                     <div class="file-select-container">
-                      <label class="app-input__label">Tệp PDF tài liệu <span style="color: var(--color-error, #ed4956);">*</span></label>
+                      <label class="app-input__label">{{ t('library.wizard.pdfFileLabel') }} <span style="color: var(--color-error, #ed4956);">*</span></label>
                       <div class="file-dropzone" :class="{ 'file-dropzone--has-file': !!selectedFile, 'file-dropzone--error': !!pdfFileError }">
                         <input
                           id="input-pdf-file"
@@ -304,7 +304,7 @@
                             <span class="file-size">({{ formatBytes(selectedFile.size) }})</span>
                           </div>
                           <div v-else class="file-prompt-text">
-                            Kéo thả hoặc nhấp để chọn tệp PDF (Tối đa {{ PDF_MAX_FILE_SIZE_LABEL }})
+                            {{ t('library.wizard.pdfDrop', { maxSize: PDF_MAX_FILE_SIZE_LABEL }) }}
                           </div>
                         </div>
                       </div>
@@ -313,22 +313,22 @@
 
                     <div style="margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4);">
                       <p style="font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-semibold); text-transform: uppercase; margin-bottom: 2px;">
-                        Thông tin tài liệu (Không bắt buộc)
+                        {{ t('library.wizard.optionalMetadata') }}
                       </p>
                       
                       <AppInput
                         id="input-pdf-title"
                         v-model="pdfTitle"
-                        label="Tiêu đề tài liệu"
-                        placeholder="Ví dụ: Dream analysis and neurobiology"
+                        :label="t('library.wizard.documentTitle')"
+                        :placeholder="t('library.wizard.example', { value: 'Dream analysis and neurobiology' })"
                         maxlength="200"
                       />
 
                       <AppInput
                         id="input-pdf-authors"
                         v-model="pdfAuthors"
-                        label="Các tác giả"
-                        placeholder="Nguyễn Văn A, Trần Thị B (phân tách bằng dấu phẩy)"
+                        :label="t('library.wizard.authors')"
+                        :placeholder="t('library.wizard.authorsPlaceholder')"
                         maxlength="200"
                       />
 
@@ -336,15 +336,15 @@
                         <AppInput
                           id="input-pdf-year"
                           v-model="pdfYear"
-                          label="Năm xuất bản"
-                          placeholder="Ví dụ: 2024"
+                          :label="t('library.wizard.year')"
+                          :placeholder="t('library.wizard.example', { value: '2024' })"
                           maxlength="4"
                         />
                         <AppInput
                           id="input-pdf-journal"
                           v-model="pdfJournal"
-                          label="Tạp chí / Nhà XB"
-                          placeholder="Ví dụ: Nature"
+                          :label="t('library.wizard.journal')"
+                          :placeholder="t('library.wizard.example', { value: 'Nature' })"
                           maxlength="150"
                         />
                       </div>
@@ -353,14 +353,14 @@
                         <AppInput
                           id="input-pdf-doi"
                           v-model="pdfDoi"
-                          label="Mã DOI liên kết"
-                          placeholder="Ví dụ: 10.1000/xyz123"
+                          :label="t('library.wizard.linkedDoi')"
+                          :placeholder="t('library.wizard.example', { value: '10.1000/xyz123' })"
                         />
                         <AppInput
                           id="input-pdf-url"
                           v-model="pdfUrl"
-                          label="Link nguồn liên kết"
-                          placeholder="Ví dụ: https://doi.org/..."
+                          :label="t('library.wizard.linkedUrl')"
+                          :placeholder="t('library.wizard.example', { value: 'https://doi.org/...' })"
                         />
                       </div>
                     </div>
@@ -371,8 +371,8 @@
                     id="input-note"
                     v-model="submittedNote"
                     type="textarea"
-                    label="Ghi chú đóng góp"
-                    placeholder="Giải thích vì sao tài liệu này liên quan đến giấc mơ (Không bắt buộc)..."
+                    :label="t('library.wizard.note')"
+                    :placeholder="t('library.wizard.notePlaceholder')"
                     :error="noteError"
                     maxlength="1000"
                     :rows="3"
@@ -388,57 +388,57 @@
                     :loading="isFetchingPreview"
                     @click="fetchPreview"
                   >
-                    {{ contribType === 'pdf' ? 'Xem trước đóng góp' : 'Tìm tài liệu' }}
+                    {{ contribType === 'pdf' ? t('library.wizard.previewContribution') : t('library.wizard.findDocument') }}
                   </AppButton>
                 </div>
               </div>
 
               <!-- Step 3: Metadata Preview -->
               <div v-else-if="step === 3 && previewData" class="wizard-step-3">
-                <p class="preview-prompt">Đây có phải tài liệu bạn muốn gửi không?</p>
+                <p class="preview-prompt">{{ t('library.wizard.confirmPrompt') }}</p>
                 
                 <div class="preview-grid">
                   <div class="preview-row">
-                    <span class="preview-label">Tiêu đề:</span>
-                    <span class="preview-value preview-value--bold">{{ previewData.title }}</span>
+                    <span class="preview-label">{{ t('library.labels.title') }}</span>
+                    <span class="preview-value preview-value--bold" translate="no">{{ previewData.title }}</span>
                   </div>
                   <div v-if="previewData.authors && previewData.authors.length > 0" class="preview-row">
-                    <span class="preview-label">Tác giả:</span>
-                    <span class="preview-value">{{ previewData.authors.join(', ') }}</span>
+                    <span class="preview-label">{{ t('library.labels.authors') }}</span>
+                    <span class="preview-value" translate="no">{{ previewData.authors.join(', ') }}</span>
                   </div>
                   <div v-if="previewData.year" class="preview-row">
-                    <span class="preview-label">Năm xuất bản:</span>
+                    <span class="preview-label">{{ t('library.labels.year') }}</span>
                     <span class="preview-value">{{ previewData.year }}</span>
                   </div>
                   <div v-if="previewData.journal" class="preview-row">
-                    <span class="preview-label">Tạp chí / Nhà XB:</span>
-                    <span class="preview-value">{{ previewData.journal }}</span>
+                    <span class="preview-label">{{ t('library.labels.journal') }}</span>
+                    <span class="preview-value" translate="no">{{ previewData.journal }}</span>
                   </div>
                   <div v-if="previewData.doi" class="preview-row">
                     <span class="preview-label">DOI:</span>
-                    <span class="preview-value code-font">{{ previewData.doi }}</span>
+                    <span class="preview-value code-font" translate="no">{{ previewData.doi }}</span>
                   </div>
                   <div v-if="previewData.isbn" class="preview-row">
                     <span class="preview-label">ISBN:</span>
-                    <span class="preview-value code-font">{{ previewData.isbn }}</span>
+                    <span class="preview-value code-font" translate="no">{{ previewData.isbn }}</span>
                   </div>
                   <div v-if="contribType === 'pdf' && previewData.fileName" class="preview-row">
-                    <span class="preview-label">Tên tệp:</span>
-                    <span class="preview-value">{{ previewData.fileName }}</span>
+                    <span class="preview-label">{{ t('library.labels.fileName') }}</span>
+                    <span class="preview-value" translate="no">{{ previewData.fileName }}</span>
                   </div>
                   <div v-if="contribType === 'pdf' && previewData.fileSize" class="preview-row">
-                    <span class="preview-label">Dung lượng:</span>
+                    <span class="preview-label">{{ t('library.labels.fileSize') }}</span>
                     <span class="preview-value">{{ formatBytes(previewData.fileSize) }}</span>
                   </div>
                   <div v-if="contribType !== 'pdf'" class="preview-row">
-                    <span class="preview-label">Bản đọc thông minh:</span>
+                    <span class="preview-label">{{ t('library.labels.smartReader') }}</span>
                     <span class="preview-value" :class="previewData.fullTextAvailable ? 'badge-status badge-status--verified' : 'badge-status badge-status--unverified'">
-                      {{ previewData.fullTextAvailable ? 'Có thể nhập tự động' : 'Chưa xác định — sẽ kiểm tra sau khi gửi' }}
+                      {{ previewData.fullTextAvailable ? t('library.wizard.autoImportable') : t('library.wizard.checkAfterSubmit') }}
                     </span>
                   </div>
                   <div v-if="contribType !== 'pdf'" class="preview-row">
                     <span class="preview-label">PDF online:</span>
-                    <span class="preview-value badge-status badge-status--unverified">Sẽ kiểm tra sau khi gửi</span>
+                    <span class="preview-value badge-status badge-status--unverified">{{ t('library.wizard.checkPdfAfterSubmit') }}</span>
                   </div>
                 </div>
 
@@ -448,21 +448,21 @@
                     <div class="progress-bar-fill" :style="{ width: `${uploadProgress}%` }"></div>
                   </div>
                   <div style="display: flex; justify-content: space-between; font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 4px;">
-                    <span>Đang tải tệp lên...</span>
+                    <span>{{ t('library.wizard.uploading') }}</span>
                     <span>{{ uploadProgress }}%</span>
                   </div>
                 </div>
 
                 <!-- Duplicate DOI alert with direct redirect link -->
                 <div v-if="duplicateSourceId" class="preview-warning-alert preview-warning-alert--danger" style="margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start;">
-                  <span>* {{ duplicateSourceError || 'Tài liệu đã tồn tại trong hệ thống.' }}</span>
+                  <span>* {{ duplicateSourceError || t('library.wizard.duplicate') }}</span>
                   <router-link
                     :to="`/library/sources/${duplicateSourceId}`"
                     class="pdf-action-btn pdf-action-btn--primary"
                     style="display: inline-flex; text-decoration: none; text-align: center; margin-top: 4px;"
                     @click="closeWizard"
                   >
-                    Mở tài liệu đã tồn tại
+                    {{ t('library.wizard.openDuplicate') }}
                   </router-link>
                 </div>
 
@@ -474,7 +474,7 @@
                     :disabled="isSubmitting"
                     @click="step = 2"
                   >
-                    Không đúng, nhập lại
+                    {{ t('library.wizard.wrong') }}
                   </AppButton>
                   
                   <AppButton
@@ -485,7 +485,7 @@
                     :loading="isSubmitting"
                     @click="submitContribution"
                   >
-                    Đúng, gửi nguồn này
+                    {{ t('library.wizard.submit') }}
                   </AppButton>
                 </div>
               </div>
@@ -497,10 +497,10 @@
     <!-- AppConfirm Deletion Dialog -->
     <AppConfirm
       v-model="showDeleteConfirm"
-      title="Xóa tài liệu học thuật"
-      message="Thao tác này sẽ xóa vĩnh viễn tài liệu, bản đọc đã nhập, phân đoạn RAG, các luật phân tích đã trích xuất và bằng chứng liên kết. Bạn có chắc chắn không?"
-      confirm-label="Xóa"
-      cancel-label="Hủy"
+      :title="t('library.deleteConfirm.title')"
+      :message="t('library.deleteConfirm.message')"
+      :confirm-label="t('library.deleteConfirm.confirm')"
+      :cancel-label="t('library.deleteConfirm.cancel')"
       :danger="true"
       :loading="isDeleting"
       @confirm="handleDeleteConfirm"
@@ -512,6 +512,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
@@ -528,6 +529,7 @@ import {
 } from '@/utils/pdfUploadLimits'
 
 const router = useRouter()
+const { t, n } = useI18n({ useScope: 'global' })
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 
@@ -540,14 +542,18 @@ const isModeratorUser = computed(() => {
 
 // Category filter tabs
 const activeTab = ref('all')
-const categoryTabs = [
-  { id: 'all', label: 'Tất cả' },
-  { id: 'science', label: 'Khoa học' },
-  { id: 'psychology', label: 'Tâm lý' },
-  { id: 'symbol', label: 'Biểu tượng' },
-  { id: 'culture', label: 'Văn hóa' },
-  { id: 'community', label: 'Cộng đồng' },
-]
+const categoryTabs = computed(() => [
+  { id: 'all', label: t('library.tabs.all') },
+  { id: 'science', label: t('library.tabs.science') },
+  { id: 'psychology', label: t('library.tabs.psychology') },
+  { id: 'symbol', label: t('library.tabs.symbol') },
+  { id: 'culture', label: t('library.tabs.culture') },
+  { id: 'community', label: t('library.tabs.community') },
+])
+
+function formatNumber(value: number) {
+  return n(value)
+}
 
 // Approved Sources catalog states
 const isLoadingSources = ref(false)
@@ -610,7 +616,7 @@ async function fetchApprovedSources() {
     pagination.value = res.pagination
   } catch (err: any) {
     hasErrorSources.value = true
-    const errMsg = err.response?.data?.message || err.message || 'Có lỗi xảy ra khi tải danh sách tài liệu.'
+    const errMsg = err.response?.data?.message || err.message || t('library.local.listLoadError')
     settingsStore.showToast(errMsg, 'error')
   } finally {
     isLoadingSources.value = false
@@ -651,9 +657,9 @@ async function handleDeleteConfirm() {
     const { data } = await apiClient.delete(`/moderation/sources/${sourceToDelete.value._id}`)
     if (data.success) {
       if (data.warnings && data.warnings.length > 0) {
-        settingsStore.showToast(`Xóa tài liệu thành công với cảnh báo: ${data.warnings.join(', ')}`, 'success')
+        settingsStore.showToast(t('library.local.deleteWarnings', { warnings: data.warnings.join(', ') }), 'success')
       } else {
-        settingsStore.showToast('Xóa tài liệu thành công.', 'success')
+        settingsStore.showToast(t('library.local.deleteSuccess'), 'success')
       }
       showDeleteConfirm.value = false
       sourceToDelete.value = null
@@ -661,7 +667,7 @@ async function handleDeleteConfirm() {
     }
   } catch (err: any) {
     console.error('Delete source error:', err)
-    const errMsg = err.response?.data?.message || err.message || 'Không thể xóa tài liệu.'
+    const errMsg = err.response?.data?.message || err.message || t('library.local.deleteError')
     settingsStore.showToast(errMsg, 'error')
   } finally {
     isDeleting.value = false
@@ -698,27 +704,27 @@ const previewData = ref<any>(null)
 
 // Step titles
 const stepTitle = computed(() => {
-  if (step.value === 1) return 'Đóng góp nguồn học thuật'
+  if (step.value === 1) return t('library.wizard.step1')
   if (step.value === 2) {
-    if (contribType.value === 'doi') return 'Nhập thông tin DOI hoặc PMCID'
-    if (contribType.value === 'url') return 'Nhập liên kết nguồn'
-    if (contribType.value === 'pdf') return 'Tải lên tài liệu PDF'
-    if (contribType.value === 'isbn') return 'Nhập mã ISBN'
+    if (contribType.value === 'doi') return t('library.wizard.stepDoi')
+    if (contribType.value === 'url') return t('library.wizard.stepUrl')
+    if (contribType.value === 'pdf') return t('library.wizard.stepPdf')
+    if (contribType.value === 'isbn') return t('library.wizard.stepIsbn')
   }
-  return 'Xác nhận thông tin tài liệu'
+  return t('library.wizard.stepConfirm')
 })
 
 // DOI & PMCID validation
 const doiError = computed(() => {
   const d = doi.value.trim()
   if (step.value === 2 && contribType.value === 'doi') {
-    if (!d) return 'Vui lòng điền mã DOI hoặc PMCID.'
-    if (d.length > 100) return 'Mã không được vượt quá 100 ký tự.'
+    if (!d) return t('library.validation.doiRequired')
+    if (d.length > 100) return t('library.validation.codeTooLong')
     if (/^PMC\d+$/i.test(d)) {
       return ''
     }
-    if (!d.startsWith('10.')) return 'Mã DOI phải bắt đầu bằng "10." hoặc sử dụng mã PMCID (Ví dụ: PMC11911046).'
-    if (!d.includes('/')) return 'Mã DOI phải chứa ký tự phân tách "/"'
+    if (!d.startsWith('10.')) return t('library.validation.doiPrefix')
+    if (!d.includes('/')) return t('library.validation.doiSlash')
   }
   return ''
 })
@@ -727,9 +733,9 @@ const doiError = computed(() => {
 const urlError = computed(() => {
   const u = url.value.trim()
   if (step.value === 2 && contribType.value === 'url') {
-    if (!u) return 'Vui lòng điền link nguồn.'
-    if (u.length > 500) return 'URL nguồn không được vượt quá 500 ký tự.'
-    if (!/^https?:\/\//i.test(u)) return 'URL phải bắt đầu bằng http:// hoặc https://'
+    if (!u) return t('library.validation.urlRequired')
+    if (u.length > 500) return t('library.validation.urlTooLong')
+    if (!/^https?:\/\//i.test(u)) return t('library.validation.urlProtocol')
   }
   return ''
 })
@@ -742,10 +748,10 @@ function normalizeIsbn(val: string): string {
 const isbnError = computed(() => {
   const raw = isbn.value.trim()
   if (step.value === 2 && contribType.value === 'isbn') {
-    if (!raw) return 'Vui lòng điền mã ISBN.'
+    if (!raw) return t('library.validation.isbnRequired')
     const clean = normalizeIsbn(raw)
     if (clean.length !== 10 && clean.length !== 13) {
-      return 'Mã ISBN phải có 10 hoặc 13 chữ số (chấp nhận ký tự X cuối đối với ISBN-10).'
+      return t('library.validation.isbnFormat')
     }
   }
   return ''
@@ -753,7 +759,7 @@ const isbnError = computed(() => {
 
 const noteError = computed(() => {
   const n = submittedNote.value.trim()
-  if (n.length > 1000) return 'Ghi chú không được vượt quá 1000 ký tự.'
+  if (n.length > 1000) return t('library.validation.noteTooLong')
   return ''
 })
 
@@ -779,20 +785,20 @@ function onFileChange(event: any) {
   const file = event.target.files?.[0]
   if (!file) {
     selectedFile.value = null
-    pdfFileError.value = 'Vui lòng chọn một tệp PDF.'
+    pdfFileError.value = t('library.validation.pdfRequired')
     return
   }
   
   const ext = file.name.split('.').pop()?.toLowerCase()
   if (ext !== 'pdf') {
     selectedFile.value = null
-    pdfFileError.value = 'Chỉ chấp nhận tệp có định dạng .pdf.'
+    pdfFileError.value = t('library.validation.pdfOnly')
     return
   }
   
   if (file.size > PDF_MAX_FILE_SIZE_BYTES) {
     selectedFile.value = null
-    pdfFileError.value = `Kích thước tệp vượt quá giới hạn cho phép (${PDF_MAX_FILE_SIZE_LABEL}).`
+    pdfFileError.value = t('library.validation.pdfTooLarge', { maxSize: PDF_MAX_FILE_SIZE_LABEL })
     return
   }
   
@@ -868,7 +874,7 @@ async function fetchPreview() {
 
   if (contribType.value === 'pdf') {
     // Generate mock preview locally for uploaded PDF to defer file uploads to step 3 confirm
-    const titleVal = pdfTitle.value.trim() || selectedFile.value?.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ') || 'Tài liệu PDF tải lên'
+    const titleVal = pdfTitle.value.trim() || selectedFile.value?.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ') || t('library.local.uploadedTitle')
     const authorsArr = pdfAuthors.value.trim() ? pdfAuthors.value.split(',').map((a: string) => a.trim()).filter(Boolean) : []
     const yearNum = pdfYear.value ? parseInt(String(pdfYear.value), 10) : undefined
 
@@ -911,20 +917,20 @@ async function fetchPreview() {
       step.value = 3
     }
   } catch (err: any) {
-    let errMsg = 'Có lỗi xảy ra khi tìm tài liệu.'
+    let errMsg = t('library.local.findError')
     if (err.response) {
       const status = err.response.status
       if (status === 404) {
-        errMsg = 'Không tìm thấy thông tin cho mã này.'
+        errMsg = t('library.local.notFound')
       } else if (status === 408) {
-        errMsg = 'Yêu cầu phản hồi quá lâu, vui lòng thử lại sau.'
+        errMsg = t('library.local.timeout')
       } else if (status === 502) {
-        errMsg = 'Không thể kết nối tới máy chủ lúc này, vui lòng thử lại sau.'
+        errMsg = t('library.local.serverUnavailable')
       } else {
-        errMsg = err.response.data?.message || 'Không thể tìm thấy thông tin tài liệu. Vui lòng kiểm tra lại.'
+        errMsg = err.response.data?.message || t('library.local.noMetadata')
       }
     } else {
-      errMsg = 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra mạng.'
+      errMsg = t('library.local.network')
     }
     settingsStore.showToast(errMsg, 'error')
   } finally {
@@ -960,7 +966,7 @@ async function submitContribution() {
         }
       )
       if (res.success) {
-        settingsStore.showToast('PDF đã được tải lên, đang chờ duyệt nguồn.', 'success')
+        settingsStore.showToast(t('library.local.pdfSubmitted'), 'success')
         closeWizard()
         await fetchApprovedSources()
         
@@ -968,7 +974,7 @@ async function submitContribution() {
           const contributionId = res.data?._id || res.data?.data?._id
           if (contributionId) {
             const sourceProgressStore = useSourceProgressStore()
-            sourceProgressStore.startPdfOnlyPipeline(contributionId, previewData.value?.title || 'Tài liệu học thuật', 'contribution', false, true)
+            sourceProgressStore.startPdfOnlyPipeline(contributionId, previewData.value?.title || t('library.local.academicDocument'), 'contribution', false, true)
           }
         }
       }
@@ -984,7 +990,7 @@ async function submitContribution() {
       
       const res = await contributeSource(payload)
       if (res.success) {
-        settingsStore.showToast('Nguồn đã được gửi và đang chờ duyệt. Bạn sẽ nhận điểm đóng góp nếu nguồn được duyệt.', 'success')
+        settingsStore.showToast(t('library.local.sourceSubmitted'), 'success')
         closeWizard()
         await fetchApprovedSources()
         
@@ -992,7 +998,7 @@ async function submitContribution() {
           const contributionId = res.data?._id || res.data?.data?._id
           if (contributionId) {
             const sourceProgressStore = useSourceProgressStore()
-            sourceProgressStore.startPipeline(contributionId, previewData.value?.title || 'Tài liệu học thuật')
+            sourceProgressStore.startPipeline(contributionId, previewData.value?.title || t('library.local.academicDocument'))
           }
         }
       }
@@ -1002,13 +1008,13 @@ async function submitContribution() {
       const data = err.response.data
       if (data && data.code === 'DUPLICATE_SOURCE' && data.existingSourceId) {
         duplicateSourceId.value = data.existingSourceId
-        duplicateSourceError.value = data.message || 'Nguồn này đã tồn tại trong hệ thống.'
-        settingsStore.showToast(duplicateSourceError.value || 'Nguồn này đã tồn tại trong hệ thống.', 'error')
+        duplicateSourceError.value = data.message || t('library.local.duplicate')
+        settingsStore.showToast(duplicateSourceError.value || t('library.local.duplicate'), 'error')
       } else {
-        settingsStore.showToast('Nguồn này đã được gửi hoặc đã tồn tại trong hệ thống.', 'error')
+        settingsStore.showToast(t('library.local.duplicateSubmitted'), 'error')
       }
     } else {
-      const errMsg = err.response?.data?.message || 'Có lỗi xảy ra khi đóng góp nguồn.'
+      const errMsg = err.response?.data?.message || t('library.local.contributionError')
       settingsStore.showToast(errMsg, 'error')
     }
   } finally {

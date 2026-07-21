@@ -1,18 +1,34 @@
 import axios from 'axios'
+import { normalizeLocale, LOCALE_STORAGE_KEY } from '@/i18n/types'
+
+// ─── Bootstrap Accept-Language at module load ─────────────────────────────────
+// Read the persisted locale before any store is initialised.
+// Guards window access for environments without DOM (test runners).
+const _bootstrapLocale = normalizeLocale(
+  typeof window !== 'undefined' ? window.localStorage.getItem(LOCALE_STORAGE_KEY) : null
+)
 
 // ─── Axios Instance ────────────────────────────────────────────────────────────
 const apiClient = axios.create({
   baseURL: 'http://localhost:5001/api',
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept-Language': _bootstrapLocale,
+  },
   withCredentials: false,
 })
 
-// ─── Request Interceptor: Attach Bearer Token ──────────────────────────────────
+// ─── Request Interceptor: Attach Bearer Token + Accept-Language ────────────────
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('ds_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  // Re-read locale on every request so mid-session locale changes are always
+  // reflected even if apiClient.defaults was not updated for any reason.
+  config.headers['Accept-Language'] = normalizeLocale(
+    typeof window !== 'undefined' ? window.localStorage.getItem(LOCALE_STORAGE_KEY) : null
+  )
   return config
 })
 
@@ -35,6 +51,8 @@ apiClient.interceptors.response.use(
 
         try {
           const { useSettingsStore } = await import('@/store/useSettingsStore')
+          // NOTE: This toast message is not localised in Phase I18N-1.
+          // It is backend-driven error messaging and will be addressed in a later phase.
           useSettingsStore().showToast('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.', 'error')
         } catch (e) {
           console.error('Failed to show toast:', e)
@@ -56,4 +74,3 @@ apiClient.interceptors.response.use(
 )
 
 export default apiClient
-

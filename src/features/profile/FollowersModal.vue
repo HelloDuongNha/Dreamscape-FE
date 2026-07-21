@@ -11,7 +11,7 @@
             :class="{ 'followers-modal__tab--active': activeTab === 'followers' }"
             @click="activeTab = 'followers'"
           >
-            Followers
+            {{ t('profile.followersLabel') }}
           </button>
           <button
             role="tab"
@@ -20,12 +20,12 @@
             :class="{ 'followers-modal__tab--active': activeTab === 'following' }"
             @click="activeTab = 'following'"
           >
-            Following
+            {{ t('profile.followingLabel') }}
           </button>
         </div>
         <button
           class="followers-modal__close-btn"
-          aria-label="Close modal"
+          :aria-label="t('profile.closeModal')"
           @click="emit('close')"
         >
           ✕
@@ -54,21 +54,22 @@
                   v-else
                   class="user-avatar-placeholder"
                   :style="{ backgroundColor: getAvatarBg(u._id) }"
+                  translate="no"
                 >
                   {{ getInitials(u.display_name) }}
                 </div>
               </div>
-              <div class="user-info">
+              <div class="user-info" translate="no">
                 <span class="user-display-name">{{ u.display_name }}</span>
                 <span class="user-username">{{ u.username }}</span>
               </div>
             </router-link>
           </div>
           <div v-else-if="followerCount > 0" class="empty-state">
-            This list is private.
+            {{ t('profile.listPrivate') }}
           </div>
           <div v-else class="empty-state">
-            No followers yet.
+            {{ t('profile.noFollowers') }}
           </div>
         </template>
 
@@ -92,21 +93,22 @@
                   v-else
                   class="user-avatar-placeholder"
                   :style="{ backgroundColor: getAvatarBg(u._id) }"
+                  translate="no"
                 >
                   {{ getInitials(u.display_name) }}
                 </div>
               </div>
-              <div class="user-info">
+              <div class="user-info" translate="no">
                 <span class="user-display-name">{{ u.display_name }}</span>
                 <span class="user-username">{{ u.username }}</span>
               </div>
             </router-link>
           </div>
           <div v-else-if="followingCount > 0" class="empty-state">
-            This list is private.
+            {{ t('profile.listPrivate') }}
           </div>
           <div v-else class="empty-state">
-            Not following anyone yet.
+            {{ t('profile.noFollowing') }}
           </div>
         </template>
       </div>
@@ -116,8 +118,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import type { User } from '@/data/mockUsers'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{

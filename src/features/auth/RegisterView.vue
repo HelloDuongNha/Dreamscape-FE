@@ -1,57 +1,61 @@
 <template>
   <div class="auth-page">
+    <AuthLocaleSwitch />
     <div class="auth-card">
 
       <div class="auth-logo" aria-hidden="true">◈</div>
-      <h1 class="auth-title">Create your account</h1>
-      <p class="auth-sub">Join DreamScape and start archiving your dreams.</p>
+      <h1 class="auth-title">{{ t('auth.signUpTitle') }}</h1>
+      <p class="auth-sub">{{ t('auth.signUpSub') }}</p>
 
-      <div v-if="errorMsg" class="auth-error" role="alert">{{ errorMsg }}</div>
+      <div v-if="localError || backendError" class="auth-error" role="alert">
+        <span v-if="localError">{{ t(localError.key, localError.params || {}) }}</span>
+        <span v-else>{{ backendError }}</span>
+      </div>
 
       <form class="auth-form" novalidate @submit.prevent="handleRegister">
         <div class="auth-field">
-          <label for="reg-username" class="auth-label">Username</label>
+          <label for="reg-username" class="auth-label">{{ t('auth.usernameLabel') }}</label>
           <AppInput
             id="reg-username"
             v-model="username"
             type="text"
-            placeholder="@yourhandle"
+            :placeholder="t('auth.usernamePlaceholder')"
             autocomplete="username"
             :disabled="loading"
           />
         </div>
 
         <div class="auth-field">
-          <label for="reg-displayname" class="auth-label">Display name</label>
+          <label for="reg-displayname" class="auth-label">{{ t('auth.displayNameLabel') }}</label>
           <AppInput
             id="reg-displayname"
             v-model="displayName"
             type="text"
-            placeholder="Your name"
+            :placeholder="t('auth.displayNamePlaceholder')"
             autocomplete="name"
             :disabled="loading"
           />
         </div>
 
         <div class="auth-field">
-          <label for="reg-email" class="auth-label">Email</label>
+          <label for="reg-email" class="auth-label">{{ t('auth.emailLabel') }}</label>
           <AppInput
             id="reg-email"
             v-model="email"
             type="email"
-            placeholder="you@dreamscape.io"
+            :placeholder="t('auth.emailPlaceholder')"
             autocomplete="email"
             :disabled="loading"
           />
         </div>
 
         <div class="auth-field">
-          <label for="reg-password" class="auth-label">Password</label>
+          <label for="reg-password" class="auth-label">{{ t('auth.passwordLabel') }}</label>
           <AppInput
             id="reg-password"
             v-model="password"
             type="password"
-            placeholder="Min. 6 characters"
+            :placeholder="t('auth.passwordMinLength')"
             autocomplete="new-password"
             :disabled="loading"
           />
@@ -62,28 +66,31 @@
           type="submit"
           variant="primary"
           size="lg"
-          :disabled="loading || !canSubmit"
+          :disabled="loading || !username || !displayName || !email || password.length < 6"
           style="width: 100%; margin-top: var(--space-2);"
         >
-          {{ loading ? 'Creating account…' : 'Create account' }}
+          {{ loading ? t('auth.creatingAccount') : t('auth.createAccountBtn') }}
         </AppButton>
       </form>
 
       <p class="auth-switch">
-        Already have an account?
-        <RouterLink to="/login" class="auth-link">Sign in</RouterLink>
+        {{ t('auth.hasAccountText') }}
+        <RouterLink to="/login" class="auth-link">{{ t('auth.signInLink') }}</RouterLink>
       </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRouter }     from 'vue-router'
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AppInput          from '@/components/common/AppInput.vue'
 import AppButton         from '@/components/common/AppButton.vue'
+import AuthLocaleSwitch  from '@/components/common/AuthLocaleSwitch.vue'
 import { useAuthStore }  from '@/store/useAuthStore'
 
+const { t } = useI18n()
 const router    = useRouter()
 const authStore = useAuthStore()
 
@@ -92,19 +99,36 @@ const displayName = ref('')
 const email       = ref('')
 const password    = ref('')
 const loading     = ref(false)
-const errorMsg    = ref('')
 
-const canSubmit = computed(() =>
-  username.value.trim() !== '' &&
-  displayName.value.trim() !== '' &&
-  email.value.trim() !== '' &&
-  password.value.length >= 6
-)
+const localError = ref<{ key: string; params?: Record<string, string | number> } | null>(null)
+const backendError = ref<string | null>(null)
 
 async function handleRegister() {
-  if (!canSubmit.value) return
+  localError.value = null
+  backendError.value = null
+
+  if (!username.value.trim()) {
+    localError.value = { key: 'errors.usernameRequired' }
+    return
+  }
+  if (!displayName.value.trim()) {
+    localError.value = { key: 'errors.displayNameRequired' }
+    return
+  }
+  if (!email.value.trim()) {
+    localError.value = { key: 'errors.emailRequired' }
+    return
+  }
+  if (!password.value) {
+    localError.value = { key: 'errors.passwordRequired' }
+    return
+  }
+  if (password.value.length < 6) {
+    localError.value = { key: 'errors.passwordTooShort' }
+    return
+  }
+
   loading.value  = true
-  errorMsg.value = ''
   try {
     const data = await authStore.register({
       username:     username.value.trim(),
@@ -123,7 +147,11 @@ async function handleRegister() {
   } catch (err: unknown) {
     const msg = (err as { response?: { data?: { message?: string } } })
       .response?.data?.message
-    errorMsg.value = msg ?? 'Registration failed. Please try again.'
+    if (msg) {
+      backendError.value = msg
+    } else {
+      localError.value = { key: 'errors.registrationFailed' }
+    }
   } finally {
     loading.value = false
   }
@@ -131,8 +159,8 @@ async function handleRegister() {
 </script>
 
 <style scoped>
-/* Same flat design system as LoginView */
 .auth-page {
+  position: relative;
   min-height: 100dvh;
   background: var(--color-bg-main, #101010);
   display: flex;

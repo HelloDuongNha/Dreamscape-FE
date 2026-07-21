@@ -1,12 +1,18 @@
 <template>
   <div class="auth-page">
+    <AuthLocaleSwitch />
     <div class="auth-card">
       <div class="auth-logo" aria-hidden="true">◈</div>
-      <h1 class="auth-title">Verify OTP Code</h1>
-      <p class="auth-sub">Enter the 6-digit verification code sent to <strong>{{ email }}</strong>.</p>
+      <h1 class="auth-title">{{ t('auth.verifyOtpTitle') }}</h1>
+      <p class="auth-sub" v-html="t('auth.verifyOtpSub', { email: `<strong>${email}</strong>` })"></p>
 
-      <div v-if="errorMsg" class="auth-error" role="alert">{{ errorMsg }}</div>
-      <div v-if="successMsg" class="auth-success" role="alert">{{ successMsg }}</div>
+      <div v-if="localError || backendError" class="auth-error" role="alert">
+        <span v-if="localError">{{ t(localError.key, localError.params || {}) }}</span>
+        <span v-else>{{ backendError }}</span>
+      </div>
+      <div v-if="localSuccess" class="auth-success" role="alert">
+        {{ t(localSuccess.key, localSuccess.params || {}) }}
+      </div>
 
       <form class="auth-form" @submit.prevent="handleVerify">
         <div class="otp-inputs-row">
@@ -36,14 +42,14 @@
           :disabled="loading || !isComplete"
           style="width: 100%; margin-top: var(--space-4);"
         >
-          {{ loading ? 'Verifying...' : 'Verify' }}
+          {{ loading ? t('auth.verifyingBtn') : t('auth.verifyBtn') }}
         </AppButton>
       </form>
 
       <p class="auth-switch">
-        Didn't receive a code?
+        {{ t('auth.noCodeText') }}
         <button type="button" class="resend-btn" :disabled="resending" @click="handleResend">
-          {{ resending ? 'Sending...' : 'Resend Code' }}
+          {{ resending ? t('auth.resendingBtn') : t('auth.resendBtn') }}
         </button>
       </p>
     </div>
@@ -53,11 +59,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/common/AppButton.vue'
+import AuthLocaleSwitch from '@/components/common/AuthLocaleSwitch.vue'
 import apiClient from '@/api/client'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
@@ -71,8 +80,10 @@ const inputRefs = ref<HTMLInputElement[]>([])
 
 const loading = ref(false)
 const resending = ref(false)
-const errorMsg = ref('')
-const successMsg = ref('')
+
+const localError = ref<{ key: string; params?: Record<string, string | number> } | null>(null)
+const backendError = ref<string | null>(null)
+const localSuccess = ref<{ key: string; params?: Record<string, string | number> } | null>(null)
 
 const isComplete = computed(() => digits.value.every(d => d !== ''))
 
@@ -118,8 +129,9 @@ function handlePaste(e: ClipboardEvent) {
 async function handleVerify() {
   if (!isComplete.value || loading.value) return
   loading.value = true
-  errorMsg.value = ''
-  successMsg.value = ''
+  localError.value = null
+  backendError.value = null
+  localSuccess.value = null
 
   const otpCode = digits.value.join('')
 
@@ -143,22 +155,27 @@ async function handleVerify() {
           useChatStore().connectSocket()
         })
 
-        settingsStore.showToast('Account created and verified!', 'success')
+        settingsStore.showToastKey('toasts.otpVerifiedSuccess', undefined, 'success')
         router.push('/')
       } else if (purpose.value === 'update_email') {
         // Update user details
         authStore.updateCurrentUser(data.user)
         settingsStore.verified = true
-        settingsStore.showToast('Email verified and updated successfully!', 'success')
+        settingsStore.showToastKey('toasts.emailVerifiedSuccess', undefined, 'success')
         router.push('/settings/security')
       } else {
-        settingsStore.showToast('Code verified successfully!', 'success')
+        settingsStore.showToastKey('toasts.otpVerifiedSuccess', undefined, 'success')
       }
     }
   } catch (err: any) {
-    const msg = err.response?.data?.message || 'Verification failed. Please check the code.'
-    errorMsg.value = msg
-    settingsStore.showToast(msg, 'error')
+    const msg = err.response?.data?.message
+    if (msg) {
+      backendError.value = msg
+      settingsStore.showToast(msg, 'error')
+    } else {
+      localError.value = { key: 'errors.verificationFailed' }
+      settingsStore.showToastKey('errors.verificationFailed', undefined, 'error')
+    }
   } finally {
     loading.value = false
   }
@@ -167,8 +184,9 @@ async function handleVerify() {
 async function handleResend() {
   if (resending.value) return
   resending.value = true
-  errorMsg.value = ''
-  successMsg.value = ''
+  localError.value = null
+  backendError.value = null
+  localSuccess.value = null
 
   try {
     const { data } = await apiClient.post('/auth/resend-otp', {
@@ -177,8 +195,8 @@ async function handleResend() {
     })
 
     if (data.success) {
-      successMsg.value = 'A new verification code has been sent to your email.'
-      settingsStore.showToast('Verification code resent.', 'success')
+      localSuccess.value = { key: 'auth.otpResentSuccess' }
+      settingsStore.showToastKey('toasts.otpVerifiedSuccess', undefined, 'success') // Resent notification
       // Reset inputs
       digits.value = ['', '', '', '', '', '']
       if (inputRefs.value[0]) {
@@ -186,9 +204,14 @@ async function handleResend() {
       }
     }
   } catch (err: any) {
-    const msg = err.response?.data?.message || 'Failed to resend code. Please try again.'
-    errorMsg.value = msg
-    settingsStore.showToast(msg, 'error')
+    const msg = err.response?.data?.message
+    if (msg) {
+      backendError.value = msg
+      settingsStore.showToast(msg, 'error')
+    } else {
+      localError.value = { key: 'errors.resendFailed' }
+      settingsStore.showToastKey('errors.resendFailed', undefined, 'error')
+    }
   } finally {
     resending.value = false
   }
@@ -197,6 +220,7 @@ async function handleResend() {
 
 <style scoped>
 .auth-page {
+  position: relative;
   min-height: 100dvh;
   background: var(--color-bg-main, #101010);
   display: flex;

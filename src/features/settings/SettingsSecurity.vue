@@ -1,40 +1,40 @@
 <template>
   <div class="settings-section">
-    <h2 class="settings-section__title">Security</h2>
-    <p class="settings-section__desc">Manage your password, account email, and active login sessions.</p>
+    <h2 class="settings-section__title">{{ t('settings.navSecurity') }}</h2>
+    <p class="settings-section__desc">{{ t('settings.securityDesc') }}</p>
 
     <!-- ── Change Password ── -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Change Password</h3>
-        <p class="settings-block__hint">At least 8 characters. No HTML or injection characters.</p>
+        <h3 class="settings-block__label">{{ t('settings.changePasswordLabel') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.changePasswordHint') }}</p>
       </div>
       <div class="settings-block__field settings-block__field--col">
         <AppInput
           id="sec-current-password"
           v-model="currentPw"
           type="password"
-          label="Current Password"
-          placeholder="Current password"
-          :error="currentPwError"
+          :label="t('settings.currentPasswordLabel')"
+          :placeholder="t('settings.currentPasswordPlaceholder')"
+          :error="currentPwErrorDisplay"
           autocomplete="current-password"
         />
         <AppInput
           id="sec-new-password"
           v-model="newPw"
           type="password"
-          label="New Password"
-          placeholder="New password (min 8 chars)"
-          :error="newPwError"
+          :label="t('settings.newPasswordLabel')"
+          :placeholder="t('settings.newPasswordPlaceholder')"
+          :error="newPwErrorDisplay"
           autocomplete="new-password"
         />
         <AppInput
           id="sec-confirm-password"
           v-model="confirmPw"
           type="password"
-          label="Confirm New Password"
-          placeholder="Repeat new password"
-          :error="confirmPwError"
+          :label="t('settings.confirmPasswordLabel')"
+          :placeholder="t('settings.confirmPasswordPlaceholder')"
+          :error="confirmPwErrorDisplay"
           autocomplete="new-password"
         />
         <div class="settings-block__actions">
@@ -45,7 +45,7 @@
             :disabled="!!currentPwError || !!newPwError || !!confirmPwError || !currentPw || !newPw || !confirmPw || isSavingPassword"
             @click="changePassword"
           >
-            {{ isSavingPassword ? 'Updating...' : 'Update password' }}
+            {{ isSavingPassword ? t('settings.updatingPasswordBtn') : t('settings.updatePasswordBtn') }}
           </AppButton>
         </div>
       </div>
@@ -54,17 +54,17 @@
     <!-- ── Email Address ── -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Email Address</h3>
-        <p class="settings-block__hint">Used for notifications and account recovery.</p>
+        <h3 class="settings-block__label">{{ t('settings.emailHeading') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.emailHint') }}</p>
       </div>
       <div class="settings-block__field settings-block__field--col">
         <AppInput
           id="sec-email"
           v-model="localEmail"
           type="email"
-          label="Email"
-          placeholder="your@email.com"
-          :error="emailError"
+          :label="t('settings.emailLabel')"
+          :placeholder="t('settings.emailPlaceholder')"
+          :error="emailErrorDisplay"
           autocomplete="email"
         />
         <!-- Verification badge — sits below the input -->
@@ -79,7 +79,7 @@
             <svg v-else width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
-            {{ settingsStore.verified ? 'Email verified' : 'Email unverified — check your inbox' }}
+            {{ settingsStore.verified ? t('settings.emailVerified') : t('settings.emailUnverified') }}
           </span>
           <AppButton
             id="save-email-btn"
@@ -88,7 +88,7 @@
             :disabled="!!emailError || !localEmail.trim() || localEmail === originalEmail || isSavingEmail"
             @click="saveEmail"
           >
-            {{ isSavingEmail ? 'Saving...' : 'Save' }}
+            {{ isSavingEmail ? t('settings.updatingBtn') : t('settings.saveBtn') }}
           </AppButton>
         </div>
       </div>
@@ -97,8 +97,8 @@
     <!-- ── Logged-in Devices ── -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Logged-in Devices</h3>
-        <p class="settings-block__hint">All active sessions. Log out any you don't recognise.</p>
+        <h3 class="settings-block__label">{{ t('settings.activeDevicesHeading') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.activeDevicesHint') }}</p>
       </div>
       <ul class="device-list" role="list">
         <li
@@ -115,10 +115,10 @@
           <div class="device-item__info">
             <div class="device-item__name-row">
               <span class="device-item__name">{{ session.device_name }}</span>
-              <span v-if="session.is_current" class="device-item__current-tag">Current</span>
+              <span v-if="session.is_current" class="device-item__current-tag">{{ t('settings.currentDevice') }}</span>
             </div>
             <span class="device-item__meta">{{ session.browser }} · {{ session.location }}</span>
-            <span class="device-item__time">Last active: {{ timeAgo(session.last_active) }}</span>
+            <span class="device-item__time">{{ t('settings.lastActive', { time: timeAgo(session.last_active, localeStore.currentLocale) }) }}</span>
           </div>
           <AppButton
             v-if="!session.is_current"
@@ -127,7 +127,7 @@
             size="sm"
             @click="settingsStore.logoutSession(session._id)"
           >
-            Log out
+            {{ t('settings.logoutBtn') }}
           </AppButton>
         </li>
       </ul>
@@ -138,15 +138,19 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter }          from 'vue-router'
+import { useI18n }            from 'vue-i18n'
 import AppInput               from '@/components/common/AppInput.vue'
 import AppButton              from '@/components/common/AppButton.vue'
 import { useSettingsStore }   from '@/store/useSettingsStore'
 import { useAuthStore }       from '@/store/useAuthStore'
+import { useLocaleStore }     from '@/store/useLocaleStore'
 import { timeAgo }            from '@/utils/timeAgo'
 import apiClient              from '@/api/client'
 
+const { t } = useI18n()
 const settingsStore = useSettingsStore()
 const authStore     = useAuthStore()
+const localeStore   = useLocaleStore()
 const router        = useRouter()
 
 // ── Password form ──────────────────────────────────────────────────
@@ -156,32 +160,60 @@ const confirmPw = ref('')
 
 const INJECTION_RE = /[<>"'`;&|{}()\\]/
 
-const apiCurrentPwError = ref('')
-const apiNewPwError = ref('')
-const apiConfirmPwError = ref('')
+interface ApiErrorStruct {
+  key?: string
+  raw?: string
+}
 
-watch(currentPw, () => { apiCurrentPwError.value = '' })
-watch(newPw, () => { apiNewPwError.value = '' })
-watch(confirmPw, () => { apiConfirmPwError.value = '' })
+const apiCurrentPwError = ref<ApiErrorStruct | null>(null)
+const apiNewPwError = ref<ApiErrorStruct | null>(null)
+const apiConfirmPwError = ref<ApiErrorStruct | null>(null)
 
-const currentPwError  = computed<string>(() => {
-  if (apiCurrentPwError.value) return apiCurrentPwError.value
-  if (!currentPw.value) return ''  // only validate when user types
-  if (INJECTION_RE.test(currentPw.value)) return 'Invalid characters detected.'
+watch(currentPw, () => { apiCurrentPwError.value = null })
+watch(newPw, () => { apiNewPwError.value = null })
+watch(confirmPw, () => { apiConfirmPwError.value = null })
+
+const currentPwError  = computed<{ key: string } | null>(() => {
+  if (apiCurrentPwError.value) return null
+  if (!currentPw.value) return null
+  if (INJECTION_RE.test(currentPw.value)) return { key: 'errors.pwInjectionError' }
+  return null
+})
+const currentPwErrorDisplay = computed(() => {
+  if (currentPwError.value) return t(currentPwError.value.key)
+  if (apiCurrentPwError.value) {
+    return apiCurrentPwError.value.key ? t(apiCurrentPwError.value.key) : (apiCurrentPwError.value.raw || '')
+  }
   return ''
 })
-const newPwError = computed<string>(() => {
-  if (apiNewPwError.value) return apiNewPwError.value
+
+const newPwError = computed<{ key: string } | null>(() => {
+  if (apiNewPwError.value) return null
   const v = newPw.value
-  if (!v) return ''
-  if (v.length < 8)            return 'Must be at least 8 characters.'
-  if (INJECTION_RE.test(v))    return 'Invalid characters detected.'
+  if (!v) return null
+  if (v.length < 8)            return { key: 'errors.pwLengthError' }
+  if (INJECTION_RE.test(v))    return { key: 'errors.pwInjectionError' }
+  return null
+})
+const newPwErrorDisplay = computed(() => {
+  if (newPwError.value) return t(newPwError.value.key)
+  if (apiNewPwError.value) {
+    return apiNewPwError.value.key ? t(apiNewPwError.value.key) : (apiNewPwError.value.raw || '')
+  }
   return ''
 })
-const confirmPwError = computed<string>(() => {
-  if (apiConfirmPwError.value) return apiConfirmPwError.value
-  if (!confirmPw.value) return ''
-  if (confirmPw.value !== newPw.value) return 'Passwords do not match.'
+
+const confirmPwError = computed<{ key: string } | null>(() => {
+  if (apiConfirmPwError.value) return null
+  if (!confirmPw.value) return null
+  if (confirmPw.value !== newPw.value) return { key: 'errors.pwMatchError' }
+  return null
+})
+const confirmPwErrorDisplay = computed(() => {
+  if (confirmPwError.value) return t(confirmPwError.value.key)
+  if (apiConfirmPwError.value) {
+    return apiConfirmPwError.value.key ? t(apiConfirmPwError.value.key) : (apiConfirmPwError.value.raw || '')
+  }
   return ''
 })
 
@@ -189,7 +221,7 @@ const isSavingPassword = ref(false)
 async function changePassword() {
   if (currentPwError.value || newPwError.value || confirmPwError.value) return
   if (!currentPw.value || !newPw.value || !confirmPw.value) {
-    settingsStore.showToast('Please fill in all password fields.', 'error')
+    settingsStore.showToastKey('toasts.passwordFieldsEmptyToast', undefined, 'error')
     return
   }
   isSavingPassword.value = true
@@ -199,7 +231,7 @@ async function changePassword() {
       newPassword: newPw.value
     })
     if (data.success) {
-      settingsStore.showToast('Password updated successfully.', 'success')
+      settingsStore.showToastKey('toasts.passwordUpdatedSuccess', undefined, 'success')
       currentPw.value = ''
       newPw.value = ''
       confirmPw.value = ''
@@ -208,16 +240,16 @@ async function changePassword() {
     const response = err.response
     if (response) {
       const status = response.status
-      const msg = response.data?.message || 'Failed to update password.'
+      const msg = response.data?.message
       if (status === 401) {
-        apiCurrentPwError.value = msg
+        apiCurrentPwError.value = msg ? { raw: msg } : { key: 'errors.savePasswordFailed' }
       } else {
-        apiNewPwError.value = msg
+        apiNewPwError.value = msg ? { raw: msg } : { key: 'errors.savePasswordFailed' }
       }
     } else {
-      apiNewPwError.value = 'Network error.'
+      apiNewPwError.value = { key: 'errors.networkError' }
     }
-    settingsStore.showToast('Failed to update password.', 'error')
+    settingsStore.showToastKey('errors.savePasswordFailed', undefined, 'error')
   } finally {
     isSavingPassword.value = false
   }
@@ -228,15 +260,22 @@ const localEmail    = ref(authStore.myUser?.email ?? '')
 const originalEmail = computed(() => authStore.myUser?.email ?? '')
 const EMAIL_RE      = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-const apiEmailError = ref('')
-watch(localEmail, () => { apiEmailError.value = '' })
+const apiEmailError = ref<ApiErrorStruct | null>(null)
+watch(localEmail, () => { apiEmailError.value = null })
 
-const emailError = computed<string>(() => {
-  if (apiEmailError.value) return apiEmailError.value
+const emailError = computed<{ key: string } | null>(() => {
+  if (apiEmailError.value) return null
   const v = localEmail.value.trim()
-  if (!v)                   return ''
-  if (INJECTION_RE.test(v)) return 'Invalid characters in email.'
-  if (!EMAIL_RE.test(v))    return 'Please enter a valid email address.'
+  if (!v)                   return null
+  if (INJECTION_RE.test(v)) return { key: 'errors.emailInjectionError' }
+  if (!EMAIL_RE.test(v))    return { key: 'errors.emailInvalidError' }
+  return null
+})
+const emailErrorDisplay = computed(() => {
+  if (emailError.value) return t(emailError.value.key)
+  if (apiEmailError.value) {
+    return apiEmailError.value.key ? t(apiEmailError.value.key) : (apiEmailError.value.raw || '')
+  }
   return ''
 })
 
@@ -244,7 +283,7 @@ const isSavingEmail = ref(false)
 async function saveEmail() {
   if (emailError.value || !localEmail.value.trim()) return
   if (localEmail.value.trim() === originalEmail.value) {
-    settingsStore.showToast('No changes to save.', 'error')
+    settingsStore.showToastKey('settings.noChangesToast', undefined, 'error')
     return
   }
   isSavingEmail.value = true
@@ -254,7 +293,7 @@ async function saveEmail() {
     })
     if (data.success) {
       if (data.status === 'pending') {
-        settingsStore.showToast('Verification code sent to your new email.', 'success')
+        settingsStore.showToastKey('toasts.verificationSentToast', undefined, 'success')
         router.push({
           path: '/verify-otp',
           query: { email: localEmail.value.trim(), purpose: 'update_email' }
@@ -262,17 +301,18 @@ async function saveEmail() {
       } else {
         authStore.updateCurrentUser(data.user)
         settingsStore.verified = false // reset verification on change
-        settingsStore.showToast('Email updated. Please verify your new address.', 'success')
+        settingsStore.showToastKey('toasts.emailUpdatedToast', undefined, 'success')
       }
     }
   } catch (err: any) {
     const response = err.response
     if (response) {
-      apiEmailError.value = response.data?.message || 'Failed to update email.'
+      const msg = response.data?.message
+      apiEmailError.value = msg ? { raw: msg } : { key: 'errors.saveEmailFailed' }
     } else {
-      apiEmailError.value = 'Network error.'
+      apiEmailError.value = { key: 'errors.networkError' }
     }
-    settingsStore.showToast('Failed to update email.', 'error')
+    settingsStore.showToastKey('errors.saveEmailFailed', undefined, 'error')
   } finally {
     isSavingEmail.value = false
   }

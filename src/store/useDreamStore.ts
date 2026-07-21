@@ -87,10 +87,7 @@ export const useDreamStore = defineStore('dream', () => {
     }
     dreams.value.unshift(populatedDream)
     const { useSettingsStore } = await import('@/store/useSettingsStore')
-    useSettingsStore().showToast(
-      'Đã đăng giấc mơ.',
-      'success',
-    )
+    useSettingsStore().showToastKey('home.postedSuccess', undefined, 'success')
     
     // Kick off Oracle analysis tracking UI & polling
     const { useOracleStore } = await import('@/store/useOracleStore')

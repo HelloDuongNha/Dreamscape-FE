@@ -448,7 +448,7 @@ async function confirmBulkAction() {
   try {
     const response = await runRuleV3BulkAction(bulkAction.value, confirmations[bulkAction.value], sourceIdFilter.value || undefined)
     const failed = response.data.failed
-    settingsStore.showToast(failed ? `Đã xử lý ${response.data.processed} quy luật; ${failed} quy luật cần kiểm tra riêng.` : `Đã xử lý ${response.data.processed} quy luật.`, failed ? 'warning' : 'success')
+    settingsStore.showToast(failed ? `Đã xử lý ${response.data.processed} quy luật; ${failed} quy luật cần kiểm tra riêng.` : `Đã xử lý ${response.data.processed} quy luật.`, failed ? 'error' : 'success')
     bulkAction.value = null
     await fetchCandidates()
   } catch (error: any) {

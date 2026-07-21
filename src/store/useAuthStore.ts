@@ -79,7 +79,7 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       _clear()
       const { useSettingsStore } = await import('@/store/useSettingsStore')
-      useSettingsStore().showToast('Logged out successfully.', 'success')
+      useSettingsStore().showToastKey('toasts.logoutSuccess', undefined, 'success')
     }
   }
 

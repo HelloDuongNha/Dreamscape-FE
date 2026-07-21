@@ -11,19 +11,19 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: () => import('@/features/auth/LoginView.vue'),
-      meta: { title: 'Sign in — DreamScape', public: true },
+      meta: { titleKey: 'navigation.titleLogin', public: true },
     },
     {
       path: '/register',
       name: 'register',
       component: () => import('@/features/auth/RegisterView.vue'),
-      meta: { title: 'Create Account — DreamScape', public: true },
+      meta: { titleKey: 'navigation.titleRegister', public: true },
     },
     {
       path: '/verify-otp',
       name: 'verify-otp',
       component: () => import('@/features/auth/OtpVerifyView.vue'),
-      meta: { title: 'Verify OTP — DreamScape', public: true },
+      meta: { titleKey: 'navigation.titleVerifyOtp', public: true },
     },
 
     // ── App routes (with sidebar via MainLayout) ──────────────────────────────
@@ -35,31 +35,31 @@ const router = createRouter({
           path: '',
           name: 'home',
           component: () => import('@/features/home/HomeView.vue'),
-          meta: { title: 'Home — DreamScape' },
+          meta: { titleKey: 'navigation.titleHome' },
         },
         {
           path: 'oracle',
           name: 'oracle',
           component: () => import('@/features/oracle/OracleView.vue'),
-          meta: { title: 'Oracle — DreamScape' },
+          meta: { titleKey: 'navigation.titleOracle' },
         },
         {
           path: 'messages',
           name: 'messages',
           component: () => import('@/features/messages/MessagesView.vue'),
-          meta: { title: 'Messages — DreamScape' },
+          meta: { titleKey: 'navigation.titleMessages' },
         },
         {
           path: 'profile',
           name: 'profile',
           component: () => import('@/features/profile/ProfileView.vue'),
-          meta: { title: 'Profile — DreamScape' },
+          meta: { titleKey: 'navigation.titleProfile' },
         },
         {
           path: 'profile/:id',
           name: 'profile-user',
           component: () => import('@/features/profile/ProfileView.vue'),
-          meta: { title: 'Profile — DreamScape' },
+          meta: { titleKey: 'navigation.titleProfile' },
         },
         {
           path: 'settings',
@@ -69,43 +69,43 @@ const router = createRouter({
           path: 'settings/:section',
           name: 'settings',
           component: () => import('@/features/settings/SettingsView.vue'),
-          meta: { title: 'Settings — DreamScape' },
+          meta: { titleKey: 'navigation.titleSettings' },
         },
         {
           path: 'achievements',
           name: 'achievements',
           component: () => import('@/features/achievements/AchievementsView.vue'),
-          meta: { title: 'Achievements — DreamScape' },
+          meta: { titleKey: 'navigation.titleSettings' },
         },
         {
           path: 'library',
           name: 'library',
           component: () => import('@/features/library/LibraryView.vue'),
-          meta: { title: 'Thư viện — DreamScape' },
+          meta: { titleKey: 'navigation.titleLibrary' },
         },
         {
           path: 'library/sources/:id',
           name: 'library-source-detail',
           component: () => import('@/features/library/LibrarySourceDetailView.vue'),
-          meta: { title: 'Chi tiết tài liệu — DreamScape' },
+          meta: { titleKey: 'navigation.titleLibrarySourceDetail' },
         },
         {
           path: 'moderation/sources',
           name: 'moderation-sources',
           component: () => import('@/features/moderation/ModerationSourcesView.vue'),
-          meta: { title: 'Duyệt nguồn — DreamScape' },
+          meta: { titleKey: 'navigation.titleModerationSources' },
         },
         {
           path: 'moderation/sources/:id/preview',
           name: 'moderation-source-preview',
           component: () => import('@/features/moderation/ModerationSourcePreviewView.vue'),
-          meta: { title: 'Xem trước tài liệu — DreamScape' },
+          meta: { titleKey: 'navigation.titleModerationSourcePreview' },
         },
         {
           path: 'moderation/rule-candidates',
           name: 'moderation-rule-candidates',
           component: () => import('@/features/moderation/RuleCandidatesView.vue'),
-          meta: { title: 'Ứng viên quy luật — DreamScape' },
+          meta: { titleKey: 'navigation.titleModerationRuleCandidates' },
         },
         {
           path: 'moderation/knowledge-evidence',
@@ -117,11 +117,6 @@ const router = createRouter({
     // Catch-all → redirect to home
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
-})
-
-// ── Update page title ─────────────────────────────────────────────────────────
-router.afterEach((to) => {
-  document.title = (to.meta.title as string) ?? 'DreamScape'
 })
 
 // ── Auth Navigation Guard ─────────────────────────────────────────────────────

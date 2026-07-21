@@ -1,36 +1,40 @@
 <template>
   <div class="auth-page">
+    <AuthLocaleSwitch />
     <div class="auth-card">
 
       <!-- Logo -->
       <div class="auth-logo" aria-hidden="true">◈</div>
-      <h1 class="auth-title">Sign in to DreamScape</h1>
-      <p class="auth-sub">Enter your credentials to continue.</p>
+      <h1 class="auth-title">{{ t('auth.signInTitle') }}</h1>
+      <p class="auth-sub">{{ t('auth.signInSub') }}</p>
 
       <!-- Error banner -->
-      <div v-if="errorMsg" class="auth-error" role="alert">{{ errorMsg }}</div>
+      <div v-if="localError || backendError" class="auth-error" role="alert">
+        <span v-if="localError">{{ t(localError.key, localError.params || {}) }}</span>
+        <span v-else>{{ backendError }}</span>
+      </div>
 
       <!-- Form -->
       <form class="auth-form" novalidate @submit.prevent="handleLogin">
         <div class="auth-field">
-          <label for="login-email" class="auth-label">Email</label>
+          <label for="login-email" class="auth-label">{{ t('auth.emailLabel') }}</label>
           <AppInput
             id="login-email"
             v-model="email"
             type="email"
-            placeholder="you@dreamscape.io"
+            :placeholder="t('auth.emailPlaceholder')"
             autocomplete="email"
             :disabled="loading"
           />
         </div>
 
         <div class="auth-field">
-          <label for="login-password" class="auth-label">Password</label>
+          <label for="login-password" class="auth-label">{{ t('auth.passwordLabel') }}</label>
           <AppInput
             id="login-password"
             v-model="password"
             type="password"
-            placeholder="Your password"
+            :placeholder="t('auth.passwordPlaceholder')"
             autocomplete="current-password"
             :disabled="loading"
           />
@@ -44,13 +48,13 @@
           :disabled="loading || !email || !password"
           style="width: 100%; margin-top: var(--space-2);"
         >
-          {{ loading ? 'Signing in…' : 'Sign in' }}
+          {{ loading ? t('auth.signingIn') : t('auth.signInBtn') }}
         </AppButton>
       </form>
 
       <p class="auth-switch">
-        Don't have an account?
-        <RouterLink to="/register" class="auth-link">Create one</RouterLink>
+        {{ t('auth.noAccountText') }}
+        <RouterLink to="/register" class="auth-link">{{ t('auth.createAccountLink') }}</RouterLink>
       </p>
     </div>
   </div>
@@ -59,29 +63,44 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AppInput  from '@/components/common/AppInput.vue'
 import AppButton from '@/components/common/AppButton.vue'
+import AuthLocaleSwitch from '@/components/common/AuthLocaleSwitch.vue'
 import { useAuthStore } from '@/store/useAuthStore'
 
+const { t } = useI18n()
 const router    = useRouter()
 const authStore = useAuthStore()
 
 const email    = ref('')
 const password = ref('')
 const loading  = ref(false)
-const errorMsg = ref('')
+
+const localError = ref<{ key: string; params?: Record<string, string | number> } | null>(null)
+const backendError = ref<string | null>(null)
 
 async function handleLogin() {
-  if (!email.value || !password.value) return
+  localError.value = null
+  backendError.value = null
+
+  if (!email.value || !password.value) {
+    localError.value = { key: 'errors.fieldsRequired' }
+    return
+  }
+
   loading.value  = true
-  errorMsg.value = ''
   try {
     await authStore.login(email.value.trim(), password.value)
     router.push('/')
   } catch (err: unknown) {
     const msg = (err as { response?: { data?: { message?: string } } })
       .response?.data?.message
-    errorMsg.value = msg ?? 'Login failed. Please check your credentials.'
+    if (msg) {
+      backendError.value = msg
+    } else {
+      localError.value = { key: 'errors.loginFailed' }
+    }
   } finally {
     loading.value = false
   }
@@ -90,6 +109,7 @@ async function handleLogin() {
 
 <style scoped>
 .auth-page {
+  position: relative;
   min-height: 100dvh;
   background: var(--color-bg-main, #101010);
   display: flex;

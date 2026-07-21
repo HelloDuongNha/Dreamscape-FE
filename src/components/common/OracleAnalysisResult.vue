@@ -556,13 +556,6 @@ function handleCompactClick() {
   emit('view-details')
 }
 
-function getContextToneClass(tone?: string): string {
-  if (tone === 'reassuring') return 'positive'
-  if (tone === 'threatening') return 'negative'
-  if (tone === 'ambivalent') return 'ambivalent'
-  return 'neutral'
-}
-
 function getContextToneLabel(tone?: string): string {
   if (tone === 'reassuring') return 'Mang tính an ủi'
   if (tone === 'threatening') return 'Mang tính đe dọa'

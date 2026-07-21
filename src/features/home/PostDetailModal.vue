@@ -7,7 +7,7 @@
         class="modal-overlay"
         role="dialog"
         aria-modal="true"
-        :aria-label="`Dream by ${postStore.focusedUser?.display_name}`"
+        :aria-label="t('home.dreamByAria', { name: postStore.focusedUser?.display_name || t('home.unknownUser') })"
         @keydown.esc="postStore.closePost()"
       >
         <div class="modal-container" tabindex="-1" ref="containerRef">
@@ -20,10 +20,10 @@
               class="modal-author"
               @click="postStore.closePost()"
             >
-              <div class="modal-author__avatar" :style="{ background: avatarBg }">
+              <div class="modal-author__avatar" :style="{ background: avatarBg }" translate="no">
                 {{ initials }}
               </div>
-              <div class="modal-author__info">
+              <div class="modal-author__info" translate="no">
                 <span class="modal-author__name">{{ postStore.focusedUser?.display_name }}</span>
                 <span class="modal-author__username">@{{ postStore.focusedUser?.username }}</span>
               </div>
@@ -36,7 +36,7 @@
               <button
                 id="modal-close-btn"
                 class="modal-close-btn"
-                aria-label="Close modal"
+                :aria-label="t('home.closeModal')"
                 @click="postStore.closePost()"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
@@ -51,7 +51,7 @@
 
             <!-- Full dream content (un-truncated) -->
             <div class="modal-content-block">
-              <p class="modal-content-text">{{ postStore.focusedDream.content }}</p>
+              <p class="modal-content-text" translate="no">{{ postStore.focusedDream.content }}</p>
               <span class="modal-timestamp">{{ timestamp }}</span>
             </div>
 
@@ -67,18 +67,18 @@
               </div>
               <div v-else-if="postStore.focusedDream.ai_status === 'pending'" class="modal-oracle-pending">
                 <div class="spinner-small" aria-hidden="true"></div>
-                <span>Oracle đang phân tích...</span>
+                <span>{{ t('home.oracleAnalyzing') }}</span>
               </div>
               <div v-else-if="postStore.focusedDream.ai_status === 'failed'" class="modal-oracle-failed">
                 <span class="warning-icon" aria-hidden="true">⚠️</span>
-                <span class="error-msg-text">Oracle chưa thể phân tích bài này</span>
+                <span class="error-msg-text">{{ t('home.oracleFailed') }}</span>
                 <button
                   v-if="isOwner"
                   type="button"
                   class="retry-btn"
                   @click.stop="retryAnalysis(postStore.focusedDream._id)"
                 >
-                  Thử lại
+                  {{ t('home.retry') }}
                 </button>
               </div>
             </div>
@@ -89,7 +89,7 @@
                 id="modal-like-btn"
                 class="modal-like-btn"
                 :class="{ 'modal-like-btn--liked': isLiked }"
-                :aria-label="isLiked ? 'Unlike this dream' : 'Like this dream'"
+                :aria-label="isLiked ? t('home.unlikeDream') : t('home.likeDream')"
                 :disabled="isLiking"
                 @click="handleLike"
               >
@@ -114,31 +114,31 @@
               <span
                 v-if="isEdited"
                 class="modal-edited-badge"
-                title="This post has been edited"
-              >Edited</span>
+                :title="t('home.editedTitle')"
+              >{{ t('home.edited') }}</span>
             </div>
 
             <!-- ── Comments section ── -->
             <div class="modal-comments-section">
               <h3 class="modal-comments-title">
-                Bình luận
+                {{ t('home.comments') }}
                 <span class="modal-comments-count">{{ postStore.focusedComments.length }}</span>
               </h3>
 
               <!-- Loading state -->
               <div v-if="postStore.isLoadingComments" class="modal-comments-loading">
-                <span>Đang tải bình luận…</span>
+                <span>{{ t('home.loadingComments') }}</span>
               </div>
 
               <!-- Comment list -->
               <template v-else>
                 <!-- Empty state -->
                 <div v-if="postStore.focusedComments.length === 0" class="modal-comments-empty">
-                  Chưa có bình luận nào.
+                  {{ t('home.noComments') }}
                 </div>
 
                 <!-- Comment items -->
-                <ul v-else class="modal-comments-list" aria-label="Bình luận">
+                <ul v-else class="modal-comments-list" :aria-label="t('home.commentsAria')">
                   <li
                     v-for="comment in postStore.focusedComments"
                     :key="comment._id"
@@ -148,6 +148,7 @@
                       class="modal-comment__avatar"
                       :style="{ background: getAvatarBg(comment.userId._id) }"
                       aria-hidden="true"
+                      translate="no"
                     >
                       {{ getInitials(comment.userId.display_name) }}
                     </div>
@@ -158,11 +159,11 @@
                           class="modal-comment__name"
                           @click="postStore.closePost()"
                         >
-                          {{ comment.userId.display_name }}
+                          <span translate="no">{{ comment.userId.display_name }}</span>
                         </RouterLink>
-                        <span class="modal-comment__time">{{ timeAgo(comment.created_at) }}</span>
+                        <span class="modal-comment__time">{{ timeAgo(comment.created_at, localeStore.currentLocale) }}</span>
                       </div>
-                      <p class="modal-comment__text">{{ comment.content }}</p>
+                      <p class="modal-comment__text" translate="no">{{ comment.content }}</p>
                     </div>
                   </li>
                 </ul>
@@ -177,6 +178,7 @@
               class="modal-input-avatar"
               :style="{ background: currentAvatarBg }"
               aria-hidden="true"
+              translate="no"
             >
               {{ currentInitials }}
             </div>
@@ -185,17 +187,18 @@
               v-model="commentText"
               type="text"
               class="modal-input-field"
-              placeholder="Add a comment..."
+              :placeholder="t('home.commentPlaceholder')"
               maxlength="500"
               autocomplete="off"
               :disabled="isSubmitting"
+              translate="no"
               @keydown.enter.prevent="submitComment"
             />
             <button
               id="modal-comment-submit"
               class="modal-input-submit"
               :disabled="!commentText.trim() || isSubmitting"
-              aria-label="Post comment"
+              :aria-label="t('home.postCommentAria')"
               @click="submitComment"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -212,11 +215,13 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { RouterLink }    from 'vue-router'
 import { usePostStore }  from '@/store/usePostStore'
 import { useDreamStore } from '@/store/useDreamStore'
 import { useAuthStore }  from '@/store/useAuthStore'
 import { useOracleStore } from '@/store/useOracleStore'
+import { useLocaleStore } from '@/store/useLocaleStore'
 import apiClient         from '@/api/client'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo }       from '@/utils/timeAgo'
@@ -226,6 +231,8 @@ const postStore  = usePostStore()
 const dreamStore = useDreamStore()
 const authStore  = useAuthStore()
 const oracleStore = useOracleStore()
+const localeStore = useLocaleStore()
+const { t } = useI18n({ useScope: 'global' })
 
 const commentText  = ref('')
 const isSubmitting = ref(false)
@@ -270,7 +277,7 @@ async function retryAnalysis(dreamId: string) {
 const initials  = computed(() => getInitials(postStore.focusedUser?.display_name ?? ''))
 const avatarBg  = computed(() => getAvatarBg(postStore.focusedUser?._id ?? ''))
 const timestamp = computed(() =>
-  postStore.focusedDream ? timeAgo(postStore.focusedDream.created_at) : ''
+  postStore.focusedDream ? timeAgo(postStore.focusedDream.created_at, localeStore.currentLocale) : ''
 )
 const analysis = computed(() => {
   const d = postStore.focusedDream
@@ -278,30 +285,19 @@ const analysis = computed(() => {
   return d.ai_result ?? d.aiAnalysis ?? null
 })
 type EmotionToneKey = 'urgent_conflicted' | 'anxious' | 'fearful' | 'sad' | 'calm' | 'mixed' | 'neutral'
-const emotionLabels: Record<'vi' | 'en', Record<EmotionToneKey, string>> = {
-  vi: {
-    urgent_conflicted: 'Gấp gáp · bối rối · tiếc nuối',
-    anxious: 'Lo âu',
-    fearful: 'Sợ hãi',
-    sad: 'Buồn · tiếc nuối',
-    calm: 'Bình yên',
-    mixed: 'Cảm xúc đan xen',
-    neutral: 'Chưa xác định rõ',
-  },
-  en: {
-    urgent_conflicted: 'Urgent · conflicted · regretful',
-    anxious: 'Anxious',
-    fearful: 'Fearful',
-    sad: 'Sad · regretful',
-    calm: 'Calm',
-    mixed: 'Mixed emotions',
-    neutral: 'Unclear',
-  },
+const emotionLabelKeys: Record<EmotionToneKey, string> = {
+  urgent_conflicted: 'home.mood.urgentConflicted',
+  anxious: 'home.mood.anxious',
+  fearful: 'home.mood.fearful',
+  sad: 'home.mood.sad',
+  calm: 'home.mood.calm',
+  mixed: 'home.mood.mixed',
+  neutral: 'home.mood.neutral',
 }
 
 const emotionToneKey = computed<EmotionToneKey>(() => {
   const explicit = analysis.value?.emotional_tone_key
-  if (explicit && explicit in emotionLabels.vi) return explicit
+  if (explicit && explicit in emotionLabelKeys) return explicit
   const legacy = `${analysis.value?.emotional_tone || postStore.focusedDream?.mood_tag || ''}`.toLocaleLowerCase('vi')
   if (/gấp|bối rối/.test(legacy)) return 'urgent_conflicted'
   if (/lo âu|lo lắng|anx/.test(legacy)) return 'anxious'
@@ -311,10 +307,7 @@ const emotionToneKey = computed<EmotionToneKey>(() => {
   if (/đan xen|mixed/.test(legacy)) return 'mixed'
   return 'neutral'
 })
-const interfaceLanguage = computed<'vi' | 'en'>(() =>
-  document.documentElement.lang.toLocaleLowerCase().startsWith('en') ? 'en' : 'vi'
-)
-const modalMoodLabel = computed(() => emotionLabels[interfaceLanguage.value][emotionToneKey.value])
+const modalMoodLabel = computed(() => t(emotionLabelKeys[emotionToneKey.value]))
 const moodClass = computed(() => emotionToneKey.value.replace(/_/g, '-'))
 const isEdited = computed(() =>
   (postStore.focusedDream?.edit_history?.length ?? 0) > 0

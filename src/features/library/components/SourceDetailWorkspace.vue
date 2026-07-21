@@ -3,13 +3,13 @@
     <!-- Loading State -->
     <div v-if="isLoading" class="detail-loading">
       <span class="spinner"></span>
-      <p>Đang tải thông tin tài liệu...</p>
+      <p>{{ t('library.reader.loadingSource') }}</p>
     </div>
 
     <!-- Error State -->
     <div v-else-if="hasError || !source" class="detail-error">
-      <p>Không thể tải thông tin chi tiết tài liệu học thuật.</p>
-      <AppButton variant="secondary" size="sm" @click="fetchSource">Tải lại</AppButton>
+      <p>{{ t('library.reader.loadSourceError') }}</p>
+      <AppButton variant="secondary" size="sm" @click="fetchSource">{{ t('library.retry') }}</AppButton>
     </div>
 
     <!-- Main Content Grid -->
@@ -20,14 +20,14 @@
           <svg class="back-arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>
           </svg>
-          <span>Thư viện</span>
+          <span>{{ t('library.reader.back') }}</span>
         </button>
 
         <!-- Font size controls in left rail -->
         <div v-if="source && source.readableInApp && activeTab === 'smart'" class="left-rail-size-controls">
-          <button class="size-btn" @click="decreaseFontSize" :disabled="fontSize <= 14" title="Thu nhỏ chữ">A-</button>
+          <button class="size-btn" @click="decreaseFontSize" :disabled="fontSize <= 14" :title="t('library.reader.decreaseFont')">A-</button>
           <span class="size-val">{{ fontSize }}px</span>
-          <button class="size-btn" @click="increaseFontSize" :disabled="fontSize >= 22" title="Phóng to chữ">A+</button>
+          <button class="size-btn" @click="increaseFontSize" :disabled="fontSize >= 22" :title="t('library.reader.increaseFont')">A+</button>
         </div>
       </div>
 
@@ -41,8 +41,8 @@
             @click="activeTab = 'smart'"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px; display: inline-block; vertical-align: middle;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-            Bản đọc thông minh
-            <span v-if="extractionQuality === 'low'" class="tab-warning-badge" title="Cấu trúc layout chưa tối ưu">Cần đối chiếu</span>
+            {{ t('library.reader.smart') }}
+            <span v-if="extractionQuality === 'low'" class="tab-warning-badge" :title="t('library.reader.layoutNotOptimal')">{{ t('library.reader.compareRequired') }}</span>
           </button>
           <button 
             v-if="source.readableInApp || !!getOriginalPdfUrl(source)"
@@ -50,7 +50,7 @@
             @click="handleSwitchToOriginal"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px; display: inline-block; vertical-align: middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-            Bản gốc
+            {{ t('library.reader.original') }}
           </button>
         </div>
 
@@ -78,30 +78,30 @@
                     type="button"
                     class="app-confirm__close-btn"
                     style="top: var(--space-2); right: var(--space-2); font-size: 1.25rem; padding: 2px;"
-                    aria-label="Ẩn thông báo"
+                    :aria-label="t('library.reader.hideNotice')"
                     @click="showOnlineUpdateWarning = false"
                   >
                     ×
                   </button>
                   <div style="color: #ef4444; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding-right: 20px;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                    Không thể lấy PDF online mới. PDF đang lưu trên Cloudinary vẫn được giữ nguyên.
+                    {{ t('library.reader.onlinePdfFailed') }}
                   </div>
                   <div style="font-size: 0.8rem; color: var(--color-text-secondary);">
                     <div @click="showAttemptedDetails = !showAttemptedDetails" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: var(--color-text-muted);">
-                      <span>Chi tiết các nguồn đã thử ({{ attemptedCandidates.length }})</span>
+                      <span>{{ t('library.reader.attemptedSources', { count: attemptedCandidates.length }) }}</span>
                       <span>{{ showAttemptedDetails ? '▲' : '▼' }}</span>
                     </div>
                     <div v-if="showAttemptedDetails" style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow-y: auto;">
                       <div v-for="(cand, idx) in attemptedCandidates" :key="idx" style="padding-bottom: 6px; border-bottom: 1px dashed var(--color-border, #262626); word-break: break-all;">
                         <div style="font-weight: 500; color: var(--color-text-secondary, #d4d4d4);">{{ getDisplaySourceLink(cand.url) }}</div>
                         <div style="font-size: 0.75rem; color: #a3a3a3; margin-top: 2px;">
-                          Trạng thái: 
-                          <span v-if="cand.reason === 'recaptcha_challenge_page'" style="color: #f59e0b;">reCAPTCHA / Cần xác minh</span>
-                          <span v-else-if="cand.reason === 'publisher_blocked'" style="color: #ef4444;">403 / Bị chặn bởi nhà xuất bản</span>
-                          <span v-else-if="cand.reason === 'preparing_download_page'" style="color: #f59e0b;">Trang chờ tải</span>
-                          <span v-else-if="cand.reason === 'html_not_pdf'" style="color: #ef4444;">Không phải tệp PDF</span>
-                          <span v-else style="color: #ef4444;">{{ cand.reason || 'Lỗi tải tệp' }}</span>
+                          {{ t('library.reader.status') }}
+                          <span v-if="cand.reason === 'recaptcha_challenge_page'" style="color: #f59e0b;">{{ t('library.reader.recaptcha') }}</span>
+                          <span v-else-if="cand.reason === 'publisher_blocked'" style="color: #ef4444;">{{ t('library.reader.publisherBlocked') }}</span>
+                          <span v-else-if="cand.reason === 'preparing_download_page'" style="color: #f59e0b;">{{ t('library.reader.preparingDownload') }}</span>
+                          <span v-else-if="cand.reason === 'html_not_pdf'" style="color: #ef4444;">{{ t('library.reader.notPdf') }}</span>
+                          <span v-else style="color: #ef4444;">{{ cand.reason || t('library.reader.downloadError') }}</span>
                         </div>
                       </div>
                     </div>
@@ -113,19 +113,19 @@
                   <div style="display: flex; align-items: center; gap: 8px;">
                     <span v-if="hasValidOriginalFilePdf(source)" style="display: inline-flex; align-items: center; gap: 4px; color: #10b981;">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                      Đã lưu PDF trên Cloudinary
+                      {{ t('library.reader.savedCloudinary') }}
                     </span>
                     <span v-else-if="cacheStatus === 'failed'" style="display: inline-flex; align-items: center; gap: 4px; color: #ef4444;">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                      Không thể lưu tự động
+                      {{ t('library.reader.cannotAutoSave') }}
                     </span>
                     <span v-else-if="hasPdfCandidate" style="display: inline-flex; align-items: center; gap: 4px; color: #eab308;">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                      Chưa lưu PDF vào Cloudinary
+                      {{ t('library.reader.notSavedCloudinary') }}
                     </span>
                     <span v-else style="display: inline-flex; align-items: center; gap: 4px; color: #a3a3a3;">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                      Chưa lưu PDF vào Cloudinary
+                      {{ t('library.reader.notSavedCloudinary') }}
                     </span>
                   </div>
                   <div v-if="isModeratorUser && !hasValidOriginalFilePdf(source) && hasPdfCandidate" style="display: flex; gap: 8px;">
@@ -136,7 +136,7 @@
                       :disabled="isCachingPdf" 
                       @click="handleCacheOriginalPdf"
                     >
-                      {{ isCachingPdf ? 'Đang lưu PDF từ nguồn online...' : 'Lưu PDF gốc vào Cloudinary' }}
+                      {{ isCachingPdf ? t('library.reader.savingOnline') : t('library.reader.saveOnline') }}
                     </button>
                     <button 
                       v-else
@@ -145,7 +145,7 @@
                       :disabled="isCachingPdf" 
                       @click="handleCacheOriginalPdf"
                     >
-                      {{ isCachingPdf ? 'Đang lưu PDF từ nguồn online...' : 'Thử lại lưu PDF' }}
+                      {{ isCachingPdf ? t('library.reader.savingOnline') : t('library.reader.retrySave') }}
                     </button>
                   </div>
                 </div>
@@ -154,7 +154,7 @@
                 <div v-if="originalDocState.status === 'resolving'" class="original-loading">
                   <div class="skeleton-shimmer"></div>
                   <span v-if="!originalPdfBusyMessage" class="spinner"></span>
-                  <p v-if="!originalPdfBusyMessage">Đang tải tài liệu gốc...</p>
+                  <p v-if="!originalPdfBusyMessage">{{ t('library.reader.loadingOriginal') }}</p>
                 </div>
                 
                 <!-- State: pdf_inline_ready (Full height viewer) -->
@@ -165,8 +165,8 @@
                       <line x1="12" y1="16" x2="12" y2="12"></line>
                       <line x1="12" y1="8" x2="12.01" y2="8"></line>
                     </svg>
-                    <span>Một số liên kết trong PDF có thể làm trình xem nhúng bị điều hướng. Hãy mở PDF trong tab mới nếu cần tương tác với liên kết.</span>
-                    <button class="dismiss-guard-btn" @click="pdfIframeNavigationGuarded = false" title="Đóng">×</button>
+                    <span>{{ t('library.reader.iframeHint') }}</span>
+                    <button class="dismiss-guard-btn" @click="pdfIframeNavigationGuarded = false" :title="t('library.wizard.close')">×</button>
                   </div>
                   <iframe 
                     v-if="originalDocState.status === 'pdf_inline_ready'"
@@ -187,8 +187,8 @@
                       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
                     </svg>
                   </div>
-                  <h3>Nguồn sách học thuật</h3>
-                  <p>Nguồn sách này hiện chỉ có metadata. Chưa có bản đọc toàn văn.</p>
+                  <h3>{{ t('library.reader.bookSource') }}</h3>
+                  <p>{{ t('library.reader.metadataOnlyBook') }}</p>
                 </div>
 
                 <!-- State: Web/article URL source (normal article web pages) -->
@@ -200,12 +200,12 @@
                       <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
                     </svg>
                   </div>
-                  <h3>Liên kết nguồn bài viết</h3>
+                  <h3>{{ t('library.reader.articleSource') }}</h3>
                   <div class="web-source-details" style="margin-block: var(--space-3); text-align: left; width: 100%; max-width: 400px; font-size: 0.9rem; display: flex; flex-direction: column; gap: 8px;">
-                    <div v-if="source.title"><strong>Tiêu đề:</strong> {{ source.title }}</div>
+                    <div v-if="source.title"><strong>{{ t('library.labels.title') }}</strong> <span translate="no">{{ source.title }}</span></div>
                     <div v-if="originalDocState.sourceLabel"><strong>Trang web:</strong> {{ originalDocState.sourceLabel }}</div>
-                    <div v-if="originalDocState.sourceArticleUrl" style="word-break: break-all;"><strong>Địa chỉ URL:</strong> <a :href="originalDocState.sourceArticleUrl" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary, #60a5fa);">{{ originalDocState.sourceArticleUrl }}</a></div>
-                    <div><strong>Trạng thái bản đọc:</strong> {{ source.fullTextStatus === 'imported' ? 'Đã nhập bản đọc vào ứng dụng' : 'Chưa nhập bản đọc' }}</div>
+                    <div v-if="originalDocState.sourceArticleUrl" style="word-break: break-all;"><strong>{{ t('library.reader.address') }}</strong> <a :href="originalDocState.sourceArticleUrl" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary, #60a5fa);" translate="no">{{ originalDocState.sourceArticleUrl }}</a></div>
+                    <div><strong>{{ t('library.reader.readerStatus') }}</strong> {{ source.fullTextStatus === 'imported' ? t('library.reader.imported') : t('library.reader.notImported') }}</div>
                   </div>
                   <a 
                     v-if="originalDocState.sourceArticleUrl"
@@ -215,7 +215,7 @@
                     class="sidebar-action-btn sidebar-action-btn--primary"
                     style="text-align: center; display: block; width: 100%; max-width: 400px; text-decoration: none; margin-top: var(--space-2);"
                   >
-                    Mở bài viết gốc ↗
+                    {{ t('library.reader.openArticle') }}
                   </a>
                 </div>
 
@@ -227,8 +227,8 @@
                       <polyline points="14 2 14 8 20 8"></polyline>
                     </svg>
                   </div>
-                  <h3>PDF gốc đã sẵn sàng.</h3>
-                  <p>Dùng bảng thông tin bên phải để xem, tải hoặc mở PDF.</p>
+                  <h3>{{ t('library.reader.pdfReady') }}</h3>
+                  <p>{{ t('library.reader.pdfReadyHelp') }}</p>
                 </div>
                 
                 <div v-else-if="originalDocState.status === 'article_only' || originalDocState.status === 'metadata_only' || (cacheStatus === 'failed' && !hasValidOriginalFilePdf(source))" class="fallback-card">
@@ -241,9 +241,9 @@
                   </div>
                   
                   <template v-if="(cacheStatus === 'failed' && !hasValidOriginalFilePdf(source)) || originalDocState.status === 'article_only'">
-                    <h3>Không thể lưu PDF tự động</h3>
+                    <h3>{{ t('library.reader.cannotAutoSave') }}</h3>
                     <p style="color: var(--color-text-secondary, #a3a3a3); font-size: 0.9rem; margin-top: 8px; max-width: 550px; line-height: 1.5; text-align: center;">
-                      DreamScape đã thử các nguồn PDF hợp pháp nhưng máy chủ nguồn không trả về file PDF trực tiếp hoặc yêu cầu xác minh. Bạn vẫn có thể mở tài liệu bên ngoài, hoặc sau này upload PDF thủ công để lưu vào Cloudinary.
+                      {{ t('library.readerLocal.autoSaveExplanation') }}
                     </p>
                     
                     <!-- Action Buttons -->
@@ -260,9 +260,9 @@
                         :disabled="isUploadingPdf || isCachingPdf || isDeletingOriginalPdf"
                         @click="triggerManualUpload"
                       >
-                        {{ isUploadingPdf ? 'Đang tải PDF lên Cloudinary...' : 
-                           isCachingPdf ? 'Đang lấy PDF từ nguồn online...' :
-                           (hasValidOriginalFilePdf(source) ? 'Cập nhật PDF' : 'Tải PDF thủ công lên DreamScape') 
+                        {{ isUploadingPdf ? t('library.reader.uploadingCloudinary') :
+                           isCachingPdf ? t('library.reader.fetchingOnline') :
+                           (hasValidOriginalFilePdf(source) ? t('library.reader.updatePdf') : t('library.reader.manualUpload'))
                         }}
                       </button>
                       <button 
@@ -271,26 +271,26 @@
                         disabled 
                         style="width: 100%; justify-content: center; opacity: 0.5; cursor: not-allowed; margin-top: var(--space-2);"
                       >
-                        Upload PDF thủ công — sắp hỗ trợ
+                        {{ t('library.reader.uploadSoon') }}
                       </button>
                     </div>
 
                     <!-- Expandable Attempt Details -->
                     <div v-if="attemptedCandidates && attemptedCandidates.length > 0" style="margin-top: var(--space-4); width: 100%; max-width: 400px; text-align: left; background: var(--color-background-alt, #1c1c1c); border: 1px solid var(--color-border, #262626); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 0.8rem;">
                       <div @click="showAttemptedDetails = !showAttemptedDetails" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: var(--color-text-secondary, #a3a3a3);">
-                        <span>Chi tiết các nguồn đã thử ({{ attemptedCandidates.length }})</span>
+                        <span>{{ t('library.reader.attemptedSources', { count: attemptedCandidates.length }) }}</span>
                         <span>{{ showAttemptedDetails ? '▲' : '▼' }}</span>
                       </div>
                       <div v-if="showAttemptedDetails" style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto;">
                         <div v-for="(cand, idx) in attemptedCandidates" :key="idx" style="padding-bottom: 6px; border-bottom: 1px dashed var(--color-border, #262626); word-break: break-all;">
                           <div style="font-weight: 500; color: var(--color-text-secondary, #d4d4d4);">{{ getDisplaySourceLink(cand.url) }}</div>
                           <div style="font-size: 0.75rem; color: #a3a3a3; margin-top: 2px;">
-                            Trạng thái: 
-                            <span v-if="cand.reason === 'recaptcha_challenge_page'" style="color: #f59e0b;">reCAPTCHA / Cần xác minh</span>
-                            <span v-else-if="cand.reason === 'publisher_blocked'" style="color: #ef4444;">403 / Bị chặn bởi nhà xuất bản</span>
-                            <span v-else-if="cand.reason === 'preparing_download_page'" style="color: #f59e0b;">Trang chờ tải</span>
-                            <span v-else-if="cand.reason === 'html_not_pdf'" style="color: #ef4444;">Không phải tệp PDF</span>
-                            <span v-else style="color: #ef4444;">{{ cand.reason || 'Lỗi tải tệp' }}</span>
+                            {{ t('library.reader.status') }}
+                            <span v-if="cand.reason === 'recaptcha_challenge_page'" style="color: #f59e0b;">{{ t('library.reader.recaptcha') }}</span>
+                            <span v-else-if="cand.reason === 'publisher_blocked'" style="color: #ef4444;">{{ t('library.reader.publisherBlocked') }}</span>
+                            <span v-else-if="cand.reason === 'preparing_download_page'" style="color: #f59e0b;">{{ t('library.reader.preparingDownload') }}</span>
+                            <span v-else-if="cand.reason === 'html_not_pdf'" style="color: #ef4444;">{{ t('library.reader.notPdf') }}</span>
+                            <span v-else style="color: #ef4444;">{{ cand.reason || t('library.reader.downloadError') }}</span>
                           </div>
                         </div>
                       </div>
@@ -298,8 +298,8 @@
                   </template>
                   
                   <template v-else>
-                    <h3>Tài liệu này không có PDF gốc trong hệ thống.</h3>
-                    <p>Bạn có thể mở trang nguồn từ bảng thông tin bên phải.</p>
+                    <h3>{{ t('library.reader.noPdf') }}</h3>
+                    <p>{{ t('library.reader.noPdfHelp') }}</p>
                   </template>
                 </div>
                 
@@ -312,10 +312,10 @@
                       <line x1="12" y1="16" x2="12.01" y2="16"></line>
                     </svg>
                   </div>
-                  <h3>Không thể hiển thị PDF trực tiếp trong hệ thống.</h3>
-                  <p>DreamScape không thể hiển thị trực tiếp tài liệu do giới hạn bảo mật của nhà xuất bản. Bạn có thể mở liên kết gốc trực tiếp trong trình duyệt.</p>
+                  <h3>{{ t('library.reader.cannotInline') }}</h3>
+                  <p>{{ t('library.reader.cannotInlineHelp') }}</p>
                   <div v-if="originalDocState.error || originalDocState.reason" style="font-size: 0.8rem; color: #ed4956; background: rgba(237, 73, 86, 0.1); border: 1px solid rgba(237, 73, 86, 0.2); padding: 8px 12px; border-radius: var(--radius-sm); max-width: 400px; word-break: break-word; margin-top: var(--space-2);">
-                    Chi tiết: {{ originalDocState.error || originalDocState.reason }}
+                    {{ t('library.reader.detail') }} <span translate="no">{{ originalDocState.error || originalDocState.reason }}</span>
                   </div>
                   <a 
                     v-if="preferredExternalDocumentUrl"
@@ -334,11 +334,11 @@
               <template v-if="source.readableInApp && activeTab === 'smart'">
                 <!-- Reader Header Area (Title and Top Pagination) -->
                 <div class="reader-header-area">
-                  <h2 class="reader-title">{{ source.title || 'Tài liệu không có tiêu đề' }}</h2>
+                  <h2 class="reader-title" translate="no">{{ source.title || t('library.untitled') }}</h2>
                   
                   <div class="reader-source-badge-wrap" v-if="smartReaderSourceType">
                     <span :class="['reader-source-badge', getBadgeClass(smartReaderSourceType)]">
-                      Nguồn đọc: {{ getFriendlySourceType(smartReaderSourceType) }}
+                      {{ t('library.reader.readingSource', { source: getFriendlySourceType(smartReaderSourceType) }) }}
                     </span>
                   </div>
                   
@@ -351,7 +351,7 @@
                         size="sm" 
                         @click="goToPageIndex(currentPageIndex - 1)"
                       >
-                        ‹ Trang trước
+                        {{ t('library.pagination.previousPage') }}
                       </AppButton>
                     </div>
                     
@@ -366,7 +366,7 @@
                           :key="pIdx" 
                           :value="pIdx"
                         >
-                          Trang {{ pIdx + 1 }}
+                          {{ t('library.pagination.page', { page: pIdx + 1 }) }}
                         </option>
                       </select>
                       <div class="page-select-arrow" aria-hidden="true">
@@ -392,7 +392,7 @@
                         size="sm" 
                         @click="goToPageIndex(currentPageIndex + 1)"
                       >
-                        Trang sau ›
+                        {{ t('library.pagination.nextPage') }}
                       </AppButton>
                     </div>
                   </div>
@@ -402,9 +402,9 @@
                 <div v-if="(smartReaderSourceType === 'pdf_text' || smartReaderSourceType === 'uploaded_pdf_text' || extractionEngine === 'pymupdf_text' || extractionEngine === 'pdf_parse_fallback') && extractionQuality === 'low' && !isWarningBannerDismissed" class="reader-low-quality-warning-banner">
                   <div class="warning-banner-content">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-top: 2px; flex-shrink: 0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                    <span>Bản đọc thông minh có thể chưa giữ đúng cấu trúc gốc. Hãy xem Bản gốc hoặc tải PDF để đối chiếu.</span>
+                    <span>{{ t('library.reader.lowQuality') }}</span>
                   </div>
-                  <button class="dismiss-warning-btn" @click="dismissWarningBanner" title="Đóng cảnh báo">×</button>
+                  <button class="dismiss-warning-btn" @click="dismissWarningBanner" :title="t('library.reader.closeWarning')">×</button>
                 </div>
 
                 <!-- Warnings banner - Moderator/Admin only -->
@@ -412,7 +412,7 @@
                   <template v-for="(warning, wIdx) in readerWarnings" :key="wIdx">
                     <div v-if="!warning.includes('bố cục') && !warning.includes('cấu trúc') && !warning.includes('thứ tự')" class="warning-item">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-top: 2px; flex-shrink: 0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                      <span>{{ warning }}</span>
+                      <span translate="no">{{ warning }}</span>
                     </div>
                   </template>
                 </div>
@@ -420,13 +420,13 @@
                 <!-- Reader Content Loading state -->
                 <div v-if="isLoadingReader" class="reader-loading">
                   <span class="spinner"></span>
-                  <p>Đang tải toàn bộ nội dung...</p>
+                  <p>{{ t('library.reader.loadingContent') }}</p>
                 </div>
 
                 <!-- Reader Content Error state -->
                 <div v-else-if="readerError" class="reader-error">
                   <p>{{ readerError }}</p>
-                  <AppButton variant="secondary" size="sm" @click="handleRetryImport">Thử lại</AppButton>
+                  <AppButton variant="secondary" size="sm" @click="handleRetryImport">{{ t('library.retry') }}</AppButton>
                 </div>
 
                 <!-- Reader Reading Surface -->
@@ -447,15 +447,15 @@
                         v-if="(block.sectionType || block.type) === 'heading'" 
                         :class="['reader-heading-text', `reader-heading--level-${block.headingLevel || 2}`]"
                       >
-                        <span v-if="block.html" v-html="getInnerHtml(block.html)"></span>
-                        <span v-else>{{ block.text }}</span>
+                        <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else translate="no">{{ block.text }}</span>
                       </h3>
                       
                       <!-- list_item -->
                       <div v-else-if="block.sectionType === 'list_item'" class="reader-list-item">
                         <span class="list-marker">{{ block.marker || extractListMarker(block.text).marker }}</span>
-                        <span v-if="block.html" class="list-text" v-html="getInnerHtml(block.html)"></span>
-                        <span v-else class="list-text">{{ block.text }}</span>
+                        <span v-if="block.html" class="list-text" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else class="list-text" translate="no">{{ block.text }}</span>
                       </div>
                       
                       <!-- reference_item / reference -->
@@ -465,8 +465,8 @@
                       >
                         <p class="reference-card-text">
                           <span class="reference-number" v-if="block.refNumber">[{{ block.refNumber }}] </span>
-                          <span v-if="block.html" v-html="getInnerHtml(block.html)"></span>
-                          <span v-else>{{ block.text }}</span>
+                          <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
+                          <span v-else translate="no">{{ block.text }}</span>
                         </p>
                         
                         <div v-if="block.actions && block.actions.length > 0" class="reference-actions-row">
@@ -490,40 +490,40 @@
                       
                       <!-- caption -->
                       <p v-else-if="block.sectionType === 'caption'" class="reader-caption-text">
-                        <span v-if="block.html" v-html="getInnerHtml(block.html)"></span>
-                        <span v-else>{{ block.text }}</span>
+                        <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else translate="no">{{ block.text }}</span>
                       </p>
      
                       <!-- abstract -->
                       <div v-else-if="block.sectionType === 'abstract'" class="reader-abstract-box">
                         <p class="abstract-text">
-                          <strong>Abstract: </strong>
-                          <span v-if="block.html" v-html="getInnerHtml(block.html)"></span>
-                          <span v-else>{{ block.text }}</span>
+                          <strong>{{ t('library.reader.abstract') }} </strong>
+                          <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
+                          <span v-else translate="no">{{ block.text }}</span>
                         </p>
                       </div>
 
                       <!-- title -->
                       <h1 v-else-if="block.sectionType === 'title'" class="reader-title-text">
-                        <span v-if="block.html" v-html="getInnerHtml(block.html)"></span>
-                        <span v-else>{{ block.text }}</span>
+                        <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else translate="no">{{ block.text }}</span>
                       </h1>
 
                       <!-- figure / table block -->
                       <div v-else-if="block.type === 'figure' || block.sectionType === 'figure' || block.blockType === 'figure' || block.type === 'table' || block.sectionType === 'table' || block.blockType === 'table'">
-                        <div v-if="block.html" class="reader-rich-block" v-html="block.html"></div>
+                        <div v-if="block.html" class="reader-rich-block" v-html="block.html" translate="no"></div>
                         <div v-else class="reader-placeholder-card">
                           <div v-if="block.type === 'figure' || block.sectionType === 'figure' || block.blockType === 'figure'" class="figure-fallback">
-                            <p class="placeholder-error"><em>[Figure image unavailable]</em></p>
-                            <p class="placeholder-caption">{{ block.text }}</p>
+                            <p class="placeholder-error"><em>{{ t('library.reader.figureUnavailable') }}</em></p>
+                            <p class="placeholder-caption" translate="no">{{ block.text }}</p>
                           </div>
                           <div v-else class="table-fallback">
-                            <p class="placeholder-caption">{{ block.text }}</p>
-                            <p class="placeholder-error"><em>[Table data unavailable]</em></p>
+                            <p class="placeholder-caption" translate="no">{{ block.text }}</p>
+                            <p class="placeholder-error"><em>{{ t('library.reader.tableUnavailable') }}</em></p>
                           </div>
                           <div v-if="block.style?.doiUrl" class="placeholder-link-wrapper">
                             <a :href="block.style.doiUrl" target="_blank" rel="noopener noreferrer" class="placeholder-link">
-                              Xem chi tiết gốc (DOI) ↗
+                              {{ t('library.reader.viewDoi') }}
                             </a>
                           </div>
                         </div>
@@ -532,7 +532,7 @@
                       <!-- page_break -->
                       <div v-else-if="block.type === 'page_break'" class="reader-page-break">
                         <div class="page-break-divider"></div>
-                        <span class="page-break-text">{{ block.text || `Trang ${block.style?.pageIndex || block.page || ''}` }}</span>
+                        <span class="page-break-text" translate="no">{{ block.text || t('library.pagination.page', { page: block.style?.pageIndex || block.page || '' }) }}</span>
                         <div class="page-break-divider"></div>
                       </div>
 
@@ -571,8 +571,8 @@
 
                       <!-- acknowledgement_item -->
                       <p v-else-if="block.type === 'acknowledgement_item'" class="acknowledgement-paragraph">
-                        <span v-if="block.html" v-html="getInnerHtml(block.html)"></span>
-                        <span v-else>{{ block.text }}</span>
+                        <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else translate="no">{{ block.text }}</span>
                       </p>
 
                       <!-- correction_item -->
@@ -583,16 +583,16 @@
                             <line x1="12" y1="16" x2="12" y2="12"></line>
                             <line x1="12" y1="8" x2="12.01" y2="8"></line>
                           </svg>
-                          <span class="correction-badge">Thông báo đính chính / đính kèm</span>
+                          <span class="correction-badge">{{ t('library.reader.correction') }}</span>
                         </div>
-                        <p v-if="block.html" class="correction-text" v-html="getInnerHtml(block.html)"></p>
-                        <p v-else class="correction-text">{{ block.text }}</p>
+                        <p v-if="block.html" class="correction-text" v-html="getInnerHtml(block.html)" translate="no"></p>
+                        <p v-else class="correction-text" translate="no">{{ block.text }}</p>
                       </div>
                       
                       <!-- paragraph or other default -->
                       <p v-else class="reader-paragraph-text">
-                        <span v-if="block.html" v-html="getInnerHtml(block.html)"></span>
-                        <span v-else>{{ block.text }}</span>
+                        <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else translate="no">{{ block.text }}</span>
                       </p>
                     </div>
                   </div>
@@ -600,15 +600,15 @@
                   <!-- Collapsible metadata card -->
                   <div v-if="(readerMetadata && readerMetadata.length > 0) || (readerMetadataBlocks && readerMetadataBlocks.length > 0)" class="collapsible-metadata-card">
                     <button class="metadata-toggle-btn" @click="isMetadataCollapsed = !isMetadataCollapsed">
-                      <span class="btn-label">Thông tin xuất bản</span>
+                      <span class="btn-label">{{ t('library.labels.publication') }}</span>
                       <svg :class="['arrow-icon', { rotated: !isMetadataCollapsed }]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </button>
                     <div v-show="!isMetadataCollapsed" class="metadata-card-content">
                       <div v-if="readerMetadata && readerMetadata.length > 0" class="metadata-string-list">
-                        <p v-for="(meta, mIdx) in readerMetadata" :key="mIdx" class="metadata-item-text">{{ meta }}</p>
+                        <p v-for="(meta, mIdx) in readerMetadata" :key="mIdx" class="metadata-item-text" translate="no">{{ meta }}</p>
                       </div>
                       <div v-if="readerMetadataBlocks && readerMetadataBlocks.length > 0" class="metadata-blocks-list">
-                        <p v-for="(block, bIdx) in readerMetadataBlocks" :key="bIdx" class="metadata-item-text">{{ block.text }}</p>
+                        <p v-for="(block, bIdx) in readerMetadataBlocks" :key="bIdx" class="metadata-item-text" translate="no">{{ block.text }}</p>
                       </div>
                     </div>
                   </div>
@@ -622,7 +622,7 @@
                         size="sm" 
                         @click="goToPageIndex(currentPageIndex - 1)"
                       >
-                        ‹ Trang trước
+                        {{ t('library.pagination.previousPage') }}
                       </AppButton>
                     </div>
                     
@@ -637,7 +637,7 @@
                           :key="pIdx" 
                           :value="pIdx"
                         >
-                          Trang {{ pIdx + 1 }}
+                          {{ t('library.pagination.page', { page: pIdx + 1 }) }}
                         </option>
                       </select>
                       <div class="page-select-arrow" aria-hidden="true">
@@ -663,21 +663,21 @@
                         size="sm" 
                         @click="goToPageIndex(currentPageIndex + 1)"
                       >
-                        Trang sau ›
+                        {{ t('library.pagination.nextPage') }}
                       </AppButton>
                     </div>
                   </div>
                 </div>
 
                 <div v-else class="reader-error">
-                  <p>Tài liệu này không chứa dữ liệu văn bản.</p>
+                  <p>{{ t('library.reader.noText') }}</p>
                 </div>
               </template>
             </template>
 
             <!-- Case B: Source is NOT readable -> Show detail info and citation -->
             <div v-else class="detail-info-blocks">
-              <h2 class="source-title-inside">{{ source.title || 'Tài liệu không có tiêu đề' }}</h2>
+              <h2 class="source-title-inside" translate="no">{{ source.title || t('library.untitled') }}</h2>
               
               <!-- Reading Availability State Banner -->
               <div class="reading-state-box">
@@ -686,11 +686,11 @@
                   <span class="state-icon"></span>
                   <div class="state-message-wrap">
                     <p class="state-message">
-                      Có bản đọc hợp pháp, chờ nhập vào DreamScape. Bạn có thể sử dụng nút "Nhập bản đọc thông minh" ở thanh bên để nạp toàn văn tài liệu.
+                      {{ t('library.reader.importAvailable') }}
                     </p>
                     <div class="state-actions-row">
                       <a v-if="originalLink" :href="originalLink" target="_blank" rel="noopener noreferrer" class="link-btn">
-                        Xem tài liệu gốc ↗
+                        {{ t('library.viewOriginal') }}
                       </a>
                     </div>
                   </div>
@@ -701,12 +701,12 @@
                   <span class="state-icon"></span>
                   <div class="state-message-wrap">
                     <p class="state-message">
-                      Quá trình nhập bản đọc tự động thất bại. Bạn có thể thử lại bằng cách bấm "Nhập bản đọc thông minh" ở thanh bên.
-                      <span v-if="source.fullTextImportError" class="import-error-msg"><br/>Chi tiết: {{ source.fullTextImportError }}</span>
+                      {{ t('library.reader.importFailed') }}
+                      <span v-if="source.fullTextImportError" class="import-error-msg" translate="no"><br/>{{ t('library.reader.detail') }} {{ source.fullTextImportError }}</span>
                     </p>
                     <div class="state-actions-row">
                       <a v-if="originalLink" :href="originalLink" target="_blank" rel="noopener noreferrer" class="link-btn">
-                        Xem tài liệu gốc ↗
+                        {{ t('library.viewOriginal') }}
                       </a>
                     </div>
                   </div>
@@ -717,7 +717,7 @@
                   <span class="state-icon"></span>
                   <div class="state-message-wrap">
                     <p class="state-message">
-                      Tài liệu này hiện chỉ có thông tin trích dẫn. Nếu bạn là quản trị viên, hãy nhấp vào "Nhập bản đọc thông minh" ở thanh bên để thử tải tự động hoặc tải lên PDF thủ công.
+                      {{ t('library.reader.citationOnly') }}
                     </p>
                   </div>
                 </div>
@@ -732,34 +732,34 @@
       <!-- Right Column: Sidebar (Always shown on the right) -->
       <div :class="['workspace-right', { 'with-tabs': source.readableInApp }]">
         <div class="attributes-card">
-          <h3 class="card-title">Thuộc tính tài liệu</h3>
+          <h3 class="card-title">{{ t('library.system.documentProperties') }}</h3>
           
           <div class="meta-table">
             <div v-if="source.authors && source.authors.length > 0" class="attribute-row">
-              <span class="meta-key">Tác giả:</span>
-              <span class="attribute-value">{{ source.authors.join(', ') }}</span>
+              <span class="meta-key">{{ t('library.labels.authors') }}</span>
+              <span class="attribute-value" translate="no">{{ source.authors.join(', ') }}</span>
             </div>
             <div v-if="source.year" class="attribute-row">
-              <span class="meta-key">Năm xuất bản:</span>
+              <span class="meta-key">{{ t('library.labels.year') }}</span>
               <span class="attribute-value">{{ source.year }}</span>
             </div>
             <div v-if="source.journal" class="attribute-row">
-              <span class="meta-key">Nơi công bố:</span>
-              <span class="attribute-value">{{ source.journal }}</span>
+              <span class="meta-key">{{ t('library.labels.journal') }}</span>
+              <span class="attribute-value" translate="no">{{ source.journal }}</span>
             </div>
             <div v-if="source.metadata?.publisher || source.publisher" class="attribute-row">
-              <span class="meta-key">Nhà xuất bản:</span>
-              <span class="attribute-value">{{ source.metadata?.publisher || source.publisher }}</span>
+              <span class="meta-key">{{ t('library.labels.publisher') }}</span>
+              <span class="attribute-value" translate="no">{{ source.metadata?.publisher || source.publisher }}</span>
             </div>
             <div v-if="source.readableInApp && totalPages" class="attribute-row">
-              <span class="meta-key">Số trang:</span>
+              <span class="meta-key">{{ t('library.labels.pageCount') }}</span>
               <span class="attribute-value">{{ totalPages }}</span>
             </div>
             <div v-if="source.doi" class="attribute-row align-center">
-              <span class="meta-key">Mã định danh:</span>
+              <span class="meta-key">{{ t('library.labels.identifier') }}</span>
               <div class="meta-doi-wrapper">
-                <span class="attribute-value code-font">{{ displayDoi }}</span>
-                <button class="copy-doi-btn" @click="copyDoi" title="Sao chép DOI">
+                <span class="attribute-value code-font" translate="no">{{ displayDoi }}</span>
+                <button class="copy-doi-btn" @click="copyDoi" :title="t('library.system.copyDoi')">
                   <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -773,11 +773,11 @@
           <div v-if="isModeratorUser" class="sidebar-moderation-row" style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border, #262626);">
             <div v-if="source.readableInApp" class="moderation-tech-info" style="margin-bottom: var(--space-3); font-size: 0.85rem; line-height: 1.4;">
               <div class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">Trạng thái RAG:</span>
+                <span style="color: var(--color-text-muted);">{{ t('library.labels.ragStatus') }}</span>
                 <span :style="statusStyle" style="font-weight: 500;">{{ statusLabel }}</span>
               </div>
               <div v-if="source.chunkCount" class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">Số chunk:</span>
+                <span style="color: var(--color-text-muted);">{{ t('library.labels.chunkCount') }}</span>
                 <span>{{ source.chunkCount }}</span>
               </div>
               <div v-if="source.chunkEmbeddingModel" class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
@@ -789,11 +789,11 @@
                 <span style="font-family: monospace;">{{ extractionEngine }}</span>
               </div>
               <div v-if="layoutQuality" class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">Chất lượng layout:</span>
+                <span style="color: var(--color-text-muted);">{{ t('library.labels.layoutQuality') }}</span>
                 <span>{{ layoutQuality }}</span>
               </div>
               <div v-if="sourceUrlUsed" class="tech-row" style="display: flex; flex-direction: column; margin-bottom: var(--space-1); gap: 2px;">
-                <span style="color: var(--color-text-muted);">Nguồn URL sử dụng:</span>
+                <span style="color: var(--color-text-muted);">{{ t('library.labels.sourceUrl') }}</span>
                 <a :href="sourceUrlUsed" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary, #60a5fa); word-break: break-all; font-family: monospace; font-size: 0.75rem;">
                   {{ sourceUrlUsed }}
                 </a>
@@ -809,7 +809,7 @@
                 @click="handleModerationReject"
                 style="margin-bottom: 8px;"
               >
-                Từ chối
+                {{ t('library.system.reject') }}
               </AppButton>
 
               <AppButton
@@ -820,7 +820,7 @@
                 @click="handleModerationApprove"
                 style="margin-bottom: 8px;"
               >
-                Duyệt
+                {{ t('library.system.approve') }}
               </AppButton>
             </template>
 
@@ -832,12 +832,12 @@
               @click="showDebugActions = !showDebugActions"
               style="margin-bottom: 8px;"
             >
-              Công cụ kiểm thử
+              {{ t('library.system.testingTools') }}
             </AppButton>
 
             <div v-if="showDebugActions" class="reader-debug-actions">
               <div class="reader-build-comparison">
-                <div class="reader-build-comparison__title">Lần dựng bản đọc</div>
+                <div class="reader-build-comparison__title">{{ t('library.system.readerBuilds') }}</div>
                 <div v-if="latestStructuredBuild" :class="['reader-build-stat', { 'reader-build-stat--active': isStructuredReaderActive }]">
                   <span>DOI / HTML / XML</span>
                   <strong>{{ latestStructuredBuild.sectionCount }} section · {{ latestStructuredBuild.chunkCount }} chunk</strong>
@@ -847,26 +847,26 @@
                   <strong>{{ latestPdfBuild.sectionCount }} section · {{ latestPdfBuild.chunkCount }} chunk</strong>
                 </div>
                 <div v-if="!latestStructuredBuild && !latestPdfBuild" class="reader-build-comparison__empty">
-                  Chưa có lịch sử dựng để so sánh. Lần chạy tiếp theo sẽ được ghi lại.
+                  {{ t('library.system.noReaderHistory') }}
                 </div>
               </div>
 
               <div class="rule-analysis-summary">
-                <div class="reader-build-comparison__title">Lần phân tích luật</div>
-                <div v-if="ruleV3SummaryLoading" class="reader-build-comparison__empty">Đang tải kết quả…</div>
+                <div class="reader-build-comparison__title">{{ t('library.system.ruleRuns') }}</div>
+                <div v-if="ruleV3SummaryLoading" class="reader-build-comparison__empty">{{ t('library.system.loadingResults') }}</div>
                 <template v-else-if="ruleV3Summary">
                   <div v-if="ruleV3Summary.totalRuleCount > 0" class="rule-analysis-counts">
-                    <span class="rule-count rule-count--pending"><strong>{{ ruleV3Summary.counts.pending }}</strong> chờ duyệt</span>
-                    <span class="rule-count rule-count--approved"><strong>{{ ruleV3Summary.counts.verified }}</strong> đã duyệt</span>
-                    <span class="rule-count rule-count--rejected"><strong>{{ ruleV3Summary.counts.rejected }}</strong> từ chối</span>
+                    <span class="rule-count rule-count--pending"><strong>{{ ruleV3Summary.counts.pending }}</strong> {{ t('library.system.pending') }}</span>
+                    <span class="rule-count rule-count--approved"><strong>{{ ruleV3Summary.counts.verified }}</strong> {{ t('library.system.approved') }}</span>
+                    <span class="rule-count rule-count--rejected"><strong>{{ ruleV3Summary.counts.rejected }}</strong> {{ t('library.system.rejected') }}</span>
                   </div>
                   <dl v-if="ruleV3Summary.latestRun" class="rule-run-facts">
-                    <div><dt>Kết quả</dt><dd :class="`run-status--${ruleV3Summary.latestRun.status}`">{{ ruleRunStatusLabel }}</dd></div>
-                    <div><dt>Thời gian</dt><dd>{{ formattedRuleRunDuration }}</dd></div>
-                    <div><dt>Chunk được phân tích</dt><dd>{{ ruleV3Summary.latestRun.targetChunkCount ?? 'Chưa ghi nhận' }}</dd></div>
-                    <div><dt>Chunk thực sự làm dẫn chứng</dt><dd>{{ ruleV3Summary.latestRun.evidenceChunkCount }}</dd></div>
-                    <div><dt>Ứng viên tạo mới / gộp</dt><dd>{{ ruleV3Summary.latestRun.savedCandidateCount }} / {{ ruleV3Summary.latestRun.mergedCandidateCount }}</dd></div>
-                    <div><dt>Đề xuất bị loại</dt><dd>{{ ruleV3Summary.latestRun.rejectedCandidateCount }}</dd></div>
+                    <div><dt>{{ t('library.system.result') }}</dt><dd :class="`run-status--${ruleV3Summary.latestRun.status}`">{{ ruleRunStatusLabel }}</dd></div>
+                    <div><dt>{{ t('library.system.duration') }}</dt><dd>{{ formattedRuleRunDuration }}</dd></div>
+                    <div><dt>{{ t('library.system.analyzedChunks') }}</dt><dd>{{ ruleV3Summary.latestRun.targetChunkCount ?? t('library.statuses.unknown') }}</dd></div>
+                    <div><dt>{{ t('library.system.evidenceChunks') }}</dt><dd>{{ ruleV3Summary.latestRun.evidenceChunkCount }}</dd></div>
+                    <div><dt>{{ t('library.system.createdMerged') }}</dt><dd>{{ ruleV3Summary.latestRun.savedCandidateCount }} / {{ ruleV3Summary.latestRun.mergedCandidateCount }}</dd></div>
+                    <div><dt>{{ t('library.system.rejectedSuggestions') }}</dt><dd>{{ ruleV3Summary.latestRun.rejectedCandidateCount }}</dd></div>
                   </dl>
                   <button
                     v-if="ruleV3Summary.runHistory.length"
@@ -874,41 +874,41 @@
                     class="rule-history-toggle"
                     @click="showRuleRunHistory = !showRuleRunHistory"
                   >
-                    {{ showRuleRunHistory ? 'Ẩn lịch sử' : `Xem ${ruleV3Summary.runHistory.length} lần phân tích gần nhất` }}
+                    {{ showRuleRunHistory ? t('library.system.hideHistory') : t('library.system.viewRecentRuns', { count: ruleV3Summary.runHistory.length }) }}
                   </button>
                   <div v-if="showRuleRunHistory" class="rule-run-history">
                     <details v-for="(run, index) in ruleV3Summary.runHistory" :key="run.runId" class="rule-run-history__item">
                       <summary>
-                        <span>Lần {{ ruleV3Summary.runHistory.length - index }} · {{ formatRuleRunDate(run.startedAt) }}</span>
+                        <span>{{ t('library.system.runNumber', { number: ruleV3Summary.runHistory.length - index, date: formatRuleRunDate(run.startedAt) }) }}</span>
                         <strong :class="`run-status--${run.status}`">{{ ruleRunStatusText(run.status) }}</strong>
                       </summary>
                       <dl>
-                        <div><dt>Thời gian</dt><dd>{{ formatRuleDuration(run.durationMs) }}</dd></div>
-                        <div><dt>Tiến độ batch</dt><dd>{{ run.processedBatches }}/{{ run.totalBatches }}</dd></div>
-                        <div><dt>Kết luận thô / đạt kiểm chứng</dt><dd>{{ run.rawCandidateCount }} / {{ run.verifiedCandidateCount }}</dd></div>
-                        <div><dt>Tạo mới / gộp / loại</dt><dd>{{ run.savedCandidateCount }} / {{ run.mergedCandidateCount }} / {{ run.rejectedCandidateCount }}</dd></div>
-                        <div><dt>Chunk mục tiêu / làm dẫn chứng</dt><dd>{{ run.targetChunkCount ?? '—' }} / {{ run.evidenceChunkCount ?? '—' }}</dd></div>
-                        <div v-if="run.status === 'failed'"><dt>Lý do dừng</dt><dd>{{ ruleRunFailureText(run.sanitizedErrorCode) }}</dd></div>
+                        <div><dt>{{ t('library.system.duration') }}</dt><dd>{{ formatRuleDuration(run.durationMs) }}</dd></div>
+                        <div><dt>{{ t('library.system.batchProgress') }}</dt><dd>{{ run.processedBatches }}/{{ run.totalBatches }}</dd></div>
+                        <div><dt>{{ t('library.system.rawVerified') }}</dt><dd>{{ run.rawCandidateCount }} / {{ run.verifiedCandidateCount }}</dd></div>
+                        <div><dt>{{ t('library.system.createdMergedRejected') }}</dt><dd>{{ run.savedCandidateCount }} / {{ run.mergedCandidateCount }} / {{ run.rejectedCandidateCount }}</dd></div>
+                        <div><dt>{{ t('library.system.targetEvidenceChunks') }}</dt><dd>{{ run.targetChunkCount ?? '—' }} / {{ run.evidenceChunkCount ?? '—' }}</dd></div>
+                        <div v-if="run.status === 'failed'"><dt>{{ t('library.system.stopReason') }}</dt><dd>{{ ruleRunFailureText(run.sanitizedErrorCode) }}</dd></div>
                       </dl>
                       <div v-if="run.rejectionDiagnostics.length" class="rule-run-rejections">
-                        <strong>Vì sao quy luật đề xuất bị loại</strong>
+                        <strong>{{ t('library.system.rejectionReasons') }}</strong>
                         <ul>
                           <li v-for="(item, itemIndex) in run.rejectionDiagnostics" :key="`${item.batchId}-${itemIndex}`">
-                            <span>{{ item.safeMessage }}</span>
-                            <small v-if="item.proposedStatement">{{ item.proposedStatement }}</small>
-                            <small>Lô bằng chứng: {{ item.batchId }}</small>
+                            <span translate="no">{{ item.safeMessage }}</span>
+                            <small v-if="item.proposedStatement" translate="no">{{ item.proposedStatement }}</small>
+                            <small>{{ t('library.system.evidenceBatch', { id: item.batchId }) }}</small>
                           </li>
                         </ul>
                       </div>
                     </details>
                   </div>
-                  <div v-else class="reader-build-comparison__empty">Chưa có bản ghi lần chạy; chỉ hiển thị các quy luật đang liên kết với tài liệu.</div>
+                  <div v-else class="reader-build-comparison__empty">{{ t('library.system.noRunRecord') }}</div>
                   <button v-if="ruleV3Summary.totalRuleCount > 0" type="button" class="rule-summary-link" @click="openRuleCandidatesForSource">
-                    Xem các quy luật của tài liệu
+                    {{ t('library.system.viewRules') }}
                   </button>
-                  <div v-if="!ruleV3Summary.latestRun && ruleV3Summary.totalRuleCount === 0" class="reader-build-comparison__empty">Tài liệu chưa có lần phân tích Rule V3.</div>
+                  <div v-if="!ruleV3Summary.latestRun && ruleV3Summary.totalRuleCount === 0" class="reader-build-comparison__empty">{{ t('library.system.noRuleRun') }}</div>
                 </template>
-                <div v-else class="reader-build-comparison__empty">Không thể tải lịch sử phân tích Rule V3.</div>
+                <div v-else class="reader-build-comparison__empty">{{ t('library.system.ruleHistoryError') }}</div>
               </div>
 
               <AppButton
@@ -919,7 +919,7 @@
                 :loading="source.readableInApp ? isCurrentlyReimporting : isImporting"
                 @click="source.readableInApp ? promptReimport() : handleImport()"
               >
-                {{ source.readableInApp ? 'Nhập lại từ DOI / HTML / XML' : 'Nhập từ DOI / HTML / XML' }}
+                {{ source.readableInApp ? t('library.system.importAgainStructured') : t('library.system.importStructured') }}
               </AppButton>
 
               <AppButton
@@ -931,7 +931,7 @@
                 :loading="isCurrentlyProcessingPdf"
                 @click="triggerPdfIngestionFlow(false)"
               >
-                {{ source.readableInApp ? 'Tạo lại từ PDF (Docling)' : 'Tạo từ PDF (Docling)' }}
+                {{ source.readableInApp ? t('library.system.rebuildDocling') : t('library.system.buildDocling') }}
               </AppButton>
 
               <AppButton
@@ -943,7 +943,7 @@
                 :disabled="isCurrentlyExtractingV3"
                 @click="handleRuleV3Extraction"
               >
-                {{ isCurrentlyExtractingV3 ? 'Đang phân tích Rule V3…' : 'Phân tích Rule V3' }}
+                {{ isCurrentlyExtractingV3 ? t('library.system.analyzingRuleV3') : t('library.system.analyzeRuleV3') }}
               </AppButton>
 
             </div>
@@ -953,16 +953,16 @@
 
         <!-- Card: Tài liệu gốc -->
         <div class="attributes-card" style="margin-top: var(--space-4);">
-          <h3 class="card-title">Tài liệu gốc</h3>
+          <h3 class="card-title">{{ t('library.system.originalDocument') }}</h3>
           
           <div class="sidebar-pdf-section" style="display: flex; flex-direction: column; gap: var(--space-3); width: 100%;">
             <!-- Status Row -->
             <div class="status-row" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
-              <span style="color: var(--color-text-muted);">Trạng thái:</span>
+              <span style="color: var(--color-text-muted);">{{ t('library.labels.status') }}</span>
               <span 
                 :style="{
-                  color: originalDocStatusLabel === 'Đã lưu PDF trên Cloudinary' ? '#10b981' : 
-                         (originalDocStatusLabel === 'Không thể lưu tự động' || originalDocStatusLabel === 'Không có tài liệu gốc') ? '#ef4444' : '#eab308',
+                  color: originalDocStatusCode === 'saved' ? '#10b981' :
+                         (originalDocStatusCode === 'save_failed' || originalDocStatusCode === 'unavailable') ? '#ef4444' : '#eab308',
                   fontWeight: '600'
                 }"
               >
@@ -976,26 +976,26 @@
                 @click="downloadPdf"
                 class="sidebar-action-btn sidebar-action-btn--primary"
               >
-                Tải PDF
+                {{ t('library.system.downloadPdf') }}
               </button>
               
               <button 
                 @click="openPdfInNewTab"
                 class="sidebar-action-btn sidebar-action-btn--text"
               >
-                Mở PDF trong tab mới ↗
+                {{ t('library.system.openPdf') }}
               </button>
               
               <div v-if="source.originalFile?.originalFileName" class="source-link-row" style="font-size: 0.75rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-2); margin-top: 2px;">
-                <span>Tên tệp gốc: </span>
-                <span style="color: var(--color-text-secondary); word-break: break-all;">
+                <span>{{ t('library.labels.originalFileName') }} </span>
+                <span style="color: var(--color-text-secondary); word-break: break-all;" translate="no">
                   {{ source.originalFile.originalFileName }}
                 </span>
               </div>
             </template>
             
             <!-- Case 2: External PDF Link or PMC PDF download (not cached yet) -->
-            <template v-else-if="originalDocStatusLabel === 'Có link PDF ngoài' || originalDocStatusLabel === 'Không thể lưu tự động'">
+            <template v-else-if="originalDocStatusCode === 'external_pdf' || originalDocStatusCode === 'save_failed'">
               <a
                 v-if="preferredExternalDocumentUrl"
                 :href="preferredExternalDocumentUrl"
@@ -1009,7 +1009,7 @@
             </template>
             
             <!-- Case 3: External Article Source Page only -->
-            <template v-else-if="originalDocStatusLabel === 'Có trang nguồn'">
+            <template v-else-if="originalDocStatusCode === 'source_page'">
               <a 
                 v-if="externalArticleUrl"
                 :href="externalArticleUrl"
@@ -1018,14 +1018,14 @@
                 class="sidebar-action-btn sidebar-action-btn--primary"
                 style="text-align: center; display: block; text-decoration: none;"
               >
-                Mở trang nguồn ↗
+                {{ t('library.system.openSourcePage') }}
               </a>
             </template>
             
             <!-- Case 4: No document links available -->
             <template v-else>
               <p style="font-size: 0.75rem; color: var(--color-text-muted); margin: 0; line-height: 1.4; text-align: left;">
-                {{ isIsbnSource ? 'Hãy bổ sung bản đọc PDF cho sách này hoặc dùng nguồn công khai khác.' : 'Hãy upload PDF hoặc dùng nguồn công khai khác.' }}
+                {{ isIsbnSource ? t('library.readerLocal.isbnNoDocument') : t('library.readerLocal.noDocument') }}
               </p>
             </template>
             
@@ -1037,9 +1037,9 @@
                 :disabled="isUploadingPdf || isCachingPdf || isDeletingOriginalPdf"
                 @click="triggerManualUpload"
               >
-                {{ isUploadingPdf ? 'Đang tải PDF lên Cloudinary...' : 
-                   isCachingPdf ? 'Đang lấy PDF từ nguồn online...' :
-                   (hasValidOriginalFilePdf(source) ? 'Cập nhật PDF' : 'Tải PDF thủ công lên DreamScape') 
+                {{ isUploadingPdf ? t('library.reader.uploadingCloudinary') :
+                   isCachingPdf ? t('library.reader.fetchingOnline') :
+                   (hasValidOriginalFilePdf(source) ? t('library.reader.updatePdf') : t('library.reader.manualUpload'))
                 }}
               </button>
               
@@ -1051,14 +1051,14 @@
                 :disabled="isUploadingPdf || isCachingPdf || isDeletingOriginalPdf"
                 @click="showDeletePdfConfirm = true"
               >
-                {{ isDeletingOriginalPdf ? 'Đang xóa PDF...' : 'Xóa PDF đã lưu trên Cloudinary' }}
+                {{ isDeletingOriginalPdf ? t('library.readerLocal.deletingPdf') : t('library.readerLocal.deleteStoredPdf') }}
               </button>
             </div>
 
             <!-- Metadata Source Label Info -->
             <div v-if="originalDocState.sourceLabel" class="source-link-row" style="font-size: 0.75rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-2); margin-top: 2px;">
-              <span>Nguồn tài liệu: </span>
-              <span style="color: var(--color-text-secondary); word-break: break-all;">
+              <span>{{ t('library.labels.source') }} </span>
+              <span style="color: var(--color-text-secondary); word-break: break-all;" translate="no">
                 {{ originalDocState.sourceLabel }}
               </span>
             </div>
@@ -1069,10 +1069,10 @@
       <!-- PDF Regeneration confirmation dialog -->
       <AppConfirm
         v-model="showPdfRegenConfirm"
-        title="Dựng lại bản đọc từ PDF"
+        :title="t('library.confirm.rebuildPdfTitle')"
         :message="pdfRegenConfirmMessage"
-        confirm-label="Tiếp tục dựng"
-        cancel-label="Hủy"
+        :confirm-label="t('library.confirm.continueBuild')"
+        :cancel-label="t('library.confirm.cancel')"
         :danger="source.extractionMethod === 'jats' || source.extractionMethod === 'html'"
         :loading="isCurrentlyProcessingPdf"
         @confirm="handlePdfRegenConfirm"
@@ -1082,10 +1082,10 @@
       <!-- Re-import confirmation dialog -->
       <AppConfirm
         v-model="showReimportConfirm"
-        title="Dựng lại bản đọc từ DOI / HTML / XML"
-        message="Thao tác này sẽ lấy lại nội dung có cấu trúc và ghi đè bản đọc hiện tại. Nếu nguồn mới không nhập được, bản đọc đang có sẽ được giữ nguyên. Bạn có chắc chắn muốn tiếp tục?"
-        confirm-label="Tiếp tục dựng"
-        cancel-label="Hủy"
+        :title="t('library.confirm.rebuildStructuredTitle')"
+        :message="t('library.confirm.rebuildStructuredMessage')"
+        :confirm-label="t('library.confirm.continueBuild')"
+        :cancel-label="t('library.confirm.cancel')"
         :loading="isCurrentlyReimporting"
         @confirm="handleReimportConfirm"
         @cancel="showReimportConfirm = false"
@@ -1096,7 +1096,7 @@
         :title="ruleExtractionConfirmTitle"
         :message="ruleExtractionConfirmMessage"
         :confirm-label="ruleExtractionConfirmLabel"
-        cancel-label="Hủy"
+        :cancel-label="t('library.confirm.cancel')"
         :danger="(ruleV3Summary?.totalRuleCount || 0) > 0"
         :loading="isCurrentlyExtractingV3"
         @confirm="confirmRuleV3Extraction"
@@ -1106,10 +1106,10 @@
       <!-- Manual PDF Upload replacement confirmation -->
       <AppConfirm
         v-model="showUploadConfirm"
-        title="Thay thế PDF gốc"
-        message="Bạn muốn thay thế PDF đã lưu trên Cloudinary bằng file mới? Bản đọc thông minh sẽ không bị ảnh hưởng."
-        confirm-label="Tiếp tục"
-        cancel-label="Hủy"
+        :title="t('library.confirm.replacePdfTitle')"
+        :message="t('library.confirm.replacePdfMessage')"
+        :confirm-label="t('library.confirm.continue')"
+        :cancel-label="t('library.confirm.cancel')"
         @confirm="handleConfirmUpload"
         @cancel="showUploadConfirm = false"
       />
@@ -1117,10 +1117,10 @@
       <!-- Delete Original PDF confirmation -->
       <AppConfirm
         v-model="showDeletePdfConfirm"
-        title="Xóa PDF đã lưu?"
-        message="Bạn có chắc muốn xóa PDF đã lưu trên Cloudinary? Bản đọc thông minh, nội dung, hình ảnh, bảng và tài liệu nguồn sẽ không bị xóa."
-        confirm-label="Xóa PDF"
-        cancel-label="Hủy"
+        :title="t('library.confirm.deletePdfTitle')"
+        :message="t('library.confirm.deletePdfMessage')"
+        :confirm-label="t('library.confirm.deletePdf')"
+        :cancel-label="t('library.confirm.cancel')"
         :danger="true"
         :loading="isDeletingOriginalPdf"
         @confirm="handleDeleteOriginalPdf"
@@ -1142,34 +1142,34 @@
               <button
                 type="button"
                 class="app-confirm__close-btn"
-                aria-label="Đóng"
+                :aria-label="t('library.wizard.close')"
                 @click="showUpdateChoiceDialog = false"
               >
                 ×
               </button>
-              <h2 class="app-confirm__title">Cập nhật PDF gốc</h2>
-              <p class="app-confirm__message">Chọn cách cập nhật PDF gốc. Bản đọc thông minh sẽ không bị ảnh hưởng.</p>
+              <h2 class="app-confirm__title">{{ t('library.confirm.updatePdfTitle') }}</h2>
+              <p class="app-confirm__message">{{ t('library.confirm.updatePdfMessage') }}</p>
               <div class="app-confirm__actions" style="display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); width: 100%;">
                 <button
                   class="app-confirm__btn app-confirm__btn--confirm"
                   style="width: 100%; text-align: center; margin: 0;"
                   @click="handleChoiceUpload"
                 >
-                  Upload PDF thủ công
+                  {{ t('library.confirm.uploadManual') }}
                 </button>
                 <button
                   class="app-confirm__btn app-confirm__btn--confirm"
                   style="width: 100%; text-align: center; margin: 0;"
                   @click="handleChoiceOnline"
                 >
-                  Lấy PDF online
+                  {{ t('library.confirm.fetchOnline') }}
                 </button>
                 <button
                   class="app-confirm__btn app-confirm__btn--cancel"
                   style="width: 100%; text-align: center; margin: 0;"
                   @click="showUpdateChoiceDialog = false"
                 >
-                  Hủy
+                  {{ t('library.confirm.cancel') }}
                 </button>
               </div>
             </div>
@@ -1180,10 +1180,10 @@
       <!-- Online PDF update confirmation -->
       <AppConfirm
         v-model="showOnlineConfirm"
-        title="Lấy lại PDF từ nguồn online"
-        message="DreamScape sẽ thử tải lại PDF từ các nguồn hợp pháp và lưu lên Cloudinary. Nếu thất bại, PDF cũ vẫn được giữ nguyên."
-        confirm-label="Tiếp tục"
-        cancel-label="Hủy"
+        :title="t('library.confirm.fetchOnlineTitle')"
+        :message="t('library.confirm.fetchOnlineMessage')"
+        :confirm-label="t('library.confirm.continue')"
+        :cancel-label="t('library.confirm.cancel')"
         :loading="isCachingPdf"
         @confirm="handleOnlineCacheConfirm"
         @cancel="showOnlineConfirm = false"
@@ -1204,6 +1204,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { getApprovedSourceById, getApprovedSourceRead, getApprovedSourceOriginalDocument, getApprovedSourcePdfInline, cacheOriginalPdf, uploadApprovedSourcePdf, deleteApprovedSourceOriginalPdf } from '@/api/sourceApi'
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import { useSettingsStore } from '@/store/useSettingsStore'
@@ -1237,6 +1238,7 @@ const props = withDefaults(
 )
 
 const router = useRouter()
+const { t, locale } = useI18n({ useScope: 'global' })
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 const extractionStore = useExtractionStore()
@@ -1359,17 +1361,17 @@ function getLinkLabel(url: string, linkText?: string): string {
   const isFile = fileExtensions.some(ext => lowerUrl.endsWith('.' + ext) || lowerUrl.includes('.' + ext + '?') || lowerUrl.includes('.' + ext + '#') || lowerText.includes(ext));
   
   if (isFile) {
-    return 'Mở tệp';
+    return t('library.readerLocal.openFile');
   }
   
   if (lowerUrl.includes('download') || lowerText.includes('download') || lowerText.includes('tải xuống')) {
     const looksLikeDownload = lowerUrl.includes('/download/') || lowerUrl.includes('download=') || isFile;
     if (looksLikeDownload) {
-      return 'Tải xuống';
+      return t('library.readerLocal.download');
     }
   }
   
-  return 'Mở liên kết';
+  return t('library.readerLocal.openLink');
 }
 
 function extractUrlsAndFileTypes(item: any, text: string, html?: string) {
@@ -2092,36 +2094,44 @@ const hasPdfCandidate = computed(() => {
 })
 
 const originalPdfBusyMessage = computed(() => {
-  if (isUploadingPdf.value) return 'Đang tải PDF lên Cloudinary...'
-  if (isCachingPdf.value) return 'Đang lấy PDF từ nguồn online...'
-  if (isDeletingOriginalPdf.value) return 'Đang xóa PDF trên Cloudinary...'
-  if (originalDocState.value.status === 'resolving') return 'Đang mở PDF trong DreamScape...'
+  if (isUploadingPdf.value) return t('library.readerLocal.uploadingPdf')
+  if (isCachingPdf.value) return t('library.readerLocal.fetchingPdf')
+  if (isDeletingOriginalPdf.value) return t('library.readerLocal.deletingCloudinary')
+  if (originalDocState.value.status === 'resolving') return t('library.readerLocal.openingPdf')
   return ''
 })
 
-const originalDocStatusLabel = computed(() => {
-  if (!source.value) return 'Không có tài liệu gốc'
+const originalDocStatusCode = computed<'saved' | 'save_failed' | 'external_pdf' | 'source_page' | 'unavailable'>(() => {
+  if (!source.value) return 'unavailable'
   
   if (hasValidOriginalFilePdf(source.value)) {
-    return 'Đã lưu PDF trên Cloudinary'
+    return 'saved'
   }
   
   if (cacheStatus.value === 'failed') {
-    return 'Không thể lưu tự động'
+    return 'save_failed'
   }
   
   const pdfUrl = getOriginalPdfUrl(source.value)
   if (pdfUrl && pdfUrl.trim().startsWith('http')) {
-    return 'Có link PDF ngoài'
+    return 'external_pdf'
   }
   
   const articleUrl = source.value.url || source.value.htmlUrl || originalDocState.value.sourceArticleUrl
   if (articleUrl && articleUrl.trim().startsWith('http')) {
-    return 'Có trang nguồn'
+    return 'source_page'
   }
   
-  return 'Không có tài liệu gốc'
+  return 'unavailable'
 })
+
+const originalDocStatusLabel = computed(() => ({
+  saved: t('library.reader.savedCloudinary'),
+  save_failed: t('library.reader.cannotAutoSave'),
+  external_pdf: t('library.reader.externalPdf'),
+  source_page: t('library.reader.sourcePage'),
+  unavailable: t('library.reader.noOriginal')
+})[originalDocStatusCode.value])
 
 const pmcArticleUrl = computed(() => {
   const pmcId = getNormalizedPmcId(source.value)
@@ -2165,10 +2175,10 @@ const preferredExternalDocumentUrl = computed(() => {
 })
 
 const preferredExternalDocumentLabel = computed(() => {
-  if (wileyEpdfUrl.value) return 'Mở PDF tại Wiley'
-  if (externalPdfUrl.value || pmcPdfUrl.value) return 'Mở PDF tại nguồn'
-  if (pmcArticleUrl.value) return 'Mở bài viết trên PMC'
-  return 'Mở trang nguồn'
+  if (wileyEpdfUrl.value) return t('library.readerLocal.openWiley')
+  if (externalPdfUrl.value || pmcPdfUrl.value) return t('library.readerLocal.openAtSource')
+  if (pmcArticleUrl.value) return t('library.readerLocal.openPmc')
+  return t('library.readerLocal.openSource')
 })
 
 const iframeUrl = computed(() => {
@@ -2415,7 +2425,7 @@ async function loadInlinePdf() {
       res = await getApprovedSourceOriginalDocument(source.value._id)
       if (!res || !res.success) {
         originalDocState.value.status = 'failed'
-        originalDocState.value.error = res?.message || 'Không thể xác định tài liệu gốc.'
+        originalDocState.value.error = res?.message || t('library.readerLocal.cannotResolveOriginal')
         return
       }
       originalDocState.value.hasPdf = !!res.hasPdf
@@ -2435,16 +2445,16 @@ async function loadInlinePdf() {
           if (parsed && parsed.success === false) {
             if (parsed.code === 'SSRF_BLOCKED') {
               originalDocState.value.status = 'blocked'
-              originalDocState.value.reason = parsed.message || 'URL bị chặn bởi kiểm tra an toàn SSRF.'
+              originalDocState.value.reason = parsed.message || t('library.readerLocal.ssrfBlocked')
             } else {
               originalDocState.value.status = 'failed'
-              originalDocState.value.error = parsed.message || 'Lỗi khi tải tài liệu PDF.'
+              originalDocState.value.error = parsed.message || t('library.readerLocal.loadPdfError')
             }
             return
           }
         } catch {}
         originalDocState.value.status = 'failed'
-        originalDocState.value.error = 'Định dạng tệp tải về không phải PDF.'
+        originalDocState.value.error = t('library.readerLocal.downloadedNotPdf')
         return
       }
       cleanActiveBlobUrl()
@@ -2458,11 +2468,11 @@ async function loadInlinePdf() {
       originalDocState.value.status = 'metadata_only'
     } else {
       originalDocState.value.status = 'failed'
-      originalDocState.value.error = res.message || 'Không thể hiển thị PDF trong hệ thống.'
+      originalDocState.value.error = res.message || t('library.readerLocal.cannotInlinePdf')
     }
   } catch (e: any) {
     console.error('Error loading inline PDF:', e)
-    let errorMsg = e.message || 'Không thể tải tài liệu gốc.'
+    let errorMsg = e.message || t('library.readerLocal.loadOriginalError')
     let isSsrf = false
     if (e.response?.data) {
       try {
@@ -2527,7 +2537,7 @@ async function handleCacheOriginalPdf() {
       : await cacheOriginalPdf(source.value._id)
     attemptedCandidates.value = res.attemptedCandidates || []
     if (res.success && (res.status === 'cached' || res.status === 'already_cached')) {
-      settingsStore.showToast('Lưu PDF gốc vào Cloudinary thành công.', 'success')
+      settingsStore.showToast(t('library.readerLocal.cacheSuccess'), 'success')
       cacheStatus.value = 'success'
       // Refresh source details
       const id = resolvedSourceId.value
@@ -2541,13 +2551,13 @@ async function handleCacheOriginalPdf() {
       }
     } else {
       cacheStatus.value = 'failed'
-      cacheMessage.value = res.message || 'Không thể lưu PDF tự động.'
+      cacheMessage.value = res.message || t('library.readerLocal.autoSaveFailed')
       settingsStore.showToast(cacheMessage.value, 'error')
     }
   } catch (err: any) {
     console.error('Error caching original PDF:', err)
     cacheStatus.value = 'failed'
-    cacheMessage.value = err.response?.data?.message || err.message || 'Lỗi hệ thống khi lưu PDF.'
+    cacheMessage.value = err.response?.data?.message || err.message || t('library.readerLocal.cacheSystemError')
     if (err.response?.data?.attemptedCandidates) {
       attemptedCandidates.value = err.response.data.attemptedCandidates
     }
@@ -2599,7 +2609,7 @@ async function handleOnlineCacheConfirm() {
     attemptedCandidates.value = res.attemptedCandidates || []
     
     if (res.success && (res.status === 'recached' || res.status === 'cached')) {
-      settingsStore.showToast('Đã lấy và cập nhật PDF online.', 'success')
+      settingsStore.showToast(t('library.readerLocal.onlineUpdateSuccess'), 'success')
       showOnlineUpdateWarning.value = false
       
       const id = resolvedSourceId.value
@@ -2611,12 +2621,12 @@ async function handleOnlineCacheConfirm() {
         await loadInlinePdf()
       }
     } else if (res.success && res.status === 'already_cached') {
-      settingsStore.showToast('Backend chưa xử lý force:true đúng cách.', 'error')
+      settingsStore.showToast(t('library.readerLocal.forceUnsupported'), 'error')
     } else {
       onlineUpdateFailed.value = true
       showOnlineUpdateWarning.value = true
       cacheStatus.value = 'failed'
-      cacheMessage.value = res.message || 'Không thể lấy PDF online mới. PDF đang lưu trên Cloudinary vẫn được giữ nguyên.'
+      cacheMessage.value = res.message || t('library.readerLocal.onlineUpdateFailed')
       settingsStore.showToast(cacheMessage.value, 'error')
     }
   } catch (err: any) {
@@ -2624,7 +2634,7 @@ async function handleOnlineCacheConfirm() {
     onlineUpdateFailed.value = true
     showOnlineUpdateWarning.value = true
     cacheStatus.value = 'failed'
-    cacheMessage.value = err.response?.data?.message || err.message || 'Không thể lấy PDF online mới. PDF đang lưu trên Cloudinary vẫn được giữ nguyên.'
+    cacheMessage.value = err.response?.data?.message || err.message || t('library.readerLocal.onlineUpdateFailed')
     if (err.response?.data?.attemptedCandidates) {
       attemptedCandidates.value = err.response.data.attemptedCandidates
     }
@@ -2649,13 +2659,13 @@ function handleFileSelected(event: Event) {
   const isPdfSize = file.size <= PDF_MAX_FILE_SIZE_BYTES
 
   if (!isPdfExt || !isPdfMime) {
-    settingsStore.showToast('Tệp tải lên không phải là định dạng PDF hợp lệ.', 'error')
+    settingsStore.showToast(t('library.readerLocal.invalidPdf'), 'error')
     if (fileInputRef.value) fileInputRef.value.value = ''
     return
   }
 
   if (!isPdfSize) {
-    settingsStore.showToast(`Kích thước tệp vượt quá giới hạn cho phép (${PDF_MAX_FILE_SIZE_LABEL}).`, 'error')
+    settingsStore.showToast(t('library.readerLocal.pdfTooLarge', { maxSize: PDF_MAX_FILE_SIZE_LABEL }), 'error')
     if (fileInputRef.value) fileInputRef.value.value = ''
     return
   }
@@ -2673,7 +2683,7 @@ async function uploadOriginalPdfFile(file: File) {
       ? await uploadModerationSourcePdf(source.value._id, file)
       : await uploadApprovedSourcePdf(source.value._id, file)
     if (res.success) {
-      settingsStore.showToast(res.message || 'Tải lên tài liệu PDF gốc thành công.', 'success')
+      settingsStore.showToast(res.message || t('library.readerLocal.uploadSuccess'), 'success')
       const incomingSource = res.source || res.data?.source || res.data?.sourceContribution
       if (incomingSource) {
         // Merge: do not wipe reader state from a partial upload response
@@ -2700,11 +2710,11 @@ async function uploadOriginalPdfFile(file: File) {
         triggerPdfIngestionFlow(false)
       }
     } else {
-      settingsStore.showToast(res.message || 'Lỗi khi tải lên tệp PDF.', 'error')
+      settingsStore.showToast(res.message || t('library.readerLocal.uploadError'), 'error')
     }
   } catch (err: any) {
     console.error('Error uploading original PDF:', err)
-    const errMsg = err.response?.data?.message || err.message || 'Lỗi hệ thống khi tải lên tệp PDF.'
+    const errMsg = err.response?.data?.message || err.message || t('library.readerLocal.uploadSystemError')
     settingsStore.showToast(errMsg, 'error')
   } finally {
     isUploadingPdf.value = false
@@ -2722,7 +2732,7 @@ async function handleDeleteOriginalPdf() {
       ? await deleteModerationSourceOriginalPdf(source.value._id)
       : await deleteApprovedSourceOriginalPdf(source.value._id)
     if (res.success) {
-      settingsStore.showToast(res.message || 'Đã xóa PDF lưu trên Cloudinary.', 'success')
+      settingsStore.showToast(res.message || t('library.readerLocal.deleteSuccess'), 'success')
       
       // Update source data from response
       const newSource = res.source || res.data?.source || res.data?.sourceContribution
@@ -2788,11 +2798,11 @@ async function handleDeleteOriginalPdf() {
         }
       }
     } else {
-      settingsStore.showToast(res.message || 'Lỗi khi xóa PDF.', 'error')
+      settingsStore.showToast(res.message || t('library.readerLocal.deleteError'), 'error')
     }
   } catch (err: any) {
     console.error('Error deleting original PDF:', err)
-    const errMsg = err.response?.data?.message || err.message || 'Lỗi hệ thống khi xóa PDF.'
+    const errMsg = err.response?.data?.message || err.message || t('library.readerLocal.deleteSystemError')
     settingsStore.showToast(errMsg, 'error')
   } finally {
     isDeletingOriginalPdf.value = false
@@ -2815,7 +2825,7 @@ async function downloadPdf() {
     if (originalDocState.value.status === 'pdf_inline_ready' && activeBlobUrl) {
       blob = await (await fetch(activeBlobUrl)).blob()
     } else {
-      settingsStore.showToast('Đang tải PDF về máy...', 'success')
+      settingsStore.showToast(t('library.readerLocal.downloading'), 'success')
       blob = props.mode === 'moderation'
         ? await getModerationSourcePdfInline(source.value._id)
         : await getApprovedSourcePdfInline(source.value._id)
@@ -2826,11 +2836,11 @@ async function downloadPdf() {
       try {
         const parsed = JSON.parse(text)
         if (parsed && parsed.success === false) {
-          settingsStore.showToast(parsed.message || 'Lỗi khi tải tài liệu PDF.', 'error')
+          settingsStore.showToast(parsed.message || t('library.readerLocal.loadPdfError'), 'error')
           return
         }
       } catch {}
-      settingsStore.showToast('Định dạng tệp không phải PDF.', 'error')
+      settingsStore.showToast(t('library.readerLocal.notPdf'), 'error')
       return
     }
     
@@ -2844,7 +2854,7 @@ async function downloadPdf() {
     URL.revokeObjectURL(url)
   } catch (err: any) {
     console.error('Error downloading PDF:', err)
-    settingsStore.showToast('Không thể tải PDF về máy.', 'error')
+    settingsStore.showToast(t('library.readerLocal.downloadFailed'), 'error')
   }
 }
 
@@ -2861,7 +2871,7 @@ async function openPdfInNewTab() {
     if (originalDocState.value.status === 'pdf_inline_ready' && originalDocState.value.pdfViewUrl) {
       url = originalDocState.value.pdfViewUrl
     } else {
-      settingsStore.showToast('Đang mở PDF...', 'success')
+      settingsStore.showToast(t('library.readerLocal.opening'), 'success')
       const blob = props.mode === 'moderation'
         ? await getModerationSourcePdfInline(source.value._id)
         : await getApprovedSourcePdfInline(source.value._id)
@@ -2870,12 +2880,12 @@ async function openPdfInNewTab() {
         try {
           const parsed = JSON.parse(text)
           if (parsed && parsed.success === false) {
-            settingsStore.showToast(parsed.message || 'Lỗi khi tải tài liệu PDF.', 'error')
+            settingsStore.showToast(parsed.message || t('library.readerLocal.loadPdfError'), 'error')
             previewWindow?.close()
             return
           }
         } catch {}
-        settingsStore.showToast('Định dạng tệp không phải PDF.', 'error')
+        settingsStore.showToast(t('library.readerLocal.notPdf'), 'error')
         previewWindow?.close()
         return
       }
@@ -2890,7 +2900,7 @@ async function openPdfInNewTab() {
   } catch (err: any) {
     previewWindow?.close()
     console.error('Error opening PDF in new tab:', err)
-    settingsStore.showToast('Không thể mở PDF trong tab mới.', 'error')
+    settingsStore.showToast(t('library.readerLocal.openFailed'), 'error')
   }
 }
 
@@ -3146,11 +3156,11 @@ function extractListMarker(text: string) {
 function getFriendlySourceType(type: string): string {
   switch (type) {
     case 'jats_xml': return 'JATS/XML'
-    case 'publisher_html': return 'HTML nhà xuất bản'
-    case 'sanitized_html': return 'HTML trang web'
+    case 'publisher_html': return t('library.reader.publisherHtml')
+    case 'sanitized_html': return t('library.reader.websiteHtml')
     case 'pdf_text':
-    case 'uploaded_pdf_text': return 'PDF parser'
-    default: return 'PDF parser'
+    case 'uploaded_pdf_text': return t('library.reader.pdfParser')
+    default: return t('library.reader.pdfParser')
   }
 }
 
@@ -3191,7 +3201,7 @@ async function fetchAllReaderData() {
       let data = await getApprovedSourceRead(source.value._id, page, 50)
       if (!data || !data.sections || data.sections.length === 0) {
         if (page === 1) {
-          readerError.value = 'Tài liệu này không chứa dữ liệu văn bản.'
+          readerError.value = t('library.readerLocal.noReaderText')
           return
         }
         break
@@ -3215,7 +3225,7 @@ async function fetchAllReaderData() {
     }
     
     if (allSections.length === 0) {
-      readerError.value = 'Tài liệu này không chứa dữ liệu văn bản.'
+      readerError.value = t('library.readerLocal.noReaderText')
       return
     }
     
@@ -3243,7 +3253,7 @@ async function fetchAllReaderData() {
     }
     currentPageIndex.value = pageIdx
   } catch (err: any) {
-    readerError.value = err.response?.data?.message || err.message || 'Không thể tải nội dung bản đọc.'
+    readerError.value = err.response?.data?.message || err.message || t('library.readerLocal.readerLoadFailed')
   } finally {
     isLoadingReader.value = false
   }
@@ -3288,15 +3298,15 @@ async function copyDoi() {
   const doi = displayDoi.value
   if (doi) {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
-      settingsStore.showToast('Không thể sao chép DOI, vui lòng thử thủ công.', 'error')
+      settingsStore.showToast(t('library.readerLocal.copyDoiFailed'), 'error')
       return
     }
     try {
       await navigator.clipboard.writeText(doi)
-      settingsStore.showToast('Đã sao chép DOI.', 'success')
+      settingsStore.showToast(t('library.readerLocal.copyDoiSuccess'), 'success')
     } catch (err) {
       console.error('Failed to copy DOI:', err)
-      settingsStore.showToast('Không thể sao chép DOI, vui lòng thử thủ công.', 'error')
+      settingsStore.showToast(t('library.readerLocal.copyDoiFailed'), 'error')
     }
   }
 }
@@ -3317,66 +3327,66 @@ const ruleV3Summary = ref<RuleV3SourceAnalysisSummary | null>(null)
 const ruleV3SummaryLoading = ref(false)
 const showRuleRunHistory = ref(false)
 const ruleRunStatusLabel = computed(() => ({
-  pending: 'Đang chạy',
-  success: 'Hoàn thành',
-  failed: 'Thất bại'
-} as Record<string, string>)[ruleV3Summary.value?.latestRun?.status || ''] || 'Chưa xác định')
+  pending: t('library.statuses.running'),
+  success: t('library.statuses.complete'),
+  failed: t('library.statuses.failed')
+} as Record<string, string>)[ruleV3Summary.value?.latestRun?.status || ''] || t('library.statuses.unknown'))
 
 const formattedRuleRunDuration = computed(() => {
   const durationMs = ruleV3Summary.value?.latestRun?.durationMs
-  if (durationMs == null) return ruleV3Summary.value?.latestRun?.status === 'pending' ? 'Đang tính' : 'Chưa xác định'
+  if (durationMs == null) return ruleV3Summary.value?.latestRun?.status === 'pending' ? t('library.statuses.calculating') : t('library.statuses.unknown')
   return formatRuleDuration(durationMs)
 })
 
 function formatRuleDuration(durationMs: number | null) {
-  if (durationMs == null) return 'Chưa xác định'
+  if (durationMs == null) return t('library.statuses.unknown')
   const seconds = Math.round(durationMs / 1000)
-  if (seconds < 60) return `${seconds} giây`
+  if (seconds < 60) return t('library.time.seconds', { count: seconds })
   const minutes = Math.floor(seconds / 60)
   const remaining = seconds % 60
-  return remaining ? `${minutes} phút ${remaining} giây` : `${minutes} phút`
+  return remaining ? t('library.time.minutesSeconds', { minutes, seconds: remaining }) : t('library.time.minutes', { count: minutes })
 }
 
 function formatRuleRunDate(value: string) {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'Chưa xác định' : date.toLocaleString('vi-VN')
+  return Number.isNaN(date.getTime()) ? t('library.statuses.unknown') : new Intl.DateTimeFormat(locale.value === 'en' ? 'en-US' : 'vi-VN', { dateStyle: 'short', timeStyle: 'medium' }).format(date)
 }
 
 function ruleRunStatusText(status: string) {
-  return ({ pending: 'Đang chạy', success: 'Hoàn thành', failed: 'Thất bại' } as Record<string, string>)[status] || status
+  return ({ pending: t('library.statuses.running'), success: t('library.statuses.complete'), failed: t('library.statuses.failed') } as Record<string, string>)[status] || status
 }
 
 function ruleRunFailureText(code: string | null) {
   return ({
-    all_verified_candidates_rejected: 'Quy luật đã kiểm chứng không đáp ứng hợp đồng lưu trữ',
-    replacement_persistence_incomplete: 'Bộ thay thế lưu không đầy đủ; kết quả cũ đã được khôi phục',
-    provider_unavailable: 'Mô hình trích xuất không khả dụng',
-    provider_timeout: 'Mô hình phản hồi quá thời gian',
-    provider_schema_invalid: 'Mô hình trả về sai cấu trúc',
-    input_too_large: 'Lô văn bản vượt giới hạn an toàn',
-    extraction_failed: 'Lỗi hệ thống trong quá trình trích xuất'
-  } as Record<string, string>)[code || ''] || 'Chưa có mô tả an toàn cho lỗi này'
+    all_verified_candidates_rejected: t('library.rule.failure.rejected'),
+    replacement_persistence_incomplete: t('library.rule.failure.incomplete'),
+    provider_unavailable: t('library.rule.failure.unavailable'),
+    provider_timeout: t('library.rule.failure.timeout'),
+    provider_schema_invalid: t('library.rule.failure.invalid'),
+    input_too_large: t('library.rule.failure.tooLarge'),
+    extraction_failed: t('library.rule.failure.generic')
+  } as Record<string, string>)[code || ''] || t('library.rule.failure.unknown')
 }
 
 const ruleExtractionConfirmMessage = computed(() => {
   const total = ruleV3Summary.value?.totalRuleCount || 0
   const hasPriorRun = Boolean(ruleV3Summary.value?.latestRun)
   if (!hasPriorRun) {
-    return 'Hệ thống sẽ phân tích toàn bộ phần nội dung phù hợp và tạo các quy luật có dẫn chứng được đối chiếu với bản đọc.'
+    return t('library.rule.firstMessage')
   }
   if (total === 0) {
-    return 'Tài liệu đã từng được phân tích nhưng hiện chưa có quy luật nào. Hệ thống sẽ chạy lại toàn bộ phần nội dung phù hợp; không có dữ liệu quy luật nào cần xóa.'
+    return t('library.rule.rerunEmptyMessage')
   }
-  return `Tài liệu hiện có ${total} quy luật ở mọi trạng thái. Khi tiếp tục, toàn bộ dẫn chứng và kết quả Rule V3 do tài liệu này đóng góp sẽ được thay thế bằng lần phân tích mới. Quy luật còn được tài liệu khác hỗ trợ vẫn được giữ lại.`
+  return t('library.rule.replaceMessage', { total })
 })
 
 const ruleExtractionConfirmTitle = computed(() =>
-  ruleV3Summary.value?.latestRun ? 'Phân tích lại Rule V3' : 'Phân tích Rule V3'
+  ruleV3Summary.value?.latestRun ? t('library.rule.reanalyzeTitle') : t('library.rule.analyzeTitle')
 )
 
 const ruleExtractionConfirmLabel = computed(() => {
-  if ((ruleV3Summary.value?.totalRuleCount || 0) > 0) return 'Xóa kết quả cũ và phân tích lại'
-  return ruleV3Summary.value?.latestRun ? 'Phân tích lại' : 'Bắt đầu phân tích'
+  if ((ruleV3Summary.value?.totalRuleCount || 0) > 0) return t('library.rule.replace')
+  return ruleV3Summary.value?.latestRun ? t('library.rule.reanalyze') : t('library.rule.start')
 })
 
 async function loadRuleV3Summary() {
@@ -3412,7 +3422,7 @@ async function confirmRuleV3Extraction() {
     : null
   await extractionStore.startExtraction(
     source.value._id,
-    source.value.title || 'Tài liệu học thuật',
+    source.value.title || t('library.readerLocal.academicDocument'),
     Boolean(latestRun),
     historicalSecondsPerBatch
   )
@@ -3460,7 +3470,7 @@ async function handleImport() {
       const sourceProgressStore = useSourceProgressStore()
       await sourceProgressStore.startStructuredReader(
         source.value._id,
-        source.value.title || 'Tài liệu học thuật',
+        source.value.title || t('library.readerLocal.academicDocument'),
         false
       )
     } finally {
@@ -3489,7 +3499,7 @@ async function handleReimportConfirm() {
     const sourceProgressStore = useSourceProgressStore()
     await sourceProgressStore.startStructuredReader(
       currentSource._id,
-      currentSource.title || 'Tài liệu học thuật',
+      currentSource.title || t('library.readerLocal.academicDocument'),
       true
     )
     await fetchSource()
@@ -3505,9 +3515,9 @@ const pdfRegenConfirmMessage = computed(() => {
   if (!source.value) return ''
   const isJatsOrHtml = source.value.extractionMethod === 'jats' || source.value.extractionMethod === 'html'
   if (isJatsOrHtml) {
-    return 'Cảnh báo: Bản đọc hiện tại được dựng từ định dạng có cấu trúc chất lượng cao (JATS XML/HTML). Việc dựng lại bản đọc từ PDF có thể làm giảm chất lượng cấu trúc và mất một số định dạng gốc. Bạn có chắc chắn muốn tiếp tục?'
+    return t('library.rule.structuredWarning')
   }
-  return 'Thao tác này sẽ dựng lại bản đọc thông minh từ file PDF gốc hiện tại. Các chương mục, phân đoạn và chunks cũ sẽ được ghi đè. Bạn có chắc chắn muốn tiếp tục?'
+  return t('library.rule.rebuildPdfMessage')
 })
 
 function triggerPdfIngestionFlow(force = false) {
@@ -3531,13 +3541,13 @@ async function runPdfIngestion(force = false) {
 
     await sourceProgressStore.startPdfOnlyPipeline(
       source.value._id,
-      source.value.title || 'Tài liệu học thuật',
+      source.value.title || t('library.readerLocal.academicDocument'),
       targetType,
       force
     )
   } catch (err: any) {
     console.error('PDF ingestion failed:', err)
-    settingsStore.showToast(err.message || 'Lỗi khi xử lý tệp PDF.', 'error')
+    settingsStore.showToast(err.message || t('library.readerLocal.processPdfError'), 'error')
   } finally {
     isCurrentlyProcessingPdf.value = false
     await fetchSource()
@@ -3557,13 +3567,13 @@ async function handleModerationApprove() {
   try {
     const res = await reviewSource(source.value._id, { reviewStatus: 'approved' })
     if (res.success) {
-      settingsStore.showToast('Phê duyệt tài liệu thành công.', 'success')
+      settingsStore.showToast(t('library.readerLocal.approveSuccess'), 'success')
       router.push(props.backUrl)
     } else {
-      settingsStore.showToast(res.message || 'Phê duyệt thất bại.', 'error')
+      settingsStore.showToast(res.message || t('library.readerLocal.approveFailed'), 'error')
     }
   } catch (err: any) {
-    const msg = err.response?.data?.message || err.message || 'Có lỗi xảy ra khi phê duyệt.'
+    const msg = err.response?.data?.message || err.message || t('library.readerLocal.approveError')
     settingsStore.showToast(msg, 'error')
   } finally {
     isReviewing.value = false
@@ -3576,13 +3586,13 @@ async function handleModerationReject() {
   try {
     const res = await reviewSource(source.value._id, { reviewStatus: 'rejected' })
     if (res.success) {
-      settingsStore.showToast('Từ chối tài liệu thành công.', 'success')
+      settingsStore.showToast(t('library.readerLocal.rejectSuccess'), 'success')
       router.push(props.backUrl)
     } else {
-      settingsStore.showToast(res.message || 'Từ chối thất bại.', 'error')
+      settingsStore.showToast(res.message || t('library.readerLocal.rejectFailed'), 'error')
     }
   } catch (err: any) {
-    const msg = err.response?.data?.message || err.message || 'Có lỗi xảy ra khi từ chối.'
+    const msg = err.response?.data?.message || err.message || t('library.readerLocal.rejectError')
     settingsStore.showToast(msg, 'error')
   } finally {
     isReviewing.value = false
@@ -3590,12 +3600,12 @@ async function handleModerationReject() {
 }
 
 const statusLabel = computed(() => {
-  if (!source.value) return 'Chưa tạo'
+  if (!source.value) return t('library.statuses.notCreated')
   switch (source.value.chunkBuildStatus) {
-    case 'completed': return 'Đã xây dựng'
-    case 'failed': return 'Thất bại'
-    case 'building': return 'Đang xây dựng'
-    default: return 'Chưa tạo'
+    case 'completed': return t('library.statuses.built')
+    case 'failed': return t('library.statuses.failed')
+    case 'building': return t('library.statuses.building')
+    default: return t('library.statuses.notCreated')
   }
 })
 
@@ -3682,7 +3692,7 @@ async function fetchSource() {
             readerMetadataBlocks.value = processed.metadataBlocks
             updateTableSizingClasses()
           } else {
-            readerError.value = 'Tài liệu này không chứa dữ liệu văn bản.'
+          readerError.value = t('library.readerLocal.noReaderText')
           }
         } else if (source.value && getOriginalPdfUrl(source.value)) {
           activeTab.value = 'original'
@@ -3706,7 +3716,7 @@ async function fetchSource() {
     if (source.value) await loadRuleV3Summary()
   } catch (err: any) {
     hasError.value = true
-    const errMsg = err.response?.data?.message || err.message || 'Không thể tải thông tin tài liệu.'
+    const errMsg = err.response?.data?.message || err.message || t('library.readerLocal.sourceLoadFailed')
     settingsStore.showToast(errMsg, 'error')
   } finally {
     isLoading.value = false

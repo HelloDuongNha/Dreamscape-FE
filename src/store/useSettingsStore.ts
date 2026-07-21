@@ -4,8 +4,12 @@ import apiClient       from '@/api/client'
 
 export type ToastType = 'success' | 'error'
 
+export type ToastContent =
+  | { kind: 'key'; key: string; params?: Record<string, string | number> }
+  | { kind: 'text'; text: string }
+
 interface Toast {
-  message: string
+  content: ToastContent
   type:    ToastType
   visible: boolean
 }
@@ -42,36 +46,46 @@ export const useSettingsStore = defineStore('settings', () => {
       const { data } = await apiClient.delete(`/auth/sessions/${id}`)
       if (data.success) {
         sessions.value = sessions.value.filter(s => s._id !== id)
-        showToast('Device logged out successfully.', 'success')
+        showToastKey('toasts.sessionLoggedOutSuccess', undefined, 'success')
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to log out device.'
-      showToast(msg, 'error')
+      const msg = err.response?.data?.message
+      if (msg) {
+        showToast(msg, 'error')
+      } else {
+        showToastKey('errors.logoutDeviceFailed', undefined, 'error')
+      }
     }
   }
 
   // ── Toast notification ────────────────────────────────────────
-  const toast = ref<Toast>({ message: '', type: 'success', visible: false })
+  const toast = ref<Toast>({ content: { kind: 'text', text: '' }, type: 'success', visible: false })
   let toastTimer: ReturnType<typeof setTimeout> | null = null
 
   function showToast(message: string, type: ToastType = 'success') {
     if (toastTimer) clearTimeout(toastTimer)
-    toast.value = { message, type, visible: true }
+    toast.value = { content: { kind: 'text', text: message }, type, visible: true }
+    toastTimer = setTimeout(() => { toast.value.visible = false }, 3500)
+  }
+
+  function showToastKey(key: string, params?: Record<string, string | number>, type: ToastType = 'success') {
+    if (toastTimer) clearTimeout(toastTimer)
+    toast.value = { content: { kind: 'key', key, params }, type, visible: true }
     toastTimer = setTimeout(() => { toast.value.visible = false }, 3500)
   }
 
   // ── Password change ───────────────────────────────────────────
   function changePassword(current: string, next: string, confirm: string): void {
     if (!current || !next || !confirm) {
-      showToast('Please fill in all password fields.', 'error'); return
+      showToastKey('toasts.passwordFieldsEmptyToast', undefined, 'error'); return
     }
     if (next.length < 8) {
-      showToast('New password must be at least 8 characters.', 'error'); return
+      showToastKey('errors.pwLengthError', undefined, 'error'); return
     }
     if (next !== confirm) {
-      showToast('Passwords do not match.', 'error'); return
+      showToastKey('errors.pwMatchError', undefined, 'error'); return
     }
-    showToast('Password updated successfully.', 'success')
+    showToastKey('toasts.passwordUpdatedSuccess', undefined, 'success')
   }
 
   // ── Email update ──────────────────────────────────────────────
@@ -80,11 +94,11 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function updateEmail(newEmail: string) {
     if (!newEmail.includes('@')) {
-      showToast('Please enter a valid email address.', 'error'); return
+      showToastKey('errors.emailInvalidError', undefined, 'error'); return
     }
     email.value    = newEmail
     verified.value = false   // reset verification on change
-    showToast('Email updated. Please verify your new address.', 'success')
+    showToastKey('toasts.emailUpdatedToast', undefined, 'success')
   }
 
   return {
@@ -94,6 +108,7 @@ export const useSettingsStore = defineStore('settings', () => {
     logoutSession,
     toast,
     showToast,
+    showToastKey,
     changePassword,
     email,
     verified,

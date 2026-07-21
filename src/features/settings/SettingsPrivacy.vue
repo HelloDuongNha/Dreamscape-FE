@@ -1,27 +1,27 @@
 <template>
   <div class="settings-section">
-    <h2 class="settings-section__title">Privacy</h2>
-    <p class="settings-section__desc">Control who can see your dreams and interact with your profile.</p>
+    <h2 class="settings-section__title">{{ t('settings.privacyTitle') }}</h2>
+    <p class="settings-section__desc">{{ t('settings.privacySubtitle') }}</p>
 
     <!-- ── Default Dream Visibility ── -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Default Dream Visibility</h3>
-        <p class="settings-block__hint">New dreams will use this setting unless overridden in the composer. Changes are saved automatically.</p>
+        <h3 class="settings-block__label">{{ t('settings.dreamVisibilityLabel') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.dreamVisibilityHint') }}</p>
       </div>
       <div class="privacy-option-group">
         <label class="privacy-option" :class="{ 'privacy-option--active': visibility === 'public' }">
           <input v-model="visibility" type="radio" value="public" class="privacy-option__radio" />
           <span class="privacy-option__content">
-            <span class="privacy-option__label">Public</span>
-            <span class="privacy-option__desc">Visible to all DreamScape users.</span>
+            <span class="privacy-option__label">{{ t('settings.dreamVisibilityPublic') }}</span>
+            <span class="privacy-option__desc">{{ t('settings.dreamVisibilityPublicDesc') }}</span>
           </span>
         </label>
         <label class="privacy-option" :class="{ 'privacy-option--active': visibility === 'private' }">
           <input v-model="visibility" type="radio" value="private" class="privacy-option__radio" />
           <span class="privacy-option__content">
-            <span class="privacy-option__label">Private</span>
-            <span class="privacy-option__desc">Only visible to you.</span>
+            <span class="privacy-option__label">{{ t('settings.dreamVisibilityPrivate') }}</span>
+            <span class="privacy-option__desc">{{ t('settings.dreamVisibilityPrivateDesc') }}</span>
           </span>
         </label>
       </div>
@@ -30,11 +30,11 @@
     <!-- ── Account Privacy ── -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Account Privacy</h3>
-        <p class="settings-block__hint">When your account is private, only people you approve can see your dreams and profile details.</p>
+        <h3 class="settings-block__label">{{ t('settings.accountPrivacyLabel') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.accountPrivacyHint') }}</p>
       </div>
       <div class="privacy-toggle-row">
-        <label for="private-account-toggle" class="privacy-toggle-label">Protect your Account</label>
+        <label for="private-account-toggle" class="privacy-toggle-label">{{ t('settings.protectAccountLabel') }}</label>
         <label class="flat-switch">
           <input
             id="private-account-toggle"
@@ -50,11 +50,11 @@
     <!-- ── Direct Message Rules ── -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Direct Messages</h3>
-        <p class="settings-block__hint">Control who can send you direct chat messages.</p>
+        <h3 class="settings-block__label">{{ t('settings.dmHeading') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.dmHint') }}</p>
       </div>
       <div class="privacy-select-row">
-        <label for="dm-privacy-select" class="privacy-select-label">Who can send you direct messages</label>
+        <label for="dm-privacy-select" class="privacy-select-label">{{ t('settings.dmSelectLabel') }}</label>
         <div class="select-container">
           <AppSelect
             id="dm-privacy-select"
@@ -68,11 +68,11 @@
     <!-- ── Followers List Rules ── -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Followers List</h3>
-        <p class="settings-block__hint">Control who can view the list of accounts following you.</p>
+        <h3 class="settings-block__label">{{ t('settings.followersHeading') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.followersHint') }}</p>
       </div>
       <div class="privacy-select-row">
-        <label for="followers-privacy-select" class="privacy-select-label">Who can view your Followers list</label>
+        <label for="followers-privacy-select" class="privacy-select-label">{{ t('settings.followersSelectLabel') }}</label>
         <div class="select-container">
           <AppSelect
             id="followers-privacy-select"
@@ -86,11 +86,11 @@
     <!-- ── Following List Rules ── -->
     <div class="settings-block">
       <div class="settings-block__header">
-        <h3 class="settings-block__label">Following List</h3>
-        <p class="settings-block__hint">Control who can view the list of accounts you are following.</p>
+        <h3 class="settings-block__label">{{ t('settings.followingHeading') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.followingHint') }}</p>
       </div>
       <div class="privacy-select-row">
-        <label for="following-privacy-select" class="privacy-select-label">Who can view your Following list</label>
+        <label for="following-privacy-select" class="privacy-select-label">{{ t('settings.followingSelectLabel') }}</label>
         <div class="select-container">
           <AppSelect
             id="following-privacy-select"
@@ -105,12 +105,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
+import { useI18n }              from 'vue-i18n'
 import { useSettingsStore }      from '@/store/useSettingsStore'
 import { useAuthStore }          from '@/store/useAuthStore'
 import apiClient                 from '@/api/client'
 import AppSelect                 from '@/components/common/AppSelect.vue'
 
+const { t } = useI18n()
 const settingsStore    = useSettingsStore()
 const authStore        = useAuthStore()
 
@@ -120,17 +122,17 @@ const dmPrivacy        = ref<'everyone' | 'following' | 'friends'>(authStore.myU
 const followersPrivacy = ref<'everyone' | 'following' | 'only_me'>(authStore.myUser?.followersPrivacy || 'everyone')
 const followingPrivacy = ref<'everyone' | 'following' | 'only_me'>(authStore.myUser?.followingPrivacy || 'everyone')
 
-const dmPrivacyOptions = [
-  { value: 'everyone', label: 'Everyone' },
-  { value: 'following', label: 'People you follow' },
-  { value: 'friends', label: 'Friends (Mutual followers)' }
-]
+const dmPrivacyOptions = computed(() => [
+  { value: 'everyone', label: t('settings.dmEveryone') },
+  { value: 'following', label: t('settings.dmFollowing') },
+  { value: 'friends', label: t('settings.dmFriends') }
+])
 
-const listPrivacyOptions = [
-  { value: 'everyone', label: 'Everyone' },
-  { value: 'following', label: 'People you follow' },
-  { value: 'only_me', label: 'Only Me' }
-]
+const listPrivacyOptions = computed(() => [
+  { value: 'everyone', label: t('settings.listEveryone') },
+  { value: 'following', label: t('settings.listFollowing') },
+  { value: 'only_me', label: t('settings.listOnlyMe') }
+])
 
 let initialSync = true
 
@@ -164,10 +166,10 @@ watch(visibility, async (newVal) => {
     })
     if (data.success) {
       authStore.updateCurrentUser(data.user)
-      settingsStore.showToast('Default privacy preference saved.', 'success')
+      settingsStore.showToastKey('toasts.dreamVisibilitySuccess', undefined, 'success')
     }
   } catch (err) {
-    settingsStore.showToast('Failed to save privacy preference.', 'error')
+    settingsStore.showToastKey('errors.dreamVisibilityFailed', undefined, 'error')
   }
 })
 
@@ -179,10 +181,14 @@ watch(isPrivateAccount, async (newVal) => {
     })
     if (data.success) {
       authStore.updateCurrentUser(data.user)
-      settingsStore.showToast(`Account privacy updated to ${newVal ? 'Private' : 'Public'}.`, 'success')
+      settingsStore.showToastKey(
+        'toasts.accountPrivacySuccess',
+        { status: newVal ? t('settings.dreamVisibilityPrivate') : t('settings.dreamVisibilityPublic') },
+        'success'
+      )
     }
   } catch (err) {
-    settingsStore.showToast('Failed to save account privacy.', 'error')
+    settingsStore.showToastKey('errors.accountPrivacyFailed', undefined, 'error')
   }
 })
 
@@ -194,10 +200,10 @@ watch(dmPrivacy, async (newVal) => {
     })
     if (data.success) {
       authStore.updateCurrentUser(data.user)
-      settingsStore.showToast('Direct message privacy updated.', 'success')
+      settingsStore.showToastKey('toasts.dmPrivacySuccess', undefined, 'success')
     }
   } catch (err) {
-    settingsStore.showToast('Failed to save direct message settings.', 'error')
+    settingsStore.showToastKey('errors.dmPrivacyFailed', undefined, 'error')
   }
 })
 
@@ -209,10 +215,10 @@ watch(followersPrivacy, async (newVal) => {
     })
     if (data.success) {
       authStore.updateCurrentUser(data.user)
-      settingsStore.showToast('Followers list privacy updated.', 'success')
+      settingsStore.showToastKey('toasts.followersPrivacySuccess', undefined, 'success')
     }
   } catch (err) {
-    settingsStore.showToast('Failed to save followers list privacy.', 'error')
+    settingsStore.showToastKey('errors.followersPrivacyFailed', undefined, 'error')
   }
 })
 
@@ -224,10 +230,10 @@ watch(followingPrivacy, async (newVal) => {
     })
     if (data.success) {
       authStore.updateCurrentUser(data.user)
-      settingsStore.showToast('Following list privacy updated.', 'success')
+      settingsStore.showToastKey('toasts.followingPrivacySuccess', undefined, 'success')
     }
   } catch (err) {
-    settingsStore.showToast('Failed to save following list privacy.', 'error')
+    settingsStore.showToastKey('errors.followingPrivacyFailed', undefined, 'error')
   }
 })
 </script>
@@ -326,4 +332,3 @@ watch(followingPrivacy, async (newVal) => {
   flex-shrink: 0;
 }
 </style>
-

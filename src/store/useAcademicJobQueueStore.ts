@@ -103,7 +103,7 @@ export const useAcademicJobQueueStore = defineStore('academicJobQueue', () => {
         queuedAt: Date.now(),
         promotedFromQueue,
         run: input.run,
-        resolve,
+        resolve: (value: unknown) => resolve(value as T),
         reject,
       }
       pending.push(job)

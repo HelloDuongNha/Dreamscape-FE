@@ -28,7 +28,7 @@
               id="mobile-menu-btn"
               class="main-layout__burger"
               :aria-expanded="!sidebarCollapsed"
-              aria-label="Toggle navigation"
+              :aria-label="t('common.toggleNav')"
               @click="sidebarCollapsed = !sidebarCollapsed"
             >
               <span /><span /><span />
@@ -37,7 +37,7 @@
             <slot name="header-title">
               <button
                 class="main-layout__page-title-btn"
-                :aria-label="route.path === '/' ? 'Scroll to top and refresh feed' : 'Go to Home'"
+                :aria-label="route.path === '/' ? t('common.scrollToTop') : t('common.goHome')"
                 @click="handleHomeClick"
               >
                 <span class="main-layout__page-title">{{ pageTitle }}</span>
@@ -50,7 +50,7 @@
 
             <!-- ── Compact search bar — only visible on the Home feed ── -->
             <div v-if="route.path === '/'" class="header-search">
-              <label for="header-search-input" class="sr-only">Search dreams</label>
+              <label for="header-search-input" class="sr-only">{{ t('common.searchLabel') }}</label>
               <div class="header-search__bar">
                 <svg class="header-search__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -59,7 +59,7 @@
                   id="header-search-input"
                   v-model="dreamStore.searchQuery"
                   type="search"
-                  placeholder="Search dreams..."
+                  :placeholder="t('common.searchPlaceholder')"
                   autocomplete="off"
                   spellcheck="false"
                   class="header-search__input"
@@ -68,7 +68,7 @@
                   v-if="dreamStore.searchQuery"
                   id="header-search-clear"
                   class="header-search__clear"
-                  aria-label="Clear search"
+                  :aria-label="t('common.clearSearch')"
                   @click="dreamStore.searchQuery = ''"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
@@ -79,12 +79,25 @@
             </div>
 
             <slot name="header-actions">
+              <!-- Locale switch — immediately left of bell -->
+              <button
+                id="locale-switch-btn"
+                class="main-layout__icon-btn locale-switch"
+                :aria-label="localeStore.currentLocale === 'vi' ? t('common.switchToEnglish') : t('common.switchToVietnamese')"
+                :title="localeStore.currentLocale === 'vi' ? t('common.switchToEnglish') : t('common.switchToVietnamese')"
+                @click="localeStore.toggleLocale()"
+              >
+                <span class="locale-switch__label" aria-hidden="true">
+                  {{ localeStore.currentLocale === 'vi' ? 'EN' : 'VI' }}
+                </span>
+              </button>
+
               <!-- Notification wrapper with dropdown -->
               <div class="notifications-wrapper">
                 <button
                   id="notif-btn"
                   class="main-layout__icon-btn"
-                  aria-label="Notifications"
+                  :aria-label="t('notifications.buttonLabel')"
                   @click.stop="toggleNotifications"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -101,21 +114,21 @@
                   @click.stop
                 >
                   <div class="notifications-dropdown__header">
-                    <h3>Notifications</h3>
+                    <h3>{{ t('notifications.title') }}</h3>
                     <button
                       v-if="notificationStore.unreadCount > 0"
                       class="notifications-dropdown__mark-all"
                       @click="notificationStore.markAllRead"
                     >
-                      Mark all as read
+                      {{ t('notifications.markAllRead') }}
                     </button>
                   </div>
                   <div class="notifications-dropdown__body">
                     <div v-if="notificationStore.isLoading" class="notifications-dropdown__loading">
-                      Loading...
+                      {{ t('notifications.loading') }}
                     </div>
                     <div v-else-if="notificationStore.notifications.length === 0" class="notifications-dropdown__empty">
-                      No notifications yet
+                      {{ t('notifications.empty') }}
                     </div>
                     <div v-else class="notifications-dropdown__list">
                       <div
@@ -128,19 +141,19 @@
                           class="notifications-dropdown__avatar"
                           :style="{ background: getAvatarBg(notif.senderId?._id ?? '') }"
                         >
-                          {{ getInitials(notif.senderId?.display_name ?? 'Anonymous') }}
+                          {{ getInitials(notif.senderId?.display_name ?? t('notifications.anonymous')) }}
                         </div>
                         <div class="notifications-dropdown__content">
                           <p class="notifications-dropdown__text">
-                            <span v-if="notif.type === 'dream_analysis'" class="notifications-dropdown__name">Oracle đã phân tích xong giấc mơ</span>
+                            <span v-if="notif.type === 'dream_analysis'" class="notifications-dropdown__name">{{ t('notifications.oracleAnalyzed') }}</span>
                             <template v-else>
-                              <span class="notifications-dropdown__name">{{ notif.senderId?.display_name }}</span>
+                              <span class="notifications-dropdown__name">{{ notif.senderId?.display_name ?? t('notifications.anonymous') }}</span>
                             </template>
-                            <span v-if="notif.type === 'like'"> liked your dream</span>
-                            <span v-else-if="notif.type === 'comment'"> commented on your dream</span>
-                            <span v-else-if="notif.type === 'follow'"> followed you</span>
+                            <span v-if="notif.type === 'like'"> {{ t('notifications.liked') }}</span>
+                            <span v-else-if="notif.type === 'comment'"> {{ t('notifications.commented') }}</span>
+                            <span v-else-if="notif.type === 'follow'"> {{ t('notifications.followed') }}</span>
                           </p>
-                          <span class="notifications-dropdown__time">{{ timeAgo(notif.timestamp) }}</span>
+                          <span class="notifications-dropdown__time">{{ timeAgo(notif.timestamp, localeStore.currentLocale) }}</span>
                         </div>
                         <span v-if="!notif.isRead" class="notifications-dropdown__unread-badge" />
                       </div>
@@ -153,7 +166,7 @@
               <button
                 id="avatar-btn"
                 class="main-layout__avatar"
-                aria-label="Go to my profile"
+                :aria-label="t('common.goToProfile')"
                 aria-haspopup="false"
                 @click="handleAvatarClick"
                 :style="{ background: avatarBg }"
@@ -203,6 +216,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
 import PostDetailModal from '@/features/home/PostDetailModal.vue'
@@ -213,11 +227,13 @@ import { useDreamStore } from '@/store/useDreamStore'
 import { useNotificationStore } from '@/store/useNotificationStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useOracleStore } from '@/store/useOracleStore'
+import { useLocaleStore } from '@/store/useLocaleStore'
 import type { ApiDream, ApiNotification } from '@/api/types'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo } from '@/utils/timeAgo'
 import apiClient from '@/api/client'
 
+const { t } = useI18n()
 const sidebarCollapsed = ref(false)
 const route = useRoute()
 const router = useRouter()
@@ -225,6 +241,7 @@ const dreamStore = useDreamStore()
 const notificationStore = useNotificationStore()
 const authStore = useAuthStore()
 const oracleStore = useOracleStore()
+const localeStore = useLocaleStore()
 
 const avatarBg = computed(() => {
   return authStore.user?._id ? getAvatarBg(authStore.user._id) : '#262626'
@@ -346,24 +363,25 @@ const isFullBleed = computed(() => {
 })
 
 
-const pageTitle = computed(() => {
-  if (route.path.startsWith('/library/sources/')) {
-    return 'Chi tiết tài liệu'
-  }
-  if (route.path.startsWith('/moderation/sources/') && route.path.endsWith('/preview')) {
-    return 'Xem trước tài liệu'
-  }
-  const map: Record<string, string> = {
-    '/':          'Home',
-    '/oracle':    'Oracle',
-    '/messages':  'Messages',
-    '/profile':   'Profile',
-    '/achievements': 'Achievements',
-    '/library':   'Thư viện',
-    '/moderation/sources': 'Duyệt nguồn',
-  }
-  return map[route.path] ?? 'DreamScape'
-})
+// Route-name → translation key map (covers all routes rendered inside MainLayout)
+const PAGE_TITLE_KEYS: Record<string, string> = {
+  home:                         'navigation.pageHome',
+  oracle:                       'navigation.pageOracle',
+  messages:                     'navigation.pageMessages',
+  profile:                      'navigation.pageProfile',
+  'profile-user':               'navigation.pageProfile',
+  settings:                     'navigation.pageSettings',
+  achievements:                 'navigation.pageAchievements',
+  library:                      'navigation.pageLibrary',
+  'library-source-detail':      'navigation.pageLibrarySourceDetail',
+  'moderation-sources':         'navigation.pageModerationSources',
+  'moderation-source-preview':  'navigation.pageModerationSourcePreview',
+  'moderation-rule-candidates': 'navigation.pageModerationRuleCandidates',
+}
+
+const pageTitle = computed(() =>
+  t(PAGE_TITLE_KEYS[route.name as string] ?? 'navigation.pageFallback')
+)
 
 defineProps<{ title?: string }>()
 </script>
@@ -458,6 +476,16 @@ defineProps<{ title?: string }>()
 .main-layout__icon-btn:hover {
   background: var(--color-bg-hover);
   color: var(--color-icon-active);
+}
+
+/* ── Locale switch label ────────────────────────────────────────── */
+.locale-switch__label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* Notification dot — solid red, no glow */

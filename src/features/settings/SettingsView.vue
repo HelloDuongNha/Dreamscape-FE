@@ -1,14 +1,12 @@
 <template>
   <div class="settings-view">
 
-
-
     <!-- ── Dual-pane shell ── -->
     <div class="settings-layout">
 
       <!-- Left menu -->
-      <aside class="settings-menu" aria-label="Settings categories">
-        <h2 class="settings-menu__title">Settings</h2>
+      <aside class="settings-menu" :aria-label="t('settings.categoriesAria')">
+        <h2 class="settings-menu__title">{{ t('navigation.settings') }}</h2>
         <nav role="navigation">
           <ul class="settings-menu__list" role="list">
             <li v-for="item in menuItems" :key="item.id" role="none">
@@ -43,12 +41,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed }            from 'vue'
+import { computed, defineComponent } from 'vue'
 import { useRoute }            from 'vue-router'
+import { useI18n }              from 'vue-i18n'
 import SettingsAccount         from './SettingsAccount.vue'
 import SettingsSecurity        from './SettingsSecurity.vue'
 import SettingsPrivacy         from './SettingsPrivacy.vue'
 
+const { t }         = useI18n()
 const route         = useRoute()
 
 const activeSection = computed(() => (route.params.section as string) || 'account')
@@ -61,25 +61,23 @@ const sectionMap: Record<string, ReturnType<typeof defineComponent> | unknown> =
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const activeComponent = computed(() => sectionMap[activeSection.value] ?? SettingsAccount)
 
-const menuItems = [
+const menuItems = computed(() => [
   {
     id:    'account',
-    label: 'Account Center',
+    label: t('settings.navAccount'),
     icon:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
   },
   {
     id:    'security',
-    label: 'Security',
+    label: t('settings.navSecurity'),
     icon:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
   },
   {
     id:    'privacy',
-    label: 'Privacy',
+    label: t('settings.navPrivacy'),
     icon:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
   },
-]
-
-function defineComponent(x: unknown) { return x }
+])
 </script>
 
 <style scoped>
@@ -90,8 +88,6 @@ function defineComponent(x: unknown) { return x }
   margin: 0 auto;
   width: 100%;
 }
-
-
 
 /* ── Dual-pane layout ── */
 .settings-layout {

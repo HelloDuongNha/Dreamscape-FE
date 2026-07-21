@@ -7,15 +7,16 @@
         class="reply-card__avatar"
         :style="{ background: commentAvatarBg }"
         aria-hidden="true"
+        translate="no"
       >
         {{ commentInitials }}
       </div>
       <div class="reply-card__comment-body">
         <div class="reply-card__comment-meta">
-          <span class="reply-card__comment-name">{{ comment.userId.display_name }}</span>
+          <span class="reply-card__comment-name" translate="no">{{ comment.userId.display_name }}</span>
           <span class="reply-card__comment-time">{{ commentTime }}</span>
         </div>
-        <p class="reply-card__comment-text">{{ comment.content }}</p>
+        <p class="reply-card__comment-text" translate="no">{{ comment.content }}</p>
       </div>
     </div>
 
@@ -25,7 +26,7 @@
       class="reply-card__original"
       role="button"
       tabindex="0"
-      aria-label="Open original post"
+      :aria-label="t('profile.openOriginalAria')"
       @click="openOriginal"
       @keydown.enter.prevent="openOriginal"
     >
@@ -35,15 +36,16 @@
           class="reply-card__original-avatar"
           :style="{ background: originalAvatarBg }"
           aria-hidden="true"
+          translate="no"
         >
           {{ originalInitials }}
         </div>
-        <div class="reply-card__original-meta">
+        <div class="reply-card__original-meta" translate="no">
           <span class="reply-card__original-name">{{ originalAuthor?.display_name }}</span>
           <span class="reply-card__original-username">{{ originalAuthor?.username }}</span>
         </div>
         <!-- Like count badge -->
-        <div class="reply-card__original-likes" aria-label="Likes">
+        <div class="reply-card__original-likes" :aria-label="t('profile.likesAria')">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
           </svg>
@@ -53,14 +55,14 @@
 
       <!-- Original post body (truncated) -->
       <p class="reply-card__original-content">
-        <span>{{ truncatedContent }}</span>
-        <span v-if="isOriginalTruncated" class="reply-card__see-more">... xem thêm</span>
+        <span translate="no">{{ truncatedContent }}</span>
+        <span v-if="isOriginalTruncated" class="reply-card__see-more">{{ t('profile.seeMore') }}</span>
       </p>
     </div>
 
     <!-- Fallback if dream no longer available -->
     <div v-else class="reply-card__original reply-card__original--unavailable">
-      <p class="reply-card__unavailable-text">Original post is no longer available.</p>
+      <p class="reply-card__unavailable-text">{{ t('profile.originalUnavailable') }}</p>
     </div>
 
   </article>
@@ -68,8 +70,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { usePostStore } from '@/store/usePostStore'
 import { useDreamStore } from '@/store/useDreamStore'
+import { useLocaleStore } from '@/store/useLocaleStore'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo } from '@/utils/timeAgo'
 import type { ApiComment, ApiDream, ApiUser } from '@/api/types'
@@ -77,13 +81,15 @@ import type { ApiComment, ApiDream, ApiUser } from '@/api/types'
 // ── Props ─────────────────────────────────────────────────────────────────────
 const props = defineProps<{ comment: ApiComment }>()
 
+const { t } = useI18n()
 const postStore  = usePostStore()
 const dreamStore = useDreamStore()
+const localeStore = useLocaleStore()
 
 // ── My comment author ─────────────────────────────────────────────────────────
 const commentInitials  = computed(() => getInitials(props.comment.userId.display_name))
 const commentAvatarBg  = computed(() => getAvatarBg(props.comment.userId._id))
-const commentTime      = computed(() => timeAgo(props.comment.created_at))
+const commentTime      = computed(() => timeAgo(props.comment.created_at, localeStore.currentLocale))
 
 // ── Original dream (populated dreamId from /api/comments/user/:id) ───────────
 

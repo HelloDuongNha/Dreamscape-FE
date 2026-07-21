@@ -4,8 +4,8 @@
     <!-- ── 404 state ── -->
     <div v-if="!isLoading && !targetUser" class="profile-404">
       <span class="profile-404__icon" aria-hidden="true">◈</span>
-      <p class="profile-404__text">User not found.</p>
-      <AppButton variant="secondary" size="sm" @click="router.push('/')">Back to Home</AppButton>
+      <p class="profile-404__text">{{ t('profile.notFoundDesc') }}</p>
+      <AppButton variant="secondary" size="sm" @click="router.push('/')">{{ t('profile.backToHomeBtn') }}</AppButton>
     </div>
 
     <!-- ── Loading Skeleton ── -->
@@ -45,8 +45,8 @@
         <template v-if="!canViewContent">
           <div class="profile-private-lock">
             <span class="profile-private-lock__icon" aria-hidden="true">🔒</span>
-            <p class="profile-private-lock__title">This Account is Private</p>
-            <p class="profile-private-lock__sub">Follow this user to see their dreams and profile details.</p>
+            <p class="profile-private-lock__title">{{ t('profile.privateTitle') }}</p>
+            <p class="profile-private-lock__sub">{{ t('profile.privateDesc') }}</p>
           </div>
         </template>
 
@@ -55,7 +55,7 @@
           <template v-if="activeTab === 'posts'">
             <div v-if="userDreams.length === 0" class="profile-empty">
               <span aria-hidden="true">◈</span>
-              <p>No posts yet.</p>
+              <p>{{ t('profile.noPosts') }}</p>
             </div>
 
             <div v-else class="profile-feed">
@@ -78,7 +78,7 @@
 
               <!-- End of archive -->
               <div v-if="!hasMore && userDreams.length > 0" class="profile-end">
-                All dreams loaded.
+                {{ t('profile.allDreamsLoaded') }}
               </div>
             </div>
           </template>
@@ -88,13 +88,19 @@
             <!-- Loading state for replies -->
             <div v-if="isLoadingReplies" class="profile-placeholder">
               <span class="profile-placeholder__icon" aria-hidden="true">◈</span>
-              <p class="profile-placeholder__sub">Loading replies…</p>
+              <p class="profile-placeholder__sub">{{ t('profile.loadingReplies') }}</p>
             </div>
             <!-- Empty state -->
             <div v-else-if="myComments.length === 0" class="profile-placeholder">
               <span class="profile-placeholder__icon" aria-hidden="true">◈</span>
-              <p class="profile-placeholder__title">Replies</p>
-              <p class="profile-placeholder__sub">Posts {{ displayUser.display_name }} has commented on will appear here.</p>
+              <p class="profile-placeholder__title">{{ t('profile.repliesTab') }}</p>
+              <p class="profile-placeholder__sub">
+                <i18n-t keypath="profile.repliesEmptyDesc" scope="global">
+                  <template #name>
+                    <span translate="no">{{ displayUser.display_name }}</span>
+                  </template>
+                </i18n-t>
+              </p>
             </div>
             <!-- Reply cards -->
             <div v-else class="profile-feed">
@@ -110,15 +116,15 @@
           <template v-else-if="activeTab === 'likes'">
             <div v-if="!isMe" class="profile-placeholder">
               <span class="profile-placeholder__icon" aria-hidden="true">◈</span>
-              <p class="profile-placeholder__title">Likes</p>
-              <p class="profile-placeholder__sub">Only visible on your own profile.</p>
+              <p class="profile-placeholder__title">{{ t('profile.likesTab') }}</p>
+              <p class="profile-placeholder__sub">{{ t('profile.likesOnlyMe') }}</p>
             </div>
 
             <template v-else>
               <div v-if="likedDreams.length === 0" class="profile-placeholder">
                 <span class="profile-placeholder__icon" aria-hidden="true">◈</span>
-                <p class="profile-placeholder__title">No liked posts yet.</p>
-                <p class="profile-placeholder__sub">Dreams you like will appear here.</p>
+                <p class="profile-placeholder__title">{{ t('profile.noLikes') }}</p>
+                <p class="profile-placeholder__sub">{{ t('profile.likesEmptyDesc') }}</p>
               </div>
 
               <div v-else class="profile-feed">
@@ -153,6 +159,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter }  from 'vue-router'
+import { useI18n }              from 'vue-i18n'
 import ProfileHeader            from './ProfileHeader.vue'
 import ProfileTabs              from './ProfileTabs.vue'
 import type { TabId }           from './ProfileTabs.vue'
@@ -168,6 +175,7 @@ import type { ApiComment }      from '@/api/types'
 import type { User }            from '@/data/mockUsers'
 import apiClient                from '@/api/client'
 
+const { t } = useI18n()
 const route      = useRoute()
 const router     = useRouter()
 const authStore  = useAuthStore()
@@ -556,5 +564,4 @@ watch(() => route.params.id, async () => {
   color: var(--color-text-muted);
   padding: var(--space-4) 0 var(--space-2);
 }
-
 </style>

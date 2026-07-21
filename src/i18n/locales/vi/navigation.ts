@@ -1,0 +1,51 @@
+/** Vietnamese — navigation labels, sidebar controls, header page titles */
+export default {
+  // Sidebar nav aria
+  mainNav: 'Điều hướng chính',
+  // Nav item labels
+  home: 'Trang chủ',
+  oracle: 'Oracle',
+  messages: 'Tin nhắn',
+  achievements: 'Thành tích',
+  library: 'Thư viện',
+  profile: 'Trang cá nhân',
+  settings: 'Cài đặt',
+  logout: 'Đăng xuất',
+  // Sidebar controls
+  expandSidebar: 'Mở rộng thanh bên',
+  collapseSidebar: 'Thu gọn thanh bên',
+  collapseLabel: 'Thu gọn',
+  // Badge aria-label — {count} is interpolated
+  unreadCount: '{count} chưa đọc',
+  // Moderation (moderator-only nav items)
+  moderationSources: 'Duyệt nguồn',
+  ruleReview: 'Duyệt quy luật',
+  // Header page titles — keyed by Vue Router route name
+  pageHome: 'Trang chủ',
+  pageOracle: 'Oracle',
+  pageMessages: 'Tin nhắn',
+  pageProfile: 'Trang cá nhân',
+  pageSettings: 'Cài đặt',
+  pageAchievements: 'Thành tích',
+  pageLibrary: 'Thư viện',
+  pageLibrarySourceDetail: 'Chi tiết tài liệu',
+  pageModerationSources: 'Duyệt nguồn',
+  pageModerationSourcePreview: 'Xem trước tài liệu',
+  pageModerationRuleCandidates: 'Duyệt quy luật',
+  pageFallback: 'DreamScape',
+  titleLogin: 'Đăng nhập — DreamScape',
+  titleRegister: 'Đăng ký — DreamScape',
+  titleVerifyOtp: 'Xác thực OTP — DreamScape',
+  titleHome: 'Trang chủ — DreamScape',
+  titleOracle: 'Oracle — DreamScape',
+  titleMessages: 'Tin nhắn — DreamScape',
+  titleProfile: 'Trang cá nhân — DreamScape',
+  titleSettings: 'Cài đặt — DreamScape',
+  titleAchievements: 'Thành tích — DreamScape',
+  titleLibrary: 'Thư viện — DreamScape',
+  titleLibrarySourceDetail: 'Chi tiết tài liệu — DreamScape',
+  titleModerationSources: 'Duyệt nguồn — DreamScape',
+  titleModerationSourcePreview: 'Xem trước tài liệu — DreamScape',
+  titleModerationRuleCandidates: 'Ứng viên quy luật — DreamScape',
+  titleFallback: 'DreamScape',
+} as const

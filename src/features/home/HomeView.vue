@@ -10,6 +10,7 @@
         class="composer__avatar"
         :style="{ background: currentAvatarBg }"
         aria-hidden="true"
+        translate="no"
       >
         {{ currentInitials }}
       </div>
@@ -20,9 +21,10 @@
           id="composer-textarea"
           v-model="composerText"
           class="composer__textarea"
-          placeholder="What did you dream about last night?"
+          :placeholder="t('home.composerPlaceholder')"
           rows="3"
-          :aria-label="'Write a new dream post'"
+          :aria-label="t('home.composerAria')"
+          translate="no"
         />
 
 
@@ -33,7 +35,7 @@
             class="composer__visibility"
             :class="{ 'composer__visibility--private': !isPublic }"
             :aria-pressed="isPublic"
-            :aria-label="isPublic ? 'Visibility: Public. Click to make private.' : 'Visibility: Private. Click to make public.'"
+            :aria-label="isPublic ? t('home.visibilityPublicAria') : t('home.visibilityPrivateAria')"
             @click="isPublic = !isPublic"
           >
             <!-- Globe (public) -->
@@ -44,7 +46,7 @@
             <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
-            {{ isPublic ? 'Public' : 'Private' }}
+            {{ isPublic ? t('home.public') : t('home.private') }}
           </button>
 
           <AppButton
@@ -54,7 +56,7 @@
             :disabled="composerText.trim().length === 0 || isPosting"
             @click="handlePost"
           >
-            {{ isPosting ? 'Posting…' : 'Post' }}
+            {{ isPosting ? t('home.posting') : t('home.post') }}
           </AppButton>
         </div>
       </div>
@@ -68,15 +70,17 @@
     ═══════════════════════════════════════════ -->
     <div v-if="dreamStore.searchQuery" class="search-results-label">
       <span class="search-results-label__count">
-        {{ filteredDreams.length }} result{{ filteredDreams.length !== 1 ? 's' : '' }}
+        {{ t('home.resultsCount', filteredDreams.length) }}
       </span>
-      <span class="search-results-label__query">for "{{ dreamStore.searchQuery }}"</span>
+      <span class="search-results-label__query">
+        {{ t('home.resultsFor') }} <span translate="no">“{{ dreamStore.searchQuery }}”</span>
+      </span>
     </div>
 
     <!-- ══════════════════════════════════════════
          ③ DREAM FEED
     ═══════════════════════════════════════════ -->
-    <section class="dream-feed" aria-label="Dream feed">
+    <section class="dream-feed" :aria-label="t('home.feedAria')">
       <!-- Initial loading skeletons -->
       <template v-if="dreamStore.isLoading">
         <AppSkeleton v-for="i in 3" :key="i" type="card" />
@@ -87,7 +91,7 @@
         <div v-if="filteredDreams.length === 0" class="feed-empty">
           <span class="feed-empty__icon" aria-hidden="true">◈</span>
           <p class="feed-empty__text">
-            {{ dreamStore.searchQuery ? 'No dreams match your search.' : 'No dreams yet. Post your first one.' }}
+            {{ dreamStore.searchQuery ? t('home.noSearchResults') : t('home.noDreams') }}
           </p>
         </div>
 
@@ -110,7 +114,7 @@
 
         <!-- End of feed -->
         <div v-if="!dreamStore.hasMore && filteredDreams.length > 0" class="feed-end">
-          <span>You've reached the end of the feed.</span>
+          <span>{{ t('home.feedEnd') }}</span>
         </div>
       </template>
     </section>
@@ -121,6 +125,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppButton       from '@/components/common/AppButton.vue'
 import AppSkeleton     from '@/components/common/AppSkeleton.vue'
@@ -136,6 +141,7 @@ const authStore  = useAuthStore()
 const postStore  = usePostStore()
 const route      = useRoute()
 const router     = useRouter()
+const { t }      = useI18n({ useScope: 'global' })
 
 
 // ── Composer ──────────────────────────────────────────────────────────────────
@@ -184,7 +190,7 @@ function resolveUser(dream: ApiDream): ApiUser {
   return {
     _id:            String(dream.userId),
     username:       '@unknown',
-    display_name:   'Unknown User',
+    display_name:   t('home.unknownUser'),
     avatar:         '',
     bio:            '',
     follower_count: 0,
