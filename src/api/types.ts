@@ -48,6 +48,17 @@ export interface AiScientificContextNote {
   boundary?: string
   ruleCode?: string
   ruleStatement?: string
+  applicationTier?: 'supported' | 'exploratory'
+  academicEvidenceScore?: number
+  caseApplicability?: {
+    status: 'strong_match' | 'partial_match' | 'mixed' | 'weakened' | 'unresolved'
+    answeredCount: number
+    totalCount: number
+    confirmedCount: number
+    weakenedCount: number
+    unresolvedCount: number
+    conclusion: string
+  }
   matchedDreamDetails?: string[]
   evidenceQuotes?: {
     sourceId: string
@@ -93,6 +104,7 @@ export interface AiCulturalSymbolicNote {
 
 export interface AiRealLifeHypothesis {
   ruleId?: string | null
+  ruleIds?: string[]
   ruleCode?: string
   ruleStatement?: string
   hypothesis:            string
@@ -133,12 +145,49 @@ export interface AiDreamAnalysisResult {
   core_analysis:             string
   disclaimer:                string
   confidence:                number
+  creative_continuation?: {
+    title: string
+    continuation: string
+    connectionToCurrentDream: string
+    inspirationIndexes: number[]
+    disclaimer: string
+    inspirations?: Array<{
+      dreamId: string
+      title: string
+      similarity: number
+      matchedOn: string[]
+    }>
+  }
+  case_conclusion?: {
+    status: 'preliminary' | 'clarified'
+    headline: string
+    conclusion: string
+    reasoning: string
+    confidenceLabel: string
+    confirmedFindings: string[]
+    ruledOut: string[]
+    recommendedNextStep: string
+    concern: {
+      level: 'no_clear_warning'
+      label: string
+      explanation: string
+      watchFor: string[]
+      helpSource: { title: string; url: string }
+    }
+    evidenceBasis: Array<{
+      kind: 'confirmed_context' | 'academic_context' | 'boundary'
+      title: string
+      detail: string
+      sources?: Array<{ sourceId: string; title: string; year?: number; doi?: string }>
+    }>
+  }
   feedback_conclusion?:      string | null
   feedback_changed_paths?:   string[]
   feedback_changed_fragments?: Record<string, string[]>
   feedback_analysis?: {
     confirmedFacts: string[]
     rejectedDirections: string[]
+    unresolvedQuestions: string[]
     interpretation: string
     nextSteps: string[]
   } | null
@@ -150,6 +199,7 @@ export interface AiDreamAnalysisResult {
     contextualMotifCount: number
     appliedRuleCount: number
     explanatoryRuleCount: number
+    exploratoryRuleCount?: number
     similarDreamCount: number
     sleepContextFactCount: number
   }
@@ -211,6 +261,7 @@ export interface ApiDream {
     durationMs?: number
   } | null
   edit_history:   { content: string; editedAt: string }[]
+  additions:      { sequence: number; content: string; addedAt: string }[]
 }
 
 export interface AuthResponse {
@@ -306,4 +357,75 @@ export interface ApiNotification {
   postId?:     string | Pick<ApiDream, '_id' | 'content'>
   isRead:      boolean
   timestamp:   string
+}
+
+// ─── Smart Reader I18N Interfaces ──────────────────────────────────────────
+
+export interface CanonicalReaderBlockIdentity {
+  chunkId: string;
+  sectionId: string;
+  chunkIndex: number;
+  contentHash: string;
+}
+
+export interface CanonicalReaderSectionIdentity {
+  sectionId: string;
+  sectionOrder: number | null;
+  heading: string | null;
+  sectionType: string | null;
+}
+
+export interface TableCellData {
+  row: number;
+  column: number;
+  rowSpan: number;
+  columnSpan: number;
+  text: string;
+  role: 'header' | 'data';
+}
+
+export interface StructuredTableData {
+  version: number;
+  source: string;
+  reconstructionMethod: string;
+  rowCount: number;
+  columnCount: number;
+  cells: TableCellData[];
+}
+
+export interface BaseReaderBlock {
+  type: string;
+  sectionType: string;
+  text: string; // presentation (may be normalized)
+  html?: string;
+  marker?: string;
+  sectionIndex: number;
+  headingLevel?: number;
+  style?: { pageIndex?: number; doiUrl?: string; [key: string]: unknown };
+  sectionIdentity: CanonicalReaderSectionIdentity | null;
+  tableData?: StructuredTableData | null;
+  actions?: { label: string; url: string }[];
+  refNumber?: string;
+  supType?: string;
+  label?: string;
+  fileTypes?: string[];
+  description?: string;
+}
+
+export interface CanonicalReaderBlock extends BaseReaderBlock {
+  blockIdentity: CanonicalReaderBlockIdentity;
+  canonicalText: string; // raw unmodified byte-for-byte text from API
+}
+
+export interface DerivedReaderBlock extends BaseReaderBlock {
+  blockIdentity?: undefined;
+  canonicalText?: undefined;
+}
+
+export type ReaderBlock = CanonicalReaderBlock | DerivedReaderBlock;
+
+export interface ReaderPage {
+  pageIndex: number;
+  blocks: ReaderBlock[];
+  wordCount: number;
 }

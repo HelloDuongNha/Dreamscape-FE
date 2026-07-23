@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { getRuleV3ExtractionProgress, startRuleV3Extraction } from '@/api/ruleCandidateApi'
 import { useAcademicJobQueueStore } from './useAcademicJobQueueStore'
 
+const EXTRACTION_TASK_KEY = 'dreamscape:pinned-task:rule-extraction:v1'
+
 export const useExtractionStore = defineStore('extraction', () => {
   const sourceId = ref<string | null>(null)
   const sourceTitle = ref<string>('')
@@ -23,27 +25,73 @@ export const useExtractionStore = defineStore('extraction', () => {
   const elapsedSeconds = ref(0)
   const estimatedRemainingSeconds = ref<number | null>(null)
   const processedLabel = ref('')
+  const currentStage = ref<'initializing' | 'extracting_candidates' | 'saving_candidates' | 'completed'>('initializing')
+  const totalBatches = ref(0)
+  const processedBatches = ref(0)
+  const rawCandidateCount = ref(0)
+  const verifiedCandidateCount = ref(0)
+  const timingDeltaSeconds = ref<number | null>(null)
+  const currentRunId = ref<string | null>(null)
 
   let clockInterval: ReturnType<typeof setInterval> | null = null
   let terminalTimer: ReturnType<typeof setTimeout> | null = null
   let localStartedAt = 0
   let etaAnchorAt = 0
   let etaAnchorSeconds: number | null = null
-  let lastProcessedBatches = 0
-  let lastBatchObservationAt = 0
-  let historicalSecondsPerBatch: number | null = null
-  const batchDurationSamples: number[] = []
+  let plannedDurationSeconds: number | null = null
 
-  function startClock() {
+  function startClock(startedAt = Date.now()) {
     if (clockInterval) clearInterval(clockInterval)
-    localStartedAt = Date.now()
-    elapsedSeconds.value = 0
+    localStartedAt = startedAt
+    elapsedSeconds.value = Math.max(0, Math.floor((Date.now() - localStartedAt) / 1000))
     clockInterval = setInterval(() => {
       elapsedSeconds.value = Math.floor((Date.now() - localStartedAt) / 1000)
       if (etaAnchorSeconds !== null) {
         estimatedRemainingSeconds.value = Math.ceil(etaAnchorSeconds - (Date.now() - etaAnchorAt) / 1000)
       }
     }, 1000)
+  }
+
+  function persistTask(expiresAt?: number) {
+    if (!sourceId.value || !currentRunId.value) {
+      localStorage.removeItem(EXTRACTION_TASK_KEY)
+      return
+    }
+    localStorage.setItem(EXTRACTION_TASK_KEY, JSON.stringify({
+      sourceId: sourceId.value,
+      sourceTitle: sourceTitle.value,
+      runId: currentRunId.value,
+      startedAt: localStartedAt,
+      progress: progress.value,
+      status: status.value,
+      stepText: stepText.value,
+      expiresAt: expiresAt || null,
+    }))
+  }
+
+  async function restoreTracking() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(EXTRACTION_TASK_KEY) || 'null')
+      if (!saved?.sourceId || !saved?.runId) return
+      if (saved.expiresAt && saved.expiresAt <= Date.now()) {
+        localStorage.removeItem(EXTRACTION_TASK_KEY)
+        return
+      }
+      sourceId.value = saved.sourceId
+      sourceTitle.value = saved.sourceTitle || ''
+      currentRunId.value = saved.runId
+      progress.value = Number(saved.progress) || 0
+      status.value = saved.status || 'pending'
+      stepText.value = saved.stepText || 'Đang khôi phục trạng thái…'
+      isDialogVisible.value = false
+      isPinnedVisible.value = true
+      if (status.value === 'pending') {
+        startClock(Number(saved.startedAt) || Date.now())
+        await pollRuleV3Run(saved.runId, false)
+      }
+    } catch {
+      // Keep page startup independent from optional notification restoration.
+    }
   }
 
   function stopClock() {
@@ -57,13 +105,7 @@ export const useExtractionStore = defineStore('extraction', () => {
     estimatedRemainingSeconds.value = seconds === null ? null : Math.ceil(seconds)
   }
 
-  function median(values: number[]) {
-    const sorted = [...values].sort((a, b) => a - b)
-    const middle = Math.floor(sorted.length / 2)
-    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
-  }
-
-  async function runExtraction(id: string, title: string, promotedFromQueue = false, replaceExisting = false, baselineSecondsPerBatch: number | null = null) {
+  async function runExtraction(id: string, title: string, promotedFromQueue = false, replaceExisting = false, baselineTotalSeconds: number | null = null) {
     stopTracking()
 
     sourceId.value = id
@@ -84,15 +126,20 @@ export const useExtractionStore = defineStore('extraction', () => {
     stageDetail.value = 'Đang đọc cấu trúc section, ngôn ngữ và loại hình nghiên cứu.'
     estimatedRemainingSeconds.value = null
     etaAnchorSeconds = null
-    lastProcessedBatches = 0
-    lastBatchObservationAt = Date.now()
-    historicalSecondsPerBatch = baselineSecondsPerBatch && baselineSecondsPerBatch > 0 ? baselineSecondsPerBatch : null
-    batchDurationSamples.length = 0
+    plannedDurationSeconds = baselineTotalSeconds && baselineTotalSeconds > 0 ? baselineTotalSeconds : null
     processedLabel.value = ''
+    currentStage.value = 'initializing'
+    totalBatches.value = 0
+    processedBatches.value = 0
+    rawCandidateCount.value = 0
+    verifiedCandidateCount.value = 0
+    timingDeltaSeconds.value = null
     startClock()
 
     try {
       const started = await startRuleV3Extraction(id, replaceExisting)
+      currentRunId.value = started.data.runId
+      persistTask()
       if (started.data.status === 'success') {
         const existing = await getRuleV3ExtractionProgress(started.data.runId)
         completeFromRun(existing.data, true, replaceExisting)
@@ -108,12 +155,12 @@ export const useExtractionStore = defineStore('extraction', () => {
     }
   }
 
-  function startExtraction(id: string, title: string, replaceExisting = false, baselineSecondsPerBatch: number | null = null) {
+  function startExtraction(id: string, title: string, replaceExisting = false, baselineTotalSeconds: number | null = null) {
     return useAcademicJobQueueStore().enqueue({
       sourceId: id,
       title,
       kind: 'rules',
-      run: ({ promotedFromQueue }) => runExtraction(id, title, promotedFromQueue, replaceExisting, baselineSecondsPerBatch),
+      run: ({ promotedFromQueue }) => runExtraction(id, title, promotedFromQueue, replaceExisting, baselineTotalSeconds),
     })
   }
 
@@ -124,18 +171,13 @@ export const useExtractionStore = defineStore('extraction', () => {
       const run = response.data
       const total = Math.max(0, run.totalBatches || 0)
       const processed = Math.max(0, run.processedBatches || 0)
-
-      if (processed > lastProcessedBatches) {
-        const now = Date.now()
-        const completedSinceLastPoll = processed - lastProcessedBatches
-        const observedSeconds = (now - lastBatchObservationAt) / 1000 / completedSinceLastPoll
-        if (observedSeconds > 0) {
-          batchDurationSamples.push(observedSeconds)
-          if (batchDurationSamples.length > 7) batchDurationSamples.shift()
-        }
-        lastProcessedBatches = processed
-        lastBatchObservationAt = now
-      }
+      currentStage.value = run.currentStage === 'saving_candidates' ? 'saving_candidates'
+        : run.currentStage === 'extracting_candidates' ? 'extracting_candidates' : 'initializing'
+      totalBatches.value = total
+      processedBatches.value = processed
+      rawCandidateCount.value = Math.max(0, run.rawCandidateCount || 0)
+      verifiedCandidateCount.value = Math.max(0, run.verifiedCandidateCount || 0)
+      persistTask()
 
       if (run.currentStage === 'initializing') {
         progress.value = 5
@@ -147,16 +189,12 @@ export const useExtractionStore = defineStore('extraction', () => {
         stepText.value = `Đang trích xuất và kiểm tra trích dẫn… (${processed}/${total})`
         processedLabel.value = total > 0 ? `${processed}/${total} lô bằng chứng` : ''
         stageDetail.value = `Đã nhận ${run.rawCandidateCount} kết luận thô; giữ ${run.verifiedCandidateCount} quy luật có dẫn chứng hợp lệ.`
-        const measured = batchDurationSamples.length ? median(batchDurationSamples) : null
-        const secondsPerBatch = measured !== null && historicalSecondsPerBatch !== null
-          ? measured * 0.7 + historicalSecondsPerBatch * 0.3
-          : measured ?? historicalSecondsPerBatch
-        if (secondsPerBatch !== null && total > processed) {
-          setEtaAnchor(secondsPerBatch * (total - processed) + 8)
-        } else if (total === processed && total > 0) {
-          setEtaAnchor(8)
-        } else {
-          setEtaAnchor(null)
+        // Freeze one honest schedule for the entire run. A completed run for
+        // this exact source becomes the next run's baseline; first runs use a
+        // conservative per-batch estimate. Progress observations never make
+        // the countdown jump around.
+        if (etaAnchorSeconds === null && total > 0) {
+          setEtaAnchor(plannedDurationSeconds ?? total * 32 + 8)
         }
       } else if (run.currentStage === 'saving_candidates') {
         progress.value = 95
@@ -164,7 +202,7 @@ export const useExtractionStore = defineStore('extraction', () => {
         stageDetail.value = replaceExisting
           ? 'Bộ kết quả cũ chỉ được thay khi toàn bộ quy luật đã kiểm chứng lưu thành công.'
           : 'Quy luật không đáp ứng hợp đồng lưu trữ sẽ bị loại và ghi rõ lý do.'
-        setEtaAnchor(8)
+        if (etaAnchorSeconds === null) setEtaAnchor(plannedDurationSeconds ?? 8)
       }
 
       if (run.status === 'success') {
@@ -240,10 +278,15 @@ export const useExtractionStore = defineStore('extraction', () => {
     stepText.value = outcomeVal === 'success_no_verified_candidates'
       ? 'Không có quy luật đạt kiểm chứng'
       : 'Hoàn tất phân tích!'
+    currentStage.value = 'completed'
+    timingDeltaSeconds.value = etaAnchorSeconds === null
+      ? null
+      : Math.round(etaAnchorSeconds - elapsedSeconds.value)
     isDialogVisible.value = false
     isPinnedVisible.value = true
     stopClock()
     scheduleTerminalDismiss()
+    persistTask(Date.now() + 3000)
   }
 
   function handleFailure(msg: string, outcomeVal: string = 'failed_system_error') {
@@ -256,12 +299,14 @@ export const useExtractionStore = defineStore('extraction', () => {
     isPinnedVisible.value = true
     stopClock()
     scheduleTerminalDismiss()
+    persistTask(Date.now() + 3000)
   }
 
   function scheduleTerminalDismiss() {
     if (terminalTimer) clearTimeout(terminalTimer)
     terminalTimer = setTimeout(() => {
       isPinnedVisible.value = false
+      localStorage.removeItem(EXTRACTION_TASK_KEY)
       terminalTimer = null
     }, 3000)
   }
@@ -272,6 +317,7 @@ export const useExtractionStore = defineStore('extraction', () => {
       clearTimeout(terminalTimer)
       terminalTimer = null
     }
+    localStorage.removeItem(EXTRACTION_TASK_KEY)
   }
 
   function stopTracking() {
@@ -298,6 +344,14 @@ export const useExtractionStore = defineStore('extraction', () => {
     estimatedRemainingSeconds.value = null
     etaAnchorSeconds = null
     processedLabel.value = ''
+    currentStage.value = 'initializing'
+    totalBatches.value = 0
+    processedBatches.value = 0
+    rawCandidateCount.value = 0
+    verifiedCandidateCount.value = 0
+    timingDeltaSeconds.value = null
+    currentRunId.value = null
+    localStorage.removeItem(EXTRACTION_TASK_KEY)
   }
 
   function minimizeDialog() {
@@ -334,10 +388,17 @@ export const useExtractionStore = defineStore('extraction', () => {
     elapsedSeconds,
     estimatedRemainingSeconds,
     processedLabel,
+    currentStage,
+    totalBatches,
+    processedBatches,
+    rawCandidateCount,
+    verifiedCandidateCount,
+    timingDeltaSeconds,
     startExtraction,
     stopTracking,
     dismissPinned,
     minimizeDialog,
-    openDialog
+    openDialog,
+    restoreTracking,
   }
 })

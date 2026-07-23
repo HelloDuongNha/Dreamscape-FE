@@ -447,15 +447,15 @@
                         v-if="(block.sectionType || block.type) === 'heading'" 
                         :class="['reader-heading-text', `reader-heading--level-${block.headingLevel || 2}`]"
                       >
-                        <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
-                        <span v-else translate="no">{{ block.text }}</span>
+                        <span v-if="block.html && !isTranslationActive && !isOcrRepairActive" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else translate="no">{{ getRenderedText(block) }}</span>
                       </h3>
                       
                       <!-- list_item -->
                       <div v-else-if="block.sectionType === 'list_item'" class="reader-list-item">
                         <span class="list-marker">{{ block.marker || extractListMarker(block.text).marker }}</span>
-                        <span v-if="block.html" class="list-text" v-html="getInnerHtml(block.html)" translate="no"></span>
-                        <span v-else class="list-text" translate="no">{{ block.text }}</span>
+                        <span v-if="block.html && !isTranslationActive && !isOcrRepairActive" class="list-text" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else class="list-text" translate="no">{{ getRenderedText(block) }}</span>
                       </div>
                       
                       <!-- reference_item / reference -->
@@ -465,8 +465,8 @@
                       >
                         <p class="reference-card-text">
                           <span class="reference-number" v-if="block.refNumber">[{{ block.refNumber }}] </span>
-                          <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
-                          <span v-else translate="no">{{ block.text }}</span>
+                          <span v-if="block.html && !isTranslationActive && !isOcrRepairActive" v-html="getInnerHtml(block.html)" translate="no"></span>
+                          <span v-else translate="no">{{ getRenderedText(block) }}</span>
                         </p>
                         
                         <div v-if="block.actions && block.actions.length > 0" class="reference-actions-row">
@@ -490,35 +490,35 @@
                       
                       <!-- caption -->
                       <p v-else-if="block.sectionType === 'caption'" class="reader-caption-text">
-                        <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
-                        <span v-else translate="no">{{ block.text }}</span>
+                        <span v-if="block.html && !isTranslationActive && !isOcrRepairActive" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else translate="no">{{ getRenderedText(block) }}</span>
                       </p>
      
                       <!-- abstract -->
                       <div v-else-if="block.sectionType === 'abstract'" class="reader-abstract-box">
                         <p class="abstract-text">
                           <strong>{{ t('library.reader.abstract') }} </strong>
-                          <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
-                          <span v-else translate="no">{{ block.text }}</span>
+                          <span v-if="block.html && !isTranslationActive && !isOcrRepairActive" v-html="getInnerHtml(block.html)" translate="no"></span>
+                          <span v-else translate="no">{{ getRenderedText(block) }}</span>
                         </p>
                       </div>
 
                       <!-- title -->
                       <h1 v-else-if="block.sectionType === 'title'" class="reader-title-text">
-                        <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
-                        <span v-else translate="no">{{ block.text }}</span>
+                        <span v-if="block.html && !isTranslationActive && !isOcrRepairActive" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else translate="no">{{ getRenderedText(block) }}</span>
                       </h1>
 
                       <!-- figure / table block -->
                       <div v-else-if="block.type === 'figure' || block.sectionType === 'figure' || block.blockType === 'figure' || block.type === 'table' || block.sectionType === 'table' || block.blockType === 'table'">
-                        <div v-if="block.html" class="reader-rich-block" v-html="block.html" translate="no"></div>
+                        <div v-if="block.html" class="reader-rich-block" v-html="getRenderedHtml(block)" translate="no"></div>
                         <div v-else class="reader-placeholder-card">
                           <div v-if="block.type === 'figure' || block.sectionType === 'figure' || block.blockType === 'figure'" class="figure-fallback">
                             <p class="placeholder-error"><em>{{ t('library.reader.figureUnavailable') }}</em></p>
-                            <p class="placeholder-caption" translate="no">{{ block.text }}</p>
+                            <p class="placeholder-caption" translate="no">{{ getRenderedText(block) }}</p>
                           </div>
                           <div v-else class="table-fallback">
-                            <p class="placeholder-caption" translate="no">{{ block.text }}</p>
+                            <p class="placeholder-caption" translate="no">{{ getRenderedText(block) }}</p>
                             <p class="placeholder-error"><em>{{ t('library.reader.tableUnavailable') }}</em></p>
                           </div>
                           <div v-if="block.style?.doiUrl" class="placeholder-link-wrapper">
@@ -571,8 +571,8 @@
 
                       <!-- acknowledgement_item -->
                       <p v-else-if="block.type === 'acknowledgement_item'" class="acknowledgement-paragraph">
-                        <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
-                        <span v-else translate="no">{{ block.text }}</span>
+                        <span v-if="block.html && !isTranslationActive && !isOcrRepairActive" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else translate="no">{{ getRenderedText(block) }}</span>
                       </p>
 
                       <!-- correction_item -->
@@ -585,14 +585,14 @@
                           </svg>
                           <span class="correction-badge">{{ t('library.reader.correction') }}</span>
                         </div>
-                        <p v-if="block.html" class="correction-text" v-html="getInnerHtml(block.html)" translate="no"></p>
-                        <p v-else class="correction-text" translate="no">{{ block.text }}</p>
+                        <p v-if="block.html && !isTranslationActive && !isOcrRepairActive" class="correction-text" v-html="getInnerHtml(block.html)" translate="no"></p>
+                        <p v-else class="correction-text" translate="no">{{ getRenderedText(block) }}</p>
                       </div>
                       
                       <!-- paragraph or other default -->
                       <p v-else class="reader-paragraph-text">
-                        <span v-if="block.html" v-html="getInnerHtml(block.html)" translate="no"></span>
-                        <span v-else translate="no">{{ block.text }}</span>
+                        <span v-if="block.html && !isTranslationActive && !isOcrRepairActive" v-html="getInnerHtml(block.html)" translate="no"></span>
+                        <span v-else translate="no">{{ getRenderedText(block) }}</span>
                       </p>
                     </div>
                   </div>
@@ -759,12 +759,14 @@
               <span class="meta-key">{{ t('library.labels.identifier') }}</span>
               <div class="meta-doi-wrapper">
                 <span class="attribute-value code-font" translate="no">{{ displayDoi }}</span>
-                <button class="copy-doi-btn" @click="copyDoi" :title="t('library.system.copyDoi')">
-                  <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                  </svg>
-                </button>
+                <AppCopyButton
+                  class="copy-doi-btn"
+                  :text="displayDoi"
+                  :label="t('library.system.copyDoi')"
+                  :copied-label="t('oracle.evidenceCopiedShort')"
+                  :success-message="t('library.readerLocal.copyDoiSuccess')"
+                  :error-message="t('library.readerLocal.copyDoiFailed')"
+                />
               </div>
             </div>
           </div>
@@ -932,6 +934,18 @@
                 @click="triggerPdfIngestionFlow(false)"
               >
                 {{ source.readableInApp ? t('library.system.rebuildDocling') : t('library.system.buildDocling') }}
+              </AppButton>
+
+              <AppButton
+                v-if="source.readableInApp"
+                variant="secondary"
+                size="sm"
+                block
+                :class="{ 'reader-debug-action--active': isOcrRepairActive }"
+                :title="t('library.reader.ocrRepairHelp')"
+                @click="isOcrRepairActive = !isOcrRepairActive"
+              >
+                {{ isOcrRepairActive ? t('library.reader.ocrRepairOn') : t('library.reader.ocrRepair') }}
               </AppButton>
 
               <AppButton
@@ -1210,6 +1224,8 @@ import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { getSourcePreview, reviewSource, getModerationSourcePdfInline, cacheModerationSourceOriginalPdf, uploadModerationSourcePdf, deleteModerationSourceOriginalPdf } from '@/api/moderationApi'
+import { useSmartReaderTranslation } from '../composables/useSmartReaderTranslation'
+import { repairOcrHtml, repairOcrText } from '../services/ocrTextRepair.service'
 import {
   getRuleV3SourceAnalysisSummary,
   type RuleV3SourceAnalysisSummary,
@@ -1218,6 +1234,7 @@ import { useSourceProgressStore } from '@/store/useSourceProgressStore'
 import { useExtractionStore } from '@/store/useExtractionStore'
 import AppButton from '@/components/common/AppButton.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
+import AppCopyButton from '@/components/common/AppCopyButton.vue'
 import {
   PDF_MAX_FILE_SIZE_BYTES,
   PDF_MAX_FILE_SIZE_LABEL,
@@ -1279,9 +1296,16 @@ function isMajorGeneralHeading(text: string): boolean {
   const majorHeadings = [
     'introduction', 'methods', 'methodology', 'results', 'discussion',
     'conclusion', 'conclusions', 'background', 'related work', 'abstract',
+    'limitation', 'limitations', 'limitations of the model', 'future directions',
     'tóm tắt', 'giới thiệu', 'phương pháp', 'kết quả', 'thảo luận', 'kết luận'
   ];
   return majorHeadings.includes(clean);
+}
+
+function isLikelyBodyProseMislabelledAsReference(text: string): boolean {
+  const clean = text.trim()
+  if (clean.length < 55 || !/^\p{Ll}/u.test(clean) || !/[.!?]$/u.test(clean)) return false
+  return !/(?:\b(?:19|20)\d{2}\b|\bdoi\s*:|https?:\/\/|\bet\s+al\.|^[\p{Lu}][\p{L}'’.-]+\s*,)/iu.test(clean)
 }
 
 function isNewSupplementaryItemStart(text: string): boolean {
@@ -1824,16 +1848,36 @@ function processReaderContent(sections: any[], quality = 'low', engine: string) 
     else if (rawType === 'table') type = 'table'
     else if (rawType === 'page_break') type = 'page_break'
     else if (rawType === 'metadata') type = 'metadata'
+
+    const sourceWasReference = type === 'reference'
+    if (type === 'reference' && isMajorGeneralHeading(text)) {
+      type = 'heading'
+    } else if (
+      type === 'reference'
+      && (/^[-–—•]+$/u.test(text) || /^(?:conflict of interest(?: statement)?|received\s*:|accepted\s*:|published online\s*:|citation\s*:|this article was submitted to\b|copyright\b|©)/iu.test(text))
+    ) {
+      type = 'metadata'
+    } else if (type === 'reference' && isLikelyBodyProseMislabelledAsReference(text)) {
+      // Defensive display repair for already-imported Docling records. The
+      // ingestion policy performs the same recovery for future imports.
+      type = 'paragraph'
+    }
     
     let mappedBlock = {
       type,
-      sectionType: block.sectionType || block.blockType || 'paragraph',
+      sectionType: sourceWasReference && type !== 'reference'
+        ? type
+        : (block.sectionType || block.blockType || 'paragraph'),
       text,
+      canonicalText: block.text || '',
       html: block.html || undefined,
       marker: block.marker || undefined,
       sectionIndex: block.sectionIndex,
       headingLevel: (block.sectionType === 'heading' || block.type === 'heading') ? getHeadingLevel(text) : undefined,
-      style: block.style || undefined
+      style: block.style || undefined,
+      blockIdentity: block.blockIdentity || undefined,
+      sectionIdentity: block.sectionIdentity || null,
+      tableData: block.tableData || null
     }
 
     if (type === 'metadata') {
@@ -1905,6 +1949,12 @@ function processReaderContent(sections: any[], quality = 'low', engine: string) 
       if (headingClass !== 'general') {
         flushCurrentSupItem()
         activeState = headingClass
+      } else if (activeState === 'references') {
+        // Any real heading after References closes the bibliography. Canonical
+        // reference entries are already typed as reference; keeping a sticky
+        // UI state here incorrectly numbered later sections as citations.
+        flushCurrentSupItem()
+        activeState = 'body'
       } else if (isMajorGeneralHeading(block.text)) {
         flushCurrentSupItem()
         activeState = 'body'
@@ -1966,7 +2016,7 @@ function processReaderContent(sections: any[], quality = 'low', engine: string) 
     } else if (activeState === 'references') {
       if (block.type === 'heading') {
         finalNormalBlocks.push(block)
-      } else {
+      } else if (block.type === 'reference') {
         let refBlock = { ...block, type: 'reference' }
         refBlock = cleanReferenceBlock(refBlock)
         
@@ -1988,6 +2038,10 @@ function processReaderContent(sections: any[], quality = 'low', engine: string) 
           lastValidReference = refBlock
           finalNormalBlocks.push(refBlock)
         }
+      } else {
+        // Do not manufacture references from ordinary paragraphs merely
+        // because they occur after a References heading in reading order.
+        finalNormalBlocks.push(block)
       }
     } else {
       // activeState === 'body'
@@ -2021,7 +2075,7 @@ function processReaderContent(sections: any[], quality = 'low', engine: string) 
 
   let refCounter = 1
   finalNormalBlocks.forEach(block => {
-    if (block.type === 'reference' || block.sectionType === 'reference_item') {
+    if (block.type === 'reference') {
       if (block.text) {
         block.text = stripLeadingReferenceNumber(block.text)
       }
@@ -3111,9 +3165,11 @@ function dismissWarningBanner() {
 }
 
 const readerPages = ref<any[]>([])
+const readerIdentity = ref<any>(null)
 const currentPageIndex = ref(0)
 const totalPages = ref(1)
 const fontSize = ref(17)
+const isOcrRepairActive = ref(false)
 const extractionQuality = ref<'high' | 'medium' | 'low'>('low')
 const smartReaderSourceType = ref('')
 const sourceUrlUsed = ref('')
@@ -3217,6 +3273,9 @@ async function fetchAllReaderData() {
         layoutQuality.value = data.fullText.layoutQuality || ''
         readerWarnings.value = data.fullText.warnings || []
         ocrNeeded.value = data.fullText.ocrNeeded || false
+        if (data.readerIdentity) {
+          readerIdentity.value = data.readerIdentity
+        }
       }
       allSections = [...allSections, ...data.sections]
       pages = data.pagination?.pages || 1
@@ -3259,6 +3318,72 @@ async function fetchAllReaderData() {
   }
 }
 
+const translationProps = {
+  pathType: props.mode === 'moderation' ? ('preview' as const) : ('approved' as const),
+  sourceId: computed(() => source.value?._id || resolvedSourceId.value),
+  sourceContentHash: computed(() => readerIdentity.value?.sourceContentHash || ''),
+  sourceLanguage: computed(() => readerIdentity.value?.sourceLanguage || null),
+  targetLocale: computed(() => locale.value as 'vi' | 'en'),
+  reloadReaderData: async () => {
+    if (props.mode === 'moderation') {
+      await fetchSource()
+    } else {
+      await fetchAllReaderData()
+    }
+  }
+}
+
+const {
+  isTranslationActive,
+  translatePage,
+  getRenderedText: getTranslatedText,
+  getRenderedHtml: getTranslatedHtml
+} = useSmartReaderTranslation(translationProps)
+
+function getRenderedText(block: any): string {
+  const text = getTranslatedText(block)
+  return isOcrRepairActive.value ? repairOcrText(text) : text
+}
+
+function getRenderedHtml(block: any): string | undefined {
+  const html = getTranslatedHtml(block)
+  return html && isOcrRepairActive.value ? repairOcrHtml(html) : html
+}
+
+function prepareBlocksForTranslation(blocks: any[]): any[] {
+  if (!isOcrRepairActive.value) return blocks
+  return blocks.map(block => ({
+    ...block,
+    text: repairOcrText(block.text || ''),
+    canonicalText: repairOcrText(block.canonicalText || block.text || ''),
+    html: block.html ? repairOcrHtml(block.html) : block.html,
+    tableData: block.tableData?.cells
+      ? {
+          ...block.tableData,
+          cells: block.tableData.cells.map((cell: any) => ({
+            ...cell,
+            text: repairOcrText(cell.text || ''),
+          })),
+        }
+      : block.tableData,
+  }))
+}
+
+watch([
+  currentPageIndex,
+  readerPages,
+  activeTab,
+  isTranslationActive,
+  isOcrRepairActive,
+  translationProps.targetLocale,
+  translationProps.sourceLanguage,
+], async () => {
+  if (activeTab.value === 'smart' && isTranslationActive.value && readerPages.value[currentPageIndex.value]) {
+    const page = readerPages.value[currentPageIndex.value]
+    await translatePage(currentPageIndex.value, prepareBlocksForTranslation(page.blocks))
+  }
+})
+
 function goToPageIndex(pageIdx: number) {
   if (!readerPages.value || readerPages.value.length === 0) return
   const index = Math.max(0, Math.min(pageIdx, readerPages.value.length - 1))
@@ -3293,23 +3418,6 @@ async function handleRetryImport() {
 const displayDoi = computed(() => {
   return !source.value || !source.value.doi ? '' : source.value.doi.replace(/^(doi|DOI):\s*/, '').trim()
 })
-
-async function copyDoi() {
-  const doi = displayDoi.value
-  if (doi) {
-    if (!navigator.clipboard || !navigator.clipboard.writeText) {
-      settingsStore.showToast(t('library.readerLocal.copyDoiFailed'), 'error')
-      return
-    }
-    try {
-      await navigator.clipboard.writeText(doi)
-      settingsStore.showToast(t('library.readerLocal.copyDoiSuccess'), 'success')
-    } catch (err) {
-      console.error('Failed to copy DOI:', err)
-      settingsStore.showToast(t('library.readerLocal.copyDoiFailed'), 'error')
-    }
-  }
-}
 
 const isModeratorUser = computed(() => {
   const moderators = '6a0fc84bd37aacb66092be0e'.split(',')
@@ -3416,15 +3524,22 @@ function handleRuleV3Extraction() {
 async function confirmRuleV3Extraction() {
   if (!source.value?._id || isCurrentlyExtractingV3.value) return
   showRuleExtractionConfirm.value = false
+  // Refresh this document's own run history immediately before scheduling so
+  // a faster/slower completed run becomes the next estimate without requiring
+  // a page reload.
+  const previousSummary = ruleV3Summary.value
+  await loadRuleV3Summary()
+  if (!ruleV3Summary.value && previousSummary) ruleV3Summary.value = previousSummary
   const latestRun = ruleV3Summary.value?.latestRun
-  const historicalSecondsPerBatch = latestRun?.durationMs && latestRun.processedBatches > 0
-    ? latestRun.durationMs / 1000 / latestRun.processedBatches
+  const latestSuccessfulRun = ruleV3Summary.value?.runHistory.find(run => run.status === 'success' && run.durationMs)
+  const historicalTotalSeconds = latestSuccessfulRun?.durationMs
+    ? latestSuccessfulRun.durationMs / 1000
     : null
   await extractionStore.startExtraction(
     source.value._id,
     source.value.title || t('library.readerLocal.academicDocument'),
     Boolean(latestRun),
-    historicalSecondsPerBatch
+    historicalTotalSeconds
   )
 }
 const readerProvenance = computed(() => String(
@@ -3438,6 +3553,14 @@ const isPdfReaderActive = computed(() =>
   ['pdf_text', 'ocr', 'mixed'].includes(readerProvenance.value) ||
   /docling|uploaded_pdf|pymupdf|pdf_parse/.test(readerProvenance.value)
 )
+
+watch([extractionEngine, smartReaderSourceType], ([engine, sourceType]) => {
+  // Docling repair is part of ingestion for new builds. Keep the presentation
+  // fallback enabled automatically so older Docling builds are repaired too.
+  if (/docling/i.test(engine) || /uploaded_pdf/i.test(sourceType)) {
+    isOcrRepairActive.value = true
+  }
+})
 
 const readerBuildSnapshots = computed(() => Array.isArray(source.value?.readerBuildSnapshots)
   ? [...source.value.readerBuildSnapshots].sort((a: any, b: any) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime())
@@ -3682,6 +3805,9 @@ async function fetchSource() {
           layoutQuality.value = fullText.layoutQuality || ''
           readerWarnings.value = fullText.warnings || []
           ocrNeeded.value = fullText.ocrNeeded || false
+          if (res.data.readerIdentity) {
+            readerIdentity.value = res.data.readerIdentity
+          }
 
           const sections = res.data.sections || []
           if (sections.length > 0) {
@@ -3969,11 +4095,13 @@ onUnmounted(() => {
 
 .reader-tabs-row {
   display: flex;
+  align-items: flex-end;
   gap: 4px;
   margin-bottom: 0;
   padding-left: var(--space-2);
   z-index: 2;
   flex-shrink: 0;
+  padding-right: var(--space-2);
 }
 
 .bookmark-tab {

@@ -5,6 +5,8 @@ import apiClient from '@/api/client'
 import { useDreamStore } from './useDreamStore'
 import { useNotificationStore } from './useNotificationStore'
 
+const ORACLE_DREAM_TASK_KEY = 'dreamscape:pinned-task:oracle-dream:v1'
+
 export const useOracleStore = defineStore('oracle', () => {
   const trackedDream = ref<ApiDream | null>(null)
   const isDialogVisible = ref(false)
@@ -47,6 +49,39 @@ export const useOracleStore = defineStore('oracle', () => {
 
     // Polling status every 2.5s
     startPolling(dream._id)
+    persistTask()
+  }
+
+  function persistTask(expiresAt?: number) {
+    if (!trackedDream.value) {
+      localStorage.removeItem(ORACLE_DREAM_TASK_KEY)
+      return
+    }
+    localStorage.setItem(ORACLE_DREAM_TASK_KEY, JSON.stringify({
+      dreamId: trackedDream.value._id,
+      visible: isPinnedVisible.value,
+      status: completedDream.value ? 'completed' : failedDream.value ? 'failed' : 'pending',
+      expiresAt: expiresAt || null,
+    }))
+  }
+
+  async function restoreTracking() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(ORACLE_DREAM_TASK_KEY) || 'null')
+      if (!saved?.dreamId) return
+      if (saved.expiresAt && saved.expiresAt <= Date.now()) {
+        localStorage.removeItem(ORACLE_DREAM_TASK_KEY)
+        return
+      }
+      const { data } = await apiClient.get<{ success: boolean; data: ApiDream }>(`/dreams/${saved.dreamId}`)
+      if (!data.success) return
+      startTracking(data.data)
+      isDialogVisible.value = false
+      isPinnedVisible.value = true
+      persistTask(saved.expiresAt || undefined)
+    } catch {
+      // A persisted task is optional UI state; authentication recovery handles real failures.
+    }
   }
 
   function startElapsedClock() {
@@ -101,6 +136,7 @@ export const useOracleStore = defineStore('oracle', () => {
       isDialogVisible.value = false
       isPinnedVisible.value = true
       scheduleTerminalDismiss()
+      persistTask(Date.now() + 3000)
       return
     }
     isDialogVisible.value = true
@@ -116,6 +152,7 @@ export const useOracleStore = defineStore('oracle', () => {
     isPinnedVisible.value = true // convert to failed pinned notification
     clearTimers()
     scheduleTerminalDismiss()
+    persistTask(Date.now() + 3000)
   }
 
   function clearTimers() {
@@ -139,12 +176,14 @@ export const useOracleStore = defineStore('oracle', () => {
     progress.value = 0
     completedDream.value = null
     failedDream.value = null
+    localStorage.removeItem(ORACLE_DREAM_TASK_KEY)
   }
 
   function scheduleTerminalDismiss() {
     clearCompletionTimer()
     completionTimer = setTimeout(() => {
       isPinnedVisible.value = false
+      localStorage.removeItem(ORACLE_DREAM_TASK_KEY)
       completionTimer = null
     }, 3000)
   }
@@ -155,6 +194,7 @@ export const useOracleStore = defineStore('oracle', () => {
     if (completedDream.value || failedDream.value) {
       clearCompletionTimer()
     }
+    localStorage.removeItem(ORACLE_DREAM_TASK_KEY)
   }
 
   function minimizeDialog() {
@@ -162,6 +202,7 @@ export const useOracleStore = defineStore('oracle', () => {
     isDialogVisible.value = false
     if (trackedDream.value) {
       isPinnedVisible.value = true
+      persistTask()
       if (completedDream.value || failedDream.value) scheduleTerminalDismiss()
     }
   }
@@ -207,5 +248,6 @@ export const useOracleStore = defineStore('oracle', () => {
     minimizeDialog,
     openDialog,
     openCompletedDialog,
+    restoreTracking,
   }
 })

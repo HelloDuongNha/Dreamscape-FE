@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { importFullText, reimportFullText, cacheModerationSourceOriginalPdf, processUploadedPdfForContribution } from '@/api/moderationApi'
 import { processUploadedPdfForApprovedSource } from '@/api/sourceApi'
 import { useAcademicJobQueueStore } from './useAcademicJobQueueStore'
+
+const SOURCE_TASK_KEY = 'dreamscape:pinned-task:source-progress:v1'
 
 export const useSourceProgressStore = defineStore('sourceProgress', () => {
   const contributionId = ref<string | null>(null)
@@ -29,6 +31,62 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
   let smoothTimer: ReturnType<typeof setInterval> | null = null
   let terminalTimer: ReturnType<typeof setTimeout> | null = null
   let clockStartedAt = 0
+  let persistedExpiresAt: number | null = null
+
+  function persistTask() {
+    if (!contributionId.value || status.value === 'none') {
+      localStorage.removeItem(SOURCE_TASK_KEY)
+      return
+    }
+    localStorage.setItem(SOURCE_TASK_KEY, JSON.stringify({
+      contributionId: contributionId.value,
+      sourceTitle: sourceTitle.value,
+      progress: progress.value,
+      status: status.value,
+      stepText: stepText.value,
+      stageDetail: stageDetail.value,
+      pipelineKind: pipelineKind.value,
+      smartReaderResult: smartReaderResult.value,
+      pdfResult: pdfResult.value,
+      selectedSource: selectedSource.value,
+      startedAt: clockStartedAt,
+      expiresAt: persistedExpiresAt,
+    }))
+  }
+
+  function restoreTracking() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SOURCE_TASK_KEY) || 'null')
+      if (!saved?.contributionId) return
+      if (saved.expiresAt && saved.expiresAt <= Date.now()) {
+        localStorage.removeItem(SOURCE_TASK_KEY)
+        return
+      }
+      contributionId.value = saved.contributionId
+      sourceTitle.value = saved.sourceTitle || ''
+      progress.value = Number(saved.progress) || 0
+      status.value = saved.status || 'pending'
+      stepText.value = saved.stepText || 'Đang khôi phục trạng thái tác vụ…'
+      stageDetail.value = saved.stageDetail || ''
+      pipelineKind.value = saved.pipelineKind || 'none'
+      smartReaderResult.value = saved.smartReaderResult || 'limited'
+      pdfResult.value = saved.pdfResult || 'none'
+      selectedSource.value = saved.selectedSource || 'none'
+      isDialogVisible.value = false
+      isPinnedVisible.value = true
+      clockStartedAt = Number(saved.startedAt) || Date.now()
+      if (status.value === 'pending') startClock(clockStartedAt)
+      else if (saved.expiresAt) {
+        persistedExpiresAt = saved.expiresAt
+        terminalTimer = setTimeout(() => {
+          isPinnedVisible.value = false
+          localStorage.removeItem(SOURCE_TASK_KEY)
+        }, Math.max(0, saved.expiresAt - Date.now()))
+      }
+    } catch {
+      localStorage.removeItem(SOURCE_TASK_KEY)
+    }
+  }
 
   function durationStorageKey() {
     return contributionId.value && pipelineKind.value !== 'none'
@@ -63,10 +121,10 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     }
   }
 
-  function startClock() {
+  function startClock(startedAt = Date.now()) {
     if (clockTimer) clearInterval(clockTimer)
-    elapsedSeconds.value = 0
-    clockStartedAt = Date.now()
+    clockStartedAt = startedAt
+    elapsedSeconds.value = Math.max(0, Math.floor((Date.now() - clockStartedAt) / 1000))
     loadExpectedDuration()
     clockTimer = setInterval(() => {
       elapsedSeconds.value = Math.floor((Date.now() - clockStartedAt) / 1000)
@@ -107,6 +165,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     progress.value = 0
     status.value = 'pending'
     stepText.value = 'Đã tải PDF gốc lên hệ thống.'
+    stageDetail.value = 'PDF gốc được giữ nguyên; Bản đọc sẽ chỉ lưu phần văn bản đã qua kiểm tra và làm sạch.'
     pipelineKind.value = 'pdf'
     smartReaderResult.value = 'limited'
     pdfResult.value = 'success'
@@ -125,7 +184,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
 
     // Step 3: Run processing (40 - 85)
     stepText.value = 'Đang nhận diện thông tin tài liệu...'
-    stageDetail.value = 'Đang nhận diện DOI/ISBN, dựng bố cục, bảng và hình ảnh. Sách scan dài có thể cần OCR trong nhiều phút.'
+    stageDetail.value = 'Docling đang dựng bố cục, bảng và hình; văn bản OCR sẽ được làm sạch tự động trước khi lưu. Sách scan dài có thể cần nhiều phút.'
     startSmoothProgress(84, 120_000)
     let finalStatus: 'success' | 'failed' = 'failed'
     let finalSmartReaderResult: 'success' | 'failed' | 'limited' | 'ocr_needed' = 'failed'
@@ -256,7 +315,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     // real Original PDF was cached do we invoke the PDF Docling fallback once.
     if (smartReaderResult.value === 'failed' && pdfResult.value === 'success') {
       stepText.value = 'Không có bản đọc HTML/JATS; đang dựng từ PDF bằng Docling...'
-      stageDetail.value = 'Docling đang phục hồi thứ tự đọc, heading, table và figure từ PDF.'
+      stageDetail.value = 'Docling đang phục hồi thứ tự đọc, heading, table và figure; bước làm sạch OCR chạy tự động trước khi lưu.'
       startSmoothProgress(92, 120_000)
       try {
         const doclingRes = await processUploadedPdfForContribution(id, false, false)
@@ -370,8 +429,11 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
 
   function scheduleTerminalDismiss() {
     if (terminalTimer) clearTimeout(terminalTimer)
+    persistedExpiresAt = Date.now() + 3000
+    persistTask()
     terminalTimer = setTimeout(() => {
       isPinnedVisible.value = false
+      localStorage.removeItem(SOURCE_TASK_KEY)
       terminalTimer = null
     }, 3000)
   }
@@ -382,6 +444,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       clearTimeout(terminalTimer)
       terminalTimer = null
     }
+    localStorage.removeItem(SOURCE_TASK_KEY)
   }
 
   function minimizeDialog() {
@@ -435,10 +498,17 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     isPinnedVisible.value = false
     progress.value = 0
     status.value = 'none'
+    persistedExpiresAt = null
+    localStorage.removeItem(SOURCE_TASK_KEY)
     pipelineKind.value = 'none'
     smartReaderResult.value = 'limited'
     pdfResult.value = 'none'
   }
+
+  watch(
+    [contributionId, progress, status, stepText, isPinnedVisible],
+    () => persistTask(),
+  )
 
   return {
     contributionId,
@@ -463,5 +533,6 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     openDialog,
     stopTracking,
     dismissPinned,
+    restoreTracking,
   }
 })

@@ -6,14 +6,31 @@ export interface RuleCandidate {
   academicFullTextId?: string
   evidenceChunkIds: string[]
   proposedRuleId: string
+  sourceLanguage?: string
   label: string
   fullStatement?: string
+  expandedExplanation?: string
+  expandedExplanations?: Partial<Record<'vi' | 'en', string>>
   probeBlueprint?: {
     verificationKind: string
+    verificationMode?: 'individual_question' | 'aggregate_dataset' | 'background_only'
     checkable: boolean
     conditionSummary: string | null
     explanation?: string
     applicabilityCheck?: string
+    questionPattern?: string
+    requiredData?: string
+    expectedPattern?: string
+    supportCriterion?: string
+    weakeningCriterion?: string
+    inconclusiveCriterion?: string
+    questionDimensions?: Array<{
+      type: string
+      questionPattern: string
+      purpose: string
+      collectedField: string
+      componentRuleCodes?: string[]
+    }>
     feedbackEffect: string
   }
   group: 'sleep_context' | 'dream_psychology' | 'personality_knowledge' | 'cultural_limitation'
@@ -38,6 +55,36 @@ export interface RuleCandidate {
   sourceYear?: number
   sourceTitle?: string
   sourceDoi?: string
+  mergeCluster?: {
+    clusterId: string
+    memberIds: string[]
+    memberCount: number
+    reasons: Array<'same_canonical_paragraph' | 'equivalent_subject_and_outcome' | 'same_meaningful_subject' | 'same_meaningful_outcome' | 'same_question_and_semantics'>
+  }
+  isComposite?: boolean
+  compositeComponents?: Array<{
+    sourceRuleId: string
+    ruleCode: string
+    statement: string
+    claimType: string
+    effectPolarity: string
+    evidenceInterpretation: string
+    subject: string
+    outcome: string
+    conditions: string[]
+    limitations: string[]
+    dreamFeatureTags: string[]
+    evidenceScore?: number
+    qualityAccepted?: boolean
+    supportingCitationCount?: number
+    expandedExplanation?: string
+    expandedExplanations?: Partial<Record<'vi' | 'en', string>>
+  }>
+  scoreAggregation?: {
+    method: 'minimum_component' | 'pooled_equivalent_evidence'
+    weakestRuleCode?: string
+    explanation: string
+  }
   generationModel?: string
   generationPromptVersion?: string
   validationErrors?: string[]
@@ -103,6 +150,7 @@ export interface EvidenceChunkPreview {
 
 export interface EvidenceExcerpt {
   evidenceGroupId: string
+  ruleId?: string
   sourceId: string
   sourceTitle?: string
   sourceDoi?: string
@@ -125,8 +173,23 @@ export interface CandidateDetailResponse {
     ruleCode: string
     status: 'pending' | 'approved' | 'retired'
     label: string
-    relationship: 'equivalent' | 'overlapping' | 'contradictory' | 'reverse_direction'
+    relationship: 'equivalent' | 'overlapping' | 'complementary' | 'scope_tension' | 'shared_context' | 'contradictory' | 'reverse_direction'
+    sharedEvidenceChunkCount?: number
     evidenceScore: number
+    subject: string
+    outcome: string
+    statement: string
+    keepSeparateReason?: string | null
+    mergeEligibility: {
+      canMerge: boolean
+      semanticCanMerge?: boolean
+      blockedByState?: 'composite_review_boundary' | 'different_status' | null
+      reasons: Array<'same_canonical_paragraph' | 'equivalent_subject_and_outcome' | 'same_meaningful_subject' | 'same_meaningful_outcome' | 'same_question_and_semantics'>
+      signals: Array<'same_source_document' | 'same_canonical_paragraph' | 'related_subject' | 'related_outcome' | 'similar_statement' | 'same_question_kind'>
+      subjectSimilarity: number
+      outcomeSimilarity: number
+      statementSimilarity: number
+    }
   }>
   feedbackStats?: {
     supports: number
@@ -134,6 +197,7 @@ export interface CandidateDetailResponse {
     unresolved: number
     total: number
     applicabilityRate: number | null
+    applicabilityScore: number | null
   }
 }
 
@@ -204,6 +268,16 @@ export const rejectRuleCandidate = async (
     message?: string
     data?: any
   }>(`/moderation/rules-v3/candidates/${id}/reject`, { reviewerNote })
+  return data
+}
+
+export const mergeRuleCandidateGroup = async (id: string): Promise<{
+  success: true
+  data: { primaryRuleId: string; retiredRuleIds: string[]; componentCount: number; requiresReview: boolean }
+}> => {
+  const { data } = await apiClient.post(`/moderation/rules-v3/candidates/${id}/merge`, {
+    confirmation: 'MERGE_COMPATIBLE_RULES',
+  })
   return data
 }
 

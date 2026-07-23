@@ -120,6 +120,16 @@ export const useDreamStore = defineStore('dream', () => {
     if (idx !== -1) dreams.value[idx] = data.data
   }
 
+  /** Append newly remembered details and start a fresh analysis without editing the original report. */
+  async function appendDreamAddition(dreamId: string, content: string): Promise<ApiDream> {
+    const { data } = await apiClient.post<UpdateDreamResponse>(`/dreams/${dreamId}/additions`, { content })
+    const idx = dreams.value.findIndex(d => d._id === dreamId)
+    if (idx !== -1) dreams.value[idx] = data.data
+    const { useOracleStore } = await import('@/store/useOracleStore')
+    useOracleStore().startTracking(data.data)
+    return data.data
+  }
+
   /**
    * Delete a dream.
    * Sends DELETE /api/dreams/:id, then removes the card from the local array.
@@ -175,6 +185,7 @@ export const useDreamStore = defineStore('dream', () => {
     addDream,
     toggleLike,
     editDream,
+    appendDreamAddition,
     removeDream,
     changePrivacy,
     incrementCommentCount,

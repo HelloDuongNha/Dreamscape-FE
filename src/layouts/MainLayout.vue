@@ -354,7 +354,7 @@ onUnmounted(() => {
 })
 
 /** Routes that need edge-to-edge layout (no max-width, no padding) */
-const FULL_BLEED_ROUTES = ['/messages']
+const FULL_BLEED_ROUTES = ['/messages', '/oracle']
 
 const isFullBleed = computed(() => {
   return FULL_BLEED_ROUTES.includes(route.path) || 

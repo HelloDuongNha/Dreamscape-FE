@@ -1,4 +1,5 @@
 import apiClient from './client'
+import type { TranslateReaderRequest, TranslateReaderResponse } from '../features/library/services/smartReaderTranslation.types'
 
 export interface ContributeSourcePayload {
   doi?: string
@@ -189,5 +190,21 @@ export const deleteApprovedSourceOriginalPdf = async (id: string): Promise<any> 
  */
 export const processUploadedPdfForApprovedSource = async (id: string, forceReplace = false, structuredFirst = false): Promise<any> => {
   const { data } = await apiClient.post<any>(`/sources/approved/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst })
+  return data
+}
+
+/**
+ * Translates targeted Smart Reader elements for an approved source.
+ */
+export const translateApprovedSourceText = async (
+  id: string,
+  payload: TranslateReaderRequest,
+  signal?: AbortSignal
+): Promise<TranslateReaderResponse> => {
+  const { data } = await apiClient.post<TranslateReaderResponse>(
+    `/sources/approved/${id}/read/translate`,
+    payload,
+    { signal }
+  )
   return data
 }

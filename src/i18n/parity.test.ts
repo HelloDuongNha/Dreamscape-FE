@@ -59,6 +59,7 @@ import viErrors from './locales/vi/errors.js'
 import viToasts from './locales/vi/toasts.js'
 import viHome from './locales/vi/home.js'
 import viLibrary from './locales/vi/library.js'
+import viRules from './locales/vi/rules.js'
 import viCatalog from './locales/vi/index.js'
 
 import enCommon from './locales/en/common.js'
@@ -71,6 +72,7 @@ import enErrors from './locales/en/errors.js'
 import enToasts from './locales/en/toasts.js'
 import enHome from './locales/en/home.js'
 import enLibrary from './locales/en/library.js'
+import enRules from './locales/en/rules.js'
 import enCatalog from './locales/en/index.js'
 
 import { normalizeLocale } from './types.js'
@@ -399,6 +401,7 @@ function testConsumedStaticKeys() {
     'src/features/home/DreamCard.vue',
     'src/features/home/PostDetailModal.vue',
     'src/store/useDreamStore.ts',
+    'src/features/moderation/RuleCandidatesView.vue',
   ]
 
   const allowlist = [
@@ -434,6 +437,9 @@ function testConsumedStaticKeys() {
     { pattern: /localSuccess/, reason: 'OTP verification success message key property' },
     { pattern: /PAGE_TITLE_KEYS/, reason: 'Page title keys dictionary lookup for fallback titles' },
     { pattern: /emotionLabelKeys\[emotionToneKey\.value\]/, reason: 'Emotion tone is a stable semantic enum mapped to a catalog key' },
+    { pattern: /`rules\.criteria\.\$\{value\}`/, reason: 'Rule score criterion uses a closed backend enum mirrored in both catalogs' },
+    { pattern: /`rules\.relationKinds\.\$\{value\}`/, reason: 'Rule relationship uses a closed backend enum mirrored in both catalogs' },
+    { pattern: /`rules\.questionTypes\.\$\{value\}`/, reason: 'Rule question dimension uses a closed backend enum mirrored in both catalogs' },
   ]
 
   const staticKeysFound = new Set<string>()
@@ -566,7 +572,7 @@ function testLibraryCatalogAndContentBoundaries() {
   const requiredBoundaries: Array<[RegExp, string]> = [
     [/source\.title[^\n]*translate="no"|translate="no"[^\n]*source\.title/, 'source title'],
     [/source\.authors\.join\(', '\)[^\n]*<\/span>|translate="no">\{\{ source\.authors/, 'source authors'],
-    [/class="reader-rich-block"[^>]*v-html="block\.html"[^>]*translate="no"/, 'rich reader HTML'],
+    [/class="reader-rich-block"[^>]*v-html="(block\.html|getRenderedHtml\(block\))"[^>]*translate="no"/, 'rich reader HTML'],
     [/class="reader-reference-card"[\s\S]*?translate="no"/, 'reference content'],
     [/source\.originalFile\.originalFileName[\s\S]*?translate="no"|translate="no"[\s\S]*?source\.originalFile\.originalFileName/, 'original filename'],
   ]
@@ -610,6 +616,41 @@ function testLibraryCatalogAndContentBoundaries() {
   console.log(`  ✓ Library catalog parity, ${requiredBoundaries.length} canonical-content boundaries, ${retained.length} classified parser/source-recognition literals`)
 }
 
+function testRuleReviewBoundaries() {
+  const relPath = 'src/features/moderation/RuleCandidatesView.vue'
+  const content = fs.readFileSync(path.resolve(process.cwd(), relPath), 'utf8')
+  assert.ok(/useI18n\(\{\s*useScope:\s*['"]global['"]\s*\}\)/.test(content), 'Rule review must use global i18n scope.')
+  assert.ok(/<blockquote translate="no">\{\{ excerpt\.excerpt \}\}<\/blockquote>/.test(content), 'Verified evidence quote must remain canonical.')
+  assert.ok(/class="context-text" translate="no">\{\{ chunkPreview\(excerpt\.chunkId\) \}\}/.test(content), 'Wider canonical context must remain untranslated.')
+  assert.ok(/class="citation-meta"[\s\S]*?<span translate="no">\{\{ excerpt\.sourceTitle/.test(content), 'Evidence source identity must remain untranslated.')
+  assert.ok(!content.includes('Khớp nguyên văn'), 'Obsolete exact-match badge must be removed.')
+  assert.ok(!content.includes('verified-badge'), 'Obsolete exact-match badge CSS must be removed.')
+  assert.ok(
+    /\['explanation',\s*candidate\.expandedExplanation/.test(content),
+    'Atomic-rule expanded explanations must be included in dynamic EN–VI translation.',
+  )
+  assert.ok(
+    /`component:\$\{index\}:explanation`/.test(content),
+    'Composite component fallback explanations must also be included in dynamic EN–VI translation.',
+  )
+  for (const marker of ['__MATCHED_FRAGMENTS__', '__MATCHED_FUTURE_EVENT__', '__MATCHED_SOLUTION__']) {
+    assert.ok(content.includes(marker), `${marker} must have a localized display replacement.`)
+  }
+  assert.ok(
+    /const clean = materializeQuestionPlaceholders\(String\(value \|\| ''\)\)\.trim\(\)/.test(content),
+    'Question placeholders must be materialized before browser translation can corrupt underscore markers.',
+  )
+
+  const templateContent = content.split('<script setup')[0]
+  const visibleVietnamese = templateContent.split('\n').filter(line => /[ĂÂĐÊÔƠƯăâđêôơưÁÀẢÃẠÉÈẺẼẸÍÌỈĨỊÓÒỎÕỌÚÙỦŨỤÝỲỶỸỴ]/u.test(line))
+  assert.deepEqual(visibleVietnamese, [], `Rule review contains hardcoded Vietnamese UI:\n${visibleVietnamese.join('\n')}`)
+
+  const viKeys = flattenKeys(viRules as unknown as Record<string, unknown>)
+  const enKeys = flattenKeys(enRules as unknown as Record<string, unknown>)
+  assert.deepEqual([...viKeys].sort(), [...enKeys].sort(), 'Rule-review catalog keys must match.')
+  console.log('  ✓ Rule review UI is localized; verified quotes/context/source identity remain canonical; exact-match badge removed')
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Runner
 // ─────────────────────────────────────────────────────────────────────────────
@@ -630,6 +671,7 @@ async function main() {
     ['11. Consumed static keys',       testConsumedStaticKeys],
     ['12. Home content boundaries',    testHomeContentBoundaries],
     ['13. Library boundaries',         testLibraryCatalogAndContentBoundaries],
+    ['14. Rule review boundaries',     testRuleReviewBoundaries],
   ]
 
   let passed = 0

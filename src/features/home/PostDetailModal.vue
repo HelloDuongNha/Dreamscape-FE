@@ -52,6 +52,32 @@
             <!-- Full dream content (un-truncated) -->
             <div class="modal-content-block">
               <p class="modal-content-text" translate="no">{{ postStore.focusedDream.content }}</p>
+              <div v-for="(addition, idx) in postStore.focusedDream.additions || []" :key="`${addition.sequence}:${addition.addedAt}`" class="modal-dream-addition" translate="no">
+                <strong>{{ (postStore.focusedDream.additions?.length || 0) === 1 ? t('home.additionLabel') : t('home.numberedAdditionLabel', { number: idx + 1 }) }}</strong>
+                <p>{{ addition.content }}</p>
+              </div>
+              <div v-if="isOwner" class="modal-addition-controls">
+                <AppButton v-if="!showAdditionForm" variant="ghost" size="sm" @click="showAdditionForm = true">
+                  {{ t('home.addDreamDetails') }}
+                </AppButton>
+                <template v-else>
+                  <textarea
+                    v-model="additionText"
+                    class="modal-addition-textarea"
+                    maxlength="2000"
+                    rows="4"
+                    :placeholder="t('home.addDreamDetailsPlaceholder')"
+                    :aria-label="t('home.addDreamDetails')"
+                    translate="no"
+                  />
+                  <div class="modal-addition-actions">
+                    <span>{{ additionText.length }} / 2000</span>
+                    <AppButton variant="ghost" size="sm" :disabled="isAddingDetail" @click="cancelAddition">{{ t('home.cancel') }}</AppButton>
+                    <AppButton variant="primary" size="sm" :loading="isAddingDetail" :disabled="!additionText.trim()" @click="submitAddition">{{ t('home.addAndReanalyze') }}</AppButton>
+                  </div>
+                  <small>{{ t('home.addDreamDetailsNote') }}</small>
+                </template>
+              </div>
               <span class="modal-timestamp">{{ timestamp }}</span>
             </div>
 
@@ -226,6 +252,7 @@ import apiClient         from '@/api/client'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo }       from '@/utils/timeAgo'
 import OracleAnalysisResult  from '@/components/common/OracleAnalysisResult.vue'
+import AppButton from '@/components/common/AppButton.vue'
 
 const postStore  = usePostStore()
 const dreamStore = useDreamStore()
@@ -239,6 +266,27 @@ const isSubmitting = ref(false)
 const isLiking     = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
 const bodyRef      = ref<HTMLElement | null>(null)
+const showAdditionForm = ref(false)
+const additionText = ref('')
+const isAddingDetail = ref(false)
+
+function cancelAddition() {
+  showAdditionForm.value = false
+  additionText.value = ''
+}
+
+async function submitAddition() {
+  const dream = postStore.focusedDream
+  if (!dream || !additionText.value.trim() || isAddingDetail.value) return
+  isAddingDetail.value = true
+  try {
+    const updated = await dreamStore.appendDreamAddition(dream._id, additionText.value.trim())
+    Object.assign(dream, updated)
+    cancelAddition()
+  } finally {
+    isAddingDetail.value = false
+  }
+}
 
 // ── Derived from focused post ─────────────────────────────────────────────────
 
@@ -503,6 +551,55 @@ watch(() => postStore.focusedId, (val) => {
   word-break: break-word;
   margin-bottom: var(--space-2);
 }
+.modal-dream-addition {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  border-left: 2px solid rgba(129, 140, 248, .6);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  background: rgba(99, 102, 241, .07);
+}
+.modal-dream-addition strong {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: #a5b4fc;
+  font-size: var(--font-size-xs);
+}
+.modal-dream-addition p {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--color-text-primary);
+  line-height: var(--line-height-relaxed);
+}
+.modal-addition-controls {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+.modal-addition-textarea {
+  width: 100%;
+  resize: vertical;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  font: inherit;
+  line-height: 1.6;
+}
+.modal-addition-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  width: 100%;
+}
+.modal-addition-actions > span,
+.modal-addition-controls > small {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+.modal-addition-actions > span { margin-right: auto; }
 .modal-timestamp {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);

@@ -33,7 +33,7 @@
           <span>Cần bạn xác nhận</span>
           <p>Các câu hỏi ngắn giúp phân biệt điều đang xảy ra ngoài đời với một tình huống chỉ xuất hiện trong giấc mơ.</p>
         </div>
-        <article v-for="(item, idx) in analysis.real_life_hypotheses" :key="questionKey(item, idx)" class="oracle-verification-card">
+        <article v-for="(item, idx) in visibleHypotheses" :key="questionKey(item, idx)" class="oracle-verification-card">
           <span v-if="item.questionType" class="oracle-feedback__timeframe">{{ formatQuestionType(item) }}</span>
           <p class="oracle-verification-card__question">{{ item.followUpQuestion }}</p>
           <p v-if="item.reasonForAsking" class="oracle-verification-card__reason">{{ item.reasonForAsking }}</p>
@@ -56,13 +56,19 @@
         </article>
         <div v-if="analysis.feedback_analysis" class="oracle-feedback-revision">
           <span>Phân tích đã thay đổi theo câu trả lời của bạn</span>
-          <ul v-if="analysis.feedback_analysis.confirmedFacts.length" class="oracle-feedback-revision__list">
-            <li v-for="fact in analysis.feedback_analysis.confirmedFacts" :key="fact"><strong>Đã xác nhận:</strong> {{ fact }}</li>
-          </ul>
-          <ul v-if="analysis.feedback_analysis.rejectedDirections.length" class="oracle-feedback-revision__list">
-            <li v-for="direction in analysis.feedback_analysis.rejectedDirections" :key="direction"><strong>Đã loại khỏi trọng tâm:</strong> {{ direction }}</li>
-          </ul>
           <p>{{ analysis.feedback_analysis.interpretation }}</p>
+          <details class="oracle-feedback-revision__details">
+            <summary>Xem {{ analysis.feedback_analysis.confirmedFacts.length + analysis.feedback_analysis.rejectedDirections.length + (analysis.feedback_analysis.unresolvedQuestions?.length || 0) }} thay đổi chi tiết</summary>
+            <ul v-if="analysis.feedback_analysis.confirmedFacts.length" class="oracle-feedback-revision__list">
+              <li v-for="fact in analysis.feedback_analysis.confirmedFacts" :key="fact"><strong>Đã xác nhận:</strong> {{ fact }}</li>
+            </ul>
+            <ul v-if="analysis.feedback_analysis.rejectedDirections.length" class="oracle-feedback-revision__list">
+              <li v-for="direction in analysis.feedback_analysis.rejectedDirections" :key="direction"><strong>Đã loại khỏi trọng tâm:</strong> {{ direction }}</li>
+            </ul>
+            <ul v-if="analysis.feedback_analysis.unresolvedQuestions?.length" class="oracle-feedback-revision__list">
+              <li v-for="question in analysis.feedback_analysis.unresolvedQuestions" :key="question"><strong>Đang để mở:</strong> {{ question }}</li>
+            </ul>
+          </details>
           <p v-if="analysis.feedback_changed_paths?.length" class="oracle-feedback-revision__hint">Chỉ những đoạn có nền tím nhạt bên dưới đã thực sự được viết lại theo câu trả lời này.</p>
           <p v-else class="oracle-feedback-revision__hint">Câu trả lời đã được lưu nhưng chưa làm thay đổi đoạn phân tích nào.</p>
         </div>
@@ -86,15 +92,88 @@
         </div>
       </header>
 
+      <section v-if="analysis.case_conclusion" class="oracle-case-conclusion">
+        <div class="oracle-case-conclusion__heading">
+          <span>{{ analysis.case_conclusion.status === 'clarified' ? 'Đã đối chiếu với câu trả lời' : 'Cần xác nhận thêm' }}</span>
+          <h3>{{ analysis.case_conclusion.headline }}</h3>
+        </div>
+        <p class="oracle-case-conclusion__answer">
+          <template v-for="(segment, segmentIdx) in feedbackSegments(analysis.case_conclusion.conclusion, 'case_conclusion.conclusion')" :key="`case-conclusion-${segmentIdx}`">
+            <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
+          </template>
+        </p>
+        <p class="oracle-case-conclusion__confidence"><strong>Mức chắc chắn:</strong> {{ analysis.case_conclusion.confidenceLabel }}</p>
+
+        <div v-if="analysis.case_conclusion.confirmedFindings?.length" class="oracle-case-decision oracle-case-decision--confirmed">
+          <strong>Điều câu trả lời đã xác nhận</strong>
+          <ul>
+            <li v-for="(item, idx) in analysis.case_conclusion.confirmedFindings" :key="`confirmed-${idx}`">
+              <template v-for="(segment, segmentIdx) in feedbackSegments(item, `case_conclusion.confirmedFindings.${idx}`)" :key="`confirmed-${idx}-${segmentIdx}`">
+                <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
+              </template>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="analysis.case_conclusion.ruledOut?.length" class="oracle-case-decision oracle-case-decision--ruled-out">
+          <strong>Điều không nên kết luận từ giấc mơ này</strong>
+          <ul>
+            <li v-for="(item, idx) in analysis.case_conclusion.ruledOut" :key="`ruled-out-${idx}`">
+              <template v-for="(segment, segmentIdx) in feedbackSegments(item, `case_conclusion.ruledOut.${idx}`)" :key="`ruled-out-${idx}-${segmentIdx}`">
+                <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
+              </template>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="analysis.case_conclusion.recommendedNextStep" class="oracle-case-action">
+          <strong>Việc hữu ích nhất lúc này</strong>
+          <p>
+            <template v-for="(segment, segmentIdx) in feedbackSegments(analysis.case_conclusion.recommendedNextStep, 'case_conclusion.recommendedNextStep')" :key="`case-action-${segmentIdx}`">
+              <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
+            </template>
+          </p>
+        </div>
+
+        <div class="oracle-concern-card">
+          <strong>{{ analysis.case_conclusion.concern.label }}</strong>
+          <p>{{ analysis.case_conclusion.concern.explanation }}</p>
+          <details>
+            <summary>Khi nào nên lưu ý thêm?</summary>
+            <ul>
+              <li v-for="item in analysis.case_conclusion.concern.watchFor" :key="item">{{ item }}</li>
+            </ul>
+            <a :href="analysis.case_conclusion.concern.helpSource.url" target="_blank" rel="noopener noreferrer">{{ analysis.case_conclusion.concern.helpSource.title }}</a>
+          </details>
+        </div>
+
+        <details class="oracle-evidence-chain">
+          <summary>Vì sao có thể tin kết luận này?</summary>
+          <article v-for="item in analysis.case_conclusion.evidenceBasis" :key="item.kind">
+            <strong>{{ item.title }}</strong>
+            <p>{{ item.detail }}</p>
+            <div v-if="item.sources?.length" class="oracle-evidence-chain__sources">
+              <button v-for="source in item.sources" :key="source.sourceId || source.doi || source.title" type="button" @click="navigateToSource(source.sourceId)">
+                {{ source.title }}<template v-if="source.year"> ({{ source.year }})</template><template v-if="source.doi"> · DOI {{ source.doi }}</template>
+              </button>
+            </div>
+          </article>
+        </details>
+      </section>
+
       <!-- Summary -->
-      <section class="oracle-section">
+      <section v-if="!analysis.case_conclusion" class="oracle-section">
         <h3 class="oracle-section__title">Tóm tắt</h3>
         <p class="oracle-section__text">{{ analysis.summary }}</p>
       </section>
+      <details v-else class="oracle-narrative-summary">
+        <summary>Xem tóm tắt lời kể</summary>
+        <p>{{ analysis.summary }}</p>
+      </details>
 
       <!-- Core Analysis -->
       <section class="oracle-section">
-        <h3 class="oracle-section__title">Bức tranh tổng thể</h3>
+        <h3 class="oracle-section__title">Vì sao hệ thống đi đến kết luận này?</h3>
         <p class="oracle-section__text oracle-section__text--spaced">
           <template v-for="(segment, segmentIdx) in feedbackSegments(analysis.core_analysis, 'core_analysis')" :key="`core-${segmentIdx}`">
             <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
@@ -182,12 +261,22 @@
             <div class="oracle-science-card__header">
               <span class="oracle-science-card__index">{{ String(idx + 1).padStart(2, '0') }}</span>
               <h4>{{ note.insightTitle || 'Một cơ chế đáng cân nhắc' }}</h4>
+              <span v-if="note.applicationTier === 'exploratory'" class="oracle-science-card__tier">Giả thuyết khám phá · bằng chứng còn yếu</span>
             </div>
             <p class="oracle-science-card__explanation">
               <template v-for="(segment, segmentIdx) in feedbackSegments(note.note, `scientific_context_notes.${idx}.note`)" :key="`science-${idx}-${segmentIdx}`">
                 <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
               </template>
             </p>
+
+            <div v-if="note.caseApplicability?.answeredCount" class="oracle-science-card__applicability">
+              <div>
+                <span>Mức phù hợp trong trường hợp này</span>
+                <strong>{{ caseApplicabilityLabel(note.caseApplicability.status) }}</strong>
+              </div>
+              <p>{{ note.caseApplicability.confirmedCount }}/{{ note.caseApplicability.totalCount }} chiều dữ kiện được xác nhận · {{ note.caseApplicability.weakenedCount }} bị làm yếu · {{ note.caseApplicability.unresolvedCount }} còn chưa rõ</p>
+              <small v-if="note.academicEvidenceScore !== undefined">Điểm bằng chứng học thuật vẫn là {{ note.academicEvidenceScore }}/100. Phản hồi cá nhân giúp kiểm tra việc áp dụng vào giấc mơ này, không tạo thêm bằng chứng nghiên cứu độc lập.</small>
+            </div>
 
             <div v-if="note.matchedDreamDetails?.length || note.dreamEvidence?.length" class="oracle-science-card__matches">
               <span>Những đoạn trong giấc mơ liên quan trực tiếp</span>
@@ -247,6 +336,30 @@
         </ol>
       </section>
 
+      <details v-if="analysis.creative_continuation" class="oracle-continuation">
+        <summary>
+          <span>Nếu giấc mơ có phần tiếp theo</span>
+          <small>Sáng tác tham khảo · không phải dự báo</small>
+        </summary>
+        <div class="oracle-continuation__body">
+          <h3>{{ analysis.creative_continuation.title }}</h3>
+          <p class="oracle-continuation__story" translate="no">{{ analysis.creative_continuation.continuation }}</p>
+          <p class="oracle-continuation__connection"><strong>Mạch được nối tiếp:</strong> {{ analysis.creative_continuation.connectionToCurrentDream }}</p>
+          <div v-if="analysis.creative_continuation.inspirations?.length" class="oracle-continuation__inspirations">
+            <strong>Tham khảo mô-típ từ các giấc mơ tương đồng</strong>
+            <button
+              v-for="item in analysis.creative_continuation.inspirations"
+              :key="item.dreamId"
+              type="button"
+              @click="openSimilarDream(item.dreamId)"
+            >
+              {{ item.title }} · {{ item.similarity }}%
+            </button>
+          </div>
+          <small>{{ analysis.creative_continuation.disclaimer }}</small>
+        </div>
+      </details>
+
       <details v-if="analysis.grounding_summary" class="oracle-grounding-audit">
         <summary>Kết quả này được tạo từ đâu?</summary>
         <div class="oracle-grounding-audit__grid">
@@ -257,10 +370,14 @@
           <span>Chi tiết nhận diện từ lời kể <strong>{{ analysis.grounding_summary.contextualMotifCount }}</strong></span>
           <span>Kết luận học thuật liên quan <strong>{{ analysis.grounding_summary.appliedRuleCount }}</strong></span>
           <span>Cơ chế tâm lý có dẫn chứng <strong>{{ analysis.grounding_summary.explanatoryRuleCount }}</strong></span>
+          <span>Giả thuyết khám phá cần xác nhận <strong>{{ analysis.grounding_summary.exploratoryRuleCount ?? 0 }}</strong></span>
           <span>Giấc mơ cũ được tham khảo <strong>{{ analysis.grounding_summary.similarDreamCount }}</strong></span>
           <span>Dữ kiện về điều kiện ngủ <strong>{{ analysis.grounding_summary.sleepContextFactCount ?? 0 }}</strong></span>
         </div>
-        <p v-if="analysis.grounding_summary.explanatoryRuleCount === 0">
+        <p v-if="analysis.grounding_summary.explanatoryRuleCount === 0 && (analysis.grounding_summary.exploratoryRuleCount ?? 0) > 0">
+          Kết quả có quy luật đã duyệt nhưng bằng chứng học thuật còn yếu. Hệ thống chỉ dùng chúng để đặt câu hỏi và đối chiếu cấu trúc của trường hợp này; câu trả lời không làm tăng điểm học thuật của quy luật.
+        </p>
+        <p v-else-if="analysis.grounding_summary.explanatoryRuleCount === 0">
           Thư viện hiện chưa có quy luật cơ chế phù hợp cho trường hợp này. Các mạch diễn giải phía trên được suy ra từ trình tự lời kể và câu trả lời của bạn, không được trình bày như một kết luận khoa học.
         </p>
         <p v-else>
@@ -417,22 +534,33 @@ function formatQuestionType(item: any): string {
   return 'Kiểm tra hoàn cảnh hiện tại'
 }
 
+function caseApplicabilityLabel(status: string): string {
+  return ({
+    strong_match: 'Phù hợp mạnh trong ca này',
+    partial_match: 'Phù hợp một phần',
+    mixed: 'Kết quả còn pha trộn',
+    weakened: 'Không phù hợp làm hướng chính',
+    unresolved: 'Chưa đủ dữ liệu',
+  } as Record<string, string>)[status] || 'Chưa đủ dữ liệu'
+}
+
 // Expanded state
 const isExpanded = ref(activeMode.value === 'full')
+const feedbackSelections = ref<Record<string, string>>({})
+const revealedQuestionCount = ref(2)
+const visibleHypotheses = computed(() => (props.analysis?.real_life_hypotheses || []).slice(0, revealedQuestionCount.value))
 
 // A feedback response replaces the analysis payload. Watching that object made
 // the open result collapse after every answer. Only a different post or mode
 // may reset expansion state.
 watch(() => props.dreamId, () => {
   isExpanded.value = activeMode.value === 'full'
+  revealedQuestionCount.value = 2
 })
 
 watch(() => props.mode, (newMode) => {
   isExpanded.value = newMode === 'full'
 })
-
-// Local UI state for hypothesis confirmations
-const feedbackSelections = ref<Record<string, string>>({})
 
 function questionKey(item: any, idx: number): string {
   return String(item?.verificationKey || `question-${idx}`)
@@ -488,8 +616,14 @@ watch(() => props.analysis, (newVal) => {
       }
     })
     feedbackSelections.value = selections
+    const answeredCount = Object.keys(selections).length
+    revealedQuestionCount.value = Math.max(
+      revealedQuestionCount.value,
+      Math.min(newVal.real_life_hypotheses.length, 2 + answeredCount),
+    )
   } else {
     feedbackSelections.value = {}
+    revealedQuestionCount.value = 2
   }
 }, { immediate: true })
 
@@ -520,6 +654,12 @@ async function selectFeedback(hypothesisIdx: number, val: 'yes' | 'no' | 'unsure
     if (response.data.success) {
       if (submittedAnswer === null) delete feedbackSelections.value[feedbackKey]
       else feedbackSelections.value[feedbackKey] = submittedAnswer
+      if (submittedAnswer !== null) {
+        revealedQuestionCount.value = Math.min(
+          props.analysis?.real_life_hypotheses?.length || revealedQuestionCount.value,
+          revealedQuestionCount.value + 1,
+        )
+      }
       const refreshedAnalysis = response.data.data?.analysis
       if (props.analysis && refreshedAnalysis) {
         Object.assign(props.analysis, refreshedAnalysis)
@@ -865,6 +1005,128 @@ function hasRealSource(source: string | undefined | null): boolean {
   margin: 0;
 }
 
+.oracle-case-conclusion {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid rgba(99, 102, 241, .34);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(99, 102, 241, .10), rgba(15, 23, 42, .22));
+}
+
+.oracle-case-conclusion__heading span {
+  color: #a5b4fc;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.oracle-case-conclusion__heading h3 {
+  margin: 5px 0 0;
+  color: var(--color-text-primary);
+  font-size: 1rem;
+}
+
+.oracle-case-conclusion__answer {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: .94rem;
+  font-weight: 560;
+  line-height: 1.7;
+}
+
+.oracle-case-conclusion__confidence {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.oracle-case-decision,
+.oracle-case-action {
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.oracle-case-decision strong,
+.oracle-case-action strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-text-primary);
+  font-size: 12px;
+}
+
+.oracle-case-decision ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-text-secondary);
+}
+
+.oracle-case-decision--confirmed {
+  border: 1px solid rgba(52, 211, 153, .24);
+  background: rgba(16, 185, 129, .07);
+}
+
+.oracle-case-decision--ruled-out {
+  border: 1px solid rgba(148, 163, 184, .20);
+  background: rgba(30, 41, 59, .24);
+}
+
+.oracle-case-action {
+  border: 1px solid rgba(129, 140, 248, .32);
+  background: rgba(99, 102, 241, .10);
+}
+
+.oracle-case-action p {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.oracle-concern-card {
+  padding: 12px 14px;
+  border: 1px solid rgba(52, 211, 153, .25);
+  border-radius: 10px;
+  background: rgba(16, 185, 129, .055);
+}
+
+.oracle-concern-card > strong { color: #6ee7b7; font-size: 13px; }
+.oracle-concern-card p { margin: 6px 0 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
+.oracle-concern-card details { margin-top: 9px; }
+.oracle-concern-card summary, .oracle-evidence-chain > summary, .oracle-narrative-summary > summary, .oracle-feedback-revision__details > summary { color: #b6c2cf; cursor: pointer; font-size: 11px; font-weight: 650; }
+.oracle-concern-card ul { margin: 8px 0 0; padding-left: 18px; color: var(--color-text-muted); font-size: 11px; line-height: 1.6; }
+.oracle-concern-card a { display: inline-block; margin-top: 8px; color: #93c5fd; font-size: 11px; text-decoration: none; }
+.oracle-concern-card a:hover { text-decoration: underline; }
+
+.oracle-evidence-chain {
+  padding-top: 2px;
+}
+
+.oracle-evidence-chain article {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 2px solid #52637a;
+  background: rgba(255, 255, 255, .018);
+}
+
+.oracle-evidence-chain article > strong { color: var(--color-text-primary); font-size: 12px; }
+.oracle-evidence-chain article > p { margin: 5px 0 0; color: var(--color-text-secondary); font-size: 11px; line-height: 1.55; }
+.oracle-evidence-chain__sources { display: grid; gap: 5px; margin-top: 8px; }
+.oracle-evidence-chain__sources button { padding: 0; border: 0; background: transparent; color: #93c5fd; cursor: pointer; font-size: 11px; line-height: 1.45; text-align: left; }
+.oracle-evidence-chain__sources button:hover { text-decoration: underline; }
+
+.oracle-narrative-summary {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.oracle-narrative-summary p { margin: 9px 0 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.6; }
+
 /* Sections */
 .oracle-section {
   display: flex;
@@ -1106,6 +1368,79 @@ function hasRealSource(source: string | undefined | null): boolean {
   gap: var(--space-3, 12px);
 }
 
+.oracle-continuation {
+  margin-top: 18px;
+  border: 1px solid rgba(168, 85, 247, .28);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(88, 28, 135, .12), rgba(15, 23, 42, .20));
+  overflow: hidden;
+}
+
+.oracle-continuation > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+.oracle-continuation > summary small,
+.oracle-continuation__body > small {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.oracle-continuation__body {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.oracle-continuation__body h3,
+.oracle-continuation__body p {
+  margin: 0;
+}
+
+.oracle-continuation__story {
+  white-space: pre-line;
+  color: var(--color-text-primary);
+  line-height: 1.75;
+}
+
+.oracle-continuation__connection {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.oracle-continuation__inspirations {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.oracle-continuation__inspirations strong {
+  width: 100%;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.oracle-continuation__inspirations button {
+  padding: 6px 9px;
+  border: 1px solid rgba(168, 85, 247, .28);
+  border-radius: 999px;
+  background: rgba(88, 28, 135, .12);
+  color: #d8b4fe;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
 .oracle-reflection {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr);
@@ -1169,6 +1504,17 @@ function hasRealSource(source: string | undefined | null): boolean {
   font-size: var(--font-size-sm, .875rem);
   font-weight: 700;
   line-height: 1.4;
+}
+
+.oracle-science-card__tier {
+  margin-left: auto;
+  padding: 4px 8px;
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.08);
+  color: #fbbf24;
+  font-size: 0.68rem;
+  font-weight: 700;
 }
 
 .oracle-science-card__explanation {
@@ -1235,6 +1581,41 @@ function hasRealSource(source: string | undefined | null): boolean {
 .oracle-science-card__boundary {
   padding-top: var(--space-2, 8px);
   border-top: 1px solid #26313d;
+}
+
+.oracle-science-card__applicability {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(139, 92, 246, .32);
+  border-radius: 10px;
+  background: rgba(139, 92, 246, .08);
+}
+
+.oracle-science-card__applicability > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.oracle-science-card__applicability span,
+.oracle-science-card__applicability small {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.oracle-science-card__applicability strong {
+  color: #c4b5fd;
+  font-size: 12px;
+}
+
+.oracle-science-card__applicability p {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .oracle-science-card__boundary > span {
@@ -1437,6 +1818,8 @@ function hasRealSource(source: string | undefined | null): boolean {
   color: #aeb5d8 !important;
   font-size: 11px !important;
 }
+.oracle-feedback-revision__details { padding-top: 2px; }
+.oracle-feedback-revision__details .oracle-feedback-revision__list { margin-top: 8px; }
 .oracle-grounding-audit {
   margin: 8px 0 14px;
   padding: 12px 14px;

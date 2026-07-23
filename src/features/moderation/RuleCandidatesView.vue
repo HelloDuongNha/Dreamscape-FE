@@ -1,26 +1,26 @@
 <template>
   <div class="rule-review-page">
     <div v-if="isUnauthorized" class="empty-panel">
-      <h3>Không có quyền truy cập</h3>
-      <p>Bạn không có quyền duyệt tri thức học thuật.</p>
+      <h3>{{ t('rules.accessDenied') }}</h3>
+      <p>{{ t('rules.accessDeniedDescription') }}</p>
     </div>
 
     <template v-else>
       <header class="page-header">
         <div>
-          <p class="eyebrow">Kiểm duyệt quy luật học thuật</p>
-          <h1>Duyệt tri thức học thuật</h1>
-          <p>Đối chiếu kết luận với bằng chứng nguồn trước khi đưa vào phân tích giấc mơ.</p>
+          <p class="eyebrow">{{ t('rules.eyebrow') }}</p>
+          <h1>{{ t('rules.title') }}</h1>
+          <p>{{ t('rules.subtitle') }}</p>
         </div>
         <div class="header-actions">
           <div v-if="activeStatus === 'pending' || activeStatus === 'rejected'" class="bulk-actions">
             <template v-if="activeStatus === 'pending'">
-              <AppButton variant="smart" @click="openBulkAction('approve_pending')">Duyệt tất cả{{ sourceIdFilter ? ' của tài liệu' : '' }}</AppButton>
-              <AppButton variant="danger-outline" @click="openBulkAction('reject_pending')">Từ chối tất cả{{ sourceIdFilter ? ' của tài liệu' : '' }}</AppButton>
+              <AppButton variant="danger-outline" @click="openBulkAction('reject_pending')">{{ t('rules.rejectAll') }}{{ sourceIdFilter ? t('rules.ofDocument') : '' }}</AppButton>
+              <AppButton variant="smart" @click="openBulkAction('approve_pending')">{{ t('rules.approveAll') }}{{ sourceIdFilter ? t('rules.ofDocument') : '' }}</AppButton>
             </template>
             <template v-else>
-              <AppButton variant="secondary" @click="openBulkAction('restore_rejected')">Khôi phục tất cả{{ sourceIdFilter ? ' của tài liệu' : '' }}</AppButton>
-              <AppButton variant="danger-outline" @click="openBulkAction('delete_rejected')">Xóa tất cả{{ sourceIdFilter ? ' của tài liệu' : '' }}</AppButton>
+              <AppButton variant="secondary" @click="openBulkAction('restore_rejected')">{{ t('rules.restoreAll') }}{{ sourceIdFilter ? t('rules.ofDocument') : '' }}</AppButton>
+              <AppButton variant="danger-outline" @click="openBulkAction('delete_rejected')">{{ t('rules.deleteAll') }}{{ sourceIdFilter ? t('rules.ofDocument') : '' }}</AppButton>
             </template>
           </div>
           <div class="header-count">
@@ -31,11 +31,11 @@
       </header>
 
       <div v-if="sourceIdFilter" class="source-filter">
-        <span>Đang lọc theo một tài liệu</span>
-        <button type="button" @click="clearSourceFilter">Bỏ lọc</button>
+        <span>{{ t('rules.sourceFilter') }}</span>
+        <button type="button" @click="clearSourceFilter">{{ t('rules.clearFilter') }}</button>
       </div>
 
-      <nav class="status-tabs" aria-label="Trạng thái quy luật">
+      <nav class="status-tabs" :aria-label="t('rules.statusNavigation')">
         <button
           v-for="tab in statusTabs"
           :key="tab.value"
@@ -50,30 +50,37 @@
         <aside class="candidate-sidebar">
           <div v-if="isLoadingList" class="loading-state">
             <span class="spinner"></span>
-            <span>Đang tải quy luật…</span>
+            <span>{{ t('rules.loadingRules') }}</span>
           </div>
           <div v-else-if="candidates.length === 0" class="empty-panel compact">
-            <h3>Không có dữ liệu</h3>
-            <p>{{ sourceIdFilter ? 'Tài liệu này chưa có quy luật ở trạng thái đã chọn.' : 'Chưa có quy luật ở trạng thái đã chọn.' }}</p>
+            <h3>{{ t('rules.noData') }}</h3>
+            <p>{{ sourceIdFilter ? t('rules.noRulesForSource') : t('rules.noRules') }}</p>
           </div>
           <div v-else class="candidate-list">
             <section v-for="(items, sourceTitle) in groupedCandidates" :key="sourceTitle" class="source-group" :style="sourceGroupStyle(String(sourceTitle))">
-              <h2><span>{{ sourceTitle }}</span><small>{{ items.length }} quy luật</small></h2>
+              <h2><span translate="no">{{ sourceTitle }}</span><small>{{ t('rules.ruleCount', { count: items.length }) }}</small></h2>
               <div class="source-rule-list">
-                <button
-                  v-for="candidate in items"
-                  :key="candidate._id"
-                  type="button"
-                  :class="['candidate-card', { selected: selectedId === candidate._id }]"
-                  @click="selectCandidate(candidate._id)"
-                >
-                  <span class="candidate-title">{{ candidate.label }}</span>
-                  <span class="candidate-card-meta">
-                    <span :class="['status-chip', `status-${candidate.status}`]">{{ statusLabel(candidate.status) }}</span>
-                    <span class="score-chip" :style="{ color: scoreColor(candidate.evidenceCredibilityScore) }">{{ candidate.evidenceCredibilityScore ?? 0 }}/100</span>
-                    <span>{{ candidate.exactCitationCount ?? 0 }} cụm dẫn chứng</span>
-                  </span>
-                </button>
+                <div v-for="cluster in candidateSections(items)" :key="cluster.key" class="concept-cluster">
+                  <div v-if="cluster.mergeable" class="concept-cluster__heading">
+                    <span>{{ t('rules.mergeableCluster') }}</span>
+                    <small>{{ t('rules.claimCount', { count: cluster.items.length }) }} · {{ mergeReasonList(cluster.reasons) }}</small>
+                  </div>
+                  <button
+                    v-for="candidate in cluster.items"
+                    :key="candidate._id"
+                    type="button"
+                    :class="['candidate-card', { selected: selectedId === candidate._id }]"
+                    @click="selectCandidate(candidate._id)"
+                  >
+                    <span class="candidate-title">{{ ruleText(candidate, 'label', candidate.label) }}</span>
+                    <span class="candidate-card-meta">
+                      <span v-if="candidate.isComposite" class="composite-list-chip">{{ t('rules.compositeRule', { count: candidate.compositeComponents?.length || 0 }) }}</span>
+                      <span :class="['status-chip', `status-${candidate.status}`]">{{ statusLabel(candidate.status) }}</span>
+                      <span class="score-chip" :style="{ color: scoreColor(candidate.evidenceCredibilityScore) }">{{ candidate.evidenceCredibilityScore ?? 0 }}/100</span>
+                      <span>{{ t('rules.evidenceGroupCount', { count: candidate.exactCitationCount ?? 0 }) }}</span>
+                    </span>
+                  </button>
+                </div>
               </div>
             </section>
           </div>
@@ -82,11 +89,11 @@
         <main class="candidate-detail">
           <div v-if="isLoadingDetail" class="loading-state detail-loading">
             <span class="spinner"></span>
-            <span>Đang tải kết luận và bằng chứng…</span>
+            <span>{{ t('rules.loadingDetail') }}</span>
           </div>
           <div v-else-if="!selectedCandidate" class="empty-panel detail-empty">
-            <h3>Chọn một quy luật</h3>
-            <p>Thông tin đánh giá và trích dẫn sẽ xuất hiện tại đây.</p>
+            <h3>{{ t('rules.selectRule') }}</h3>
+            <p>{{ t('rules.selectRuleDescription') }}</p>
           </div>
           <article v-else class="rule-document">
             <section class="rule-hero">
@@ -94,45 +101,62 @@
                 <span :class="['status-chip', `status-${selectedCandidate.status}`]">{{ statusLabel(selectedCandidate.status) }}</span>
                 <span class="rule-code">{{ selectedCandidate.proposedRuleId }}</span>
               </div>
-              <h2>{{ selectedCandidate.label }}</h2>
-              <p class="source-line">{{ formattedSource }}</p>
+              <h2>{{ ruleText(selectedCandidate, 'label', selectedCandidate.label) }}</h2>
+              <span v-if="selectedCandidate.isComposite" class="composite-badge">{{ t('rules.compositeRule', { count: selectedCandidate.compositeComponents?.length || 0 }) }}</span>
+              <p class="source-line" translate="no">{{ formattedSource }}</p>
               <div v-if="selectedCandidate.qualityAccepted === false" class="quality-blocked">
-                <strong>Không đạt kiểm tra chất lượng</strong>
-                <span>{{ selectedCandidate.qualitySummary }}</span>
+                <strong>{{ t('rules.qualityFailed') }}</strong>
+                <span>{{ ruleText(selectedCandidate, 'qualitySummary', selectedCandidate.qualitySummary || '') }}</span>
               </div>
             </section>
 
             <section class="content-card inference-card">
               <div class="section-heading">
                 <div>
-                  <h3>Nội dung có thể sử dụng</h3>
-                  <p class="section-description">Quan hệ, bối cảnh và giới hạn được rút ra từ tài liệu.</p>
+                  <h3>{{ t('rules.usableContent') }}</h3>
+                  <p class="section-description">{{ t('rules.usableContentDescription') }}</p>
                 </div>
               </div>
-              <div class="relationship-flow">
+              <div v-if="selectedCandidate.isComposite" class="composite-claims">
+                <article v-for="(component, index) in selectedCandidate.compositeComponents" :key="component.sourceRuleId" class="composite-claim">
+                  <div class="composite-claim__header">
+                    <strong>{{ t('rules.atomicClaim', { number: index + 1 }) }}</strong>
+                    <span>
+                      <span translate="no">{{ component.ruleCode }}</span><template v-if="component.evidenceScore !== undefined"> · {{ component.evidenceScore }}/100 · {{ t('rules.supportingEvidenceCount', { count: component.supportingCitationCount || 0 }) }}</template>
+                    </span>
+                  </div>
+                  <div class="relationship-flow">
+                    <div><span>{{ t('rules.factor') }}</span><strong>{{ ruleText(selectedCandidate, `component:${index}:subject`, component.subject) }}</strong></div>
+                    <div class="relationship-arrow" aria-hidden="true">→</div>
+                    <div><span>{{ t('rules.outcome') }}</span><strong>{{ ruleText(selectedCandidate, `component:${index}:outcome`, component.outcome) }}</strong></div>
+                  </div>
+                  <p class="rule-explanation">{{ localizedRuleExplanation(component.expandedExplanations, selectedCandidate, `component:${index}:explanation`, component.expandedExplanation || component.statement) }}</p>
+                </article>
+              </div>
+              <div v-else class="relationship-flow">
                 <div>
-                  <span>Yếu tố / chủ thể</span>
-                  <strong>{{ selectedCandidate.factor || 'Chưa xác định' }}</strong>
+                  <span>{{ t('rules.factor') }}</span>
+                  <strong>{{ selectedCandidate.factor ? ruleText(selectedCandidate, 'factor', selectedCandidate.factor) : t('rules.unknownValue') }}</strong>
                 </div>
                 <div class="relationship-arrow" aria-hidden="true">→</div>
                 <div>
-                  <span>Kết quả / hiện tượng</span>
-                  <strong>{{ selectedCandidate.inputSource || 'Chưa xác định' }}</strong>
+                  <span>{{ t('rules.outcome') }}</span>
+                  <strong>{{ selectedCandidate.inputSource ? ruleText(selectedCandidate, 'outcome', selectedCandidate.inputSource) : t('rules.unknownValue') }}</strong>
                 </div>
               </div>
-              <p v-if="selectedCandidate.fullStatement" class="rule-explanation">{{ selectedCandidate.fullStatement }}</p>
+              <p v-if="!selectedCandidate.isComposite && selectedCandidate.fullStatement" class="rule-explanation">{{ localizedRuleExplanation(selectedCandidate.expandedExplanations, selectedCandidate, 'explanation', selectedCandidate.expandedExplanation || selectedCandidate.fullStatement) }}</p>
               <ul class="rule-reading-guide">
                 <li>
-                  <strong>Chỉ áp dụng trong bối cảnh:</strong>
-                  {{ reviewConditions.length ? punctuatedList(reviewConditions, '; ') : 'Tài liệu chưa nêu bối cảnh đủ cụ thể.' }}
+                  <strong>{{ t('rules.appliesOnlyWhen') }}</strong>
+                  {{ reviewConditions.length ? punctuatedList(translatedRuleList(selectedCandidate, 'condition', reviewConditions), '; ') : t('rules.noSpecificContext') }}
                 </li>
                 <li>
-                  <strong>Dấu hiệu cần xuất hiện trong lời kể:</strong>
-                  {{ reviewDreamTags.length ? punctuatedList(reviewDreamTags, ', ') : 'Chưa xác định được dấu hiệu phù hợp.' }}
+                  <strong>{{ t('rules.dreamSignals') }}</strong>
+                  {{ reviewDreamTags.length ? punctuatedList(translatedRuleList(selectedCandidate, 'dreamTag', reviewDreamTags), ', ') : t('rules.noDreamSignals') }}
                 </li>
                 <li>
-                  <strong>Giới hạn cần giữ:</strong>
-                  {{ reviewLimitations.length ? punctuatedList(reviewLimitations, '; ') : 'Tài liệu chưa nêu giới hạn đủ rõ.' }}
+                  <strong>{{ t('rules.limitations') }}</strong>
+                  {{ reviewLimitations.length ? punctuatedList(translatedRuleList(selectedCandidate, 'limitation', reviewLimitations), '; ') : t('rules.noClearLimitations') }}
                 </li>
               </ul>
             </section>
@@ -141,29 +165,33 @@
               <div class="content-card assessment-card">
                 <div class="score-header">
                   <div>
-                    <h3 class="assessment-title">Mức hỗ trợ từ tài liệu</h3>
+                    <h3 class="assessment-title">{{ t('rules.evidenceSupport') }}</h3>
                     <strong class="score-number" :style="{ color: scoreColor(selectedCandidate.evidenceCredibilityScore) }">{{ selectedCandidate.evidenceCredibilityScore ?? 0 }}/100</strong>
                   </div>
                   <span :class="['level-badge', scoreLevelClass(selectedCandidate.evidenceCredibilityScore)]">
                     {{ scoreLevelLabel(selectedCandidate.evidenceCredibilityScore) }}
                   </span>
                 </div>
-                <div class="score-track" role="progressbar" aria-label="Mức hỗ trợ từ tài liệu" :aria-valuenow="selectedCandidate.evidenceCredibilityScore ?? 0" aria-valuemin="0" aria-valuemax="100">
+                <div class="score-track" role="progressbar" :aria-label="t('rules.evidenceSupportAria')" :aria-valuenow="selectedCandidate.evidenceCredibilityScore ?? 0" aria-valuemin="0" aria-valuemax="100">
                   <span :style="{ width: `${selectedCandidate.evidenceCredibilityScore ?? 0}%`, backgroundColor: scoreColor(selectedCandidate.evidenceCredibilityScore) }"></span>
                 </div>
                 <p class="score-conclusion">{{ evidenceScoreConclusion }}</p>
-                <p class="score-note">Điểm phản ánh mức tài liệu đang hỗ trợ kết luận, không phải xác suất kết luận đúng trong mọi trường hợp.</p>
+                <p class="score-note">{{ t('rules.scoreNote') }}</p>
+                <p v-if="selectedCandidate.scoreAggregation" class="score-aggregation-note">
+                  <strong>{{ selectedCandidate.scoreAggregation.method === 'pooled_equivalent_evidence' ? t('rules.pooledScoreMethod') : t('rules.compositeScoreMethod', { code: selectedCandidate.scoreAggregation.weakestRuleCode || '' }) }}</strong>
+                  {{ selectedCandidate.scoreAggregation.method === 'pooled_equivalent_evidence' ? t('rules.pooledScoreExplanation') : t('rules.minimumScoreExplanation') }}
+                </p>
                 <dl class="criteria-list">
                   <div v-for="item in scoreCriteriaRows" :key="item.key" class="criterion-row">
                     <dt>
                       <span>{{ scoreCriterionLabel(item.key) }}</span>
                       <div class="criterion-help">
-                        <button type="button" aria-label="Giải thích tiêu chí" @click.stop="toggleCriterionHelp(item.key)">?</button>
+                        <button type="button" :aria-label="t('rules.criterionHelp')" @click.stop="toggleCriterionHelp(item.key)">?</button>
                         <div v-if="openCriterionKey === item.key" @click.stop>
-                          <strong>Ngưỡng chấm điểm</strong>
-                          <ul><li v-for="line in rubricBullets(item.rubric)" :key="line">{{ line }}</li></ul>
-                          <strong>Vì sao quy luật nhận {{ item.score }}/{{ item.maxScore }}</strong>
-                          <ul><li>{{ item.reason }}</li></ul>
+                          <strong>{{ t('rules.scoreThreshold') }}</strong>
+                          <ul><li v-for="line in rubricBullets(ruleText(selectedCandidate, `rubric:${item.key}`, item.rubric))" :key="line">{{ line }}</li></ul>
+                          <strong>{{ t('rules.scoreReason', { score: item.score, maxScore: item.maxScore }) }}</strong>
+                          <ul><li>{{ ruleText(selectedCandidate, `reason:${item.key}`, item.reason) }}</li></ul>
                         </div>
                       </div>
                     </dt>
@@ -177,87 +205,133 @@
             <section v-if="ruleRelationships.length" class="content-card relationship-card">
               <div class="section-heading">
                 <div>
-                  <h3>Quan hệ với các quy luật khác</h3>
-                  <p class="section-description">Đối chiếu theo chiều chủ thể → kết quả, điều kiện và chiều tác động; không chỉ so khớp câu chữ.</p>
+                  <h3>{{ t('rules.relationships') }}</h3>
+                  <p class="section-description">{{ t('rules.relationshipsDescription') }}</p>
                 </div>
+                <AppButton
+                  v-if="canMergeSelectedRule"
+                  variant="secondary"
+                  :loading="isMerging"
+                  @click="showMergeModal = true"
+                >
+                  {{ t('rules.mergeCompatible') }}
+                </AppButton>
               </div>
-              <button v-for="item in ruleRelationships" :key="item.ruleId" type="button" class="related-rule" @click="selectCandidate(item.ruleId)">
-                <span :class="['relation-kind', `relation-kind--${item.relationship}`]">{{ relationshipLabel(item.relationship) }}</span>
-                <strong>{{ item.label }}</strong>
-                <small>{{ item.ruleCode }} · {{ item.evidenceScore }}/100</small>
-              </button>
+              <div v-if="mergeableRelationships.length" class="relationship-group relationship-group--mergeable">
+                <strong class="relationship-group__title">{{ t('rules.canMergeSection') }}</strong>
+                <p>{{ t('rules.canMergeSectionDescription') }}</p>
+                <button v-for="item in mergeableRelationships" :key="item.ruleId" type="button" class="related-rule" @click="selectCandidate(item.ruleId)">
+                  <span class="relation-kind relation-kind--equivalent">{{ relationshipBadge(item) }}</span>
+                  <span class="related-rule__content"><strong>{{ relatedRuleText(item) }}</strong><small>{{ relationshipWhyShown(item) }}</small><small>{{ ruleText(selectedCandidate, `related:${item.ruleId}:flow`, `${item.subject} → ${item.outcome}`) }}</small></span>
+                  <small>{{ item.evidenceScore }}/100</small>
+                </button>
+              </div>
+              <div v-if="nonMergeableRelationships.length" class="relationship-group">
+                <strong class="relationship-group__title">{{ t('rules.keepSeparateSection') }}</strong>
+                <p>{{ t('rules.keepSeparateSectionDescription') }}</p>
+                <button v-for="item in nonMergeableRelationships" :key="item.ruleId" type="button" class="related-rule" @click="selectCandidate(item.ruleId)">
+                  <span :class="['relation-kind', `relation-kind--${item.relationship}`]">{{ relationshipBadge(item) }}</span>
+                  <span class="related-rule__content"><strong>{{ relatedRuleText(item) }}</strong><small>{{ relationshipWhyShown(item) }}</small><small>{{ ruleText(selectedCandidate, `related:${item.ruleId}:flow`, `${item.subject} → ${item.outcome}`) }}</small></span>
+                  <small>{{ item.evidenceScore }}/100</small>
+                </button>
+              </div>
             </section>
 
             <section v-if="selectedCandidate.probeBlueprint" class="content-card probe-card">
               <div class="section-heading">
                 <div>
-                  <h3>Khả năng kiểm tra khi áp dụng</h3>
-                  <p class="section-description">Chỉ tạo câu hỏi khi chính kết luận học thuật có một điều kiện mà người kể có thể xác nhận hoặc bác bỏ.</p>
+                  <h3>{{ t('rules.probeTitle') }}</h3>
+                  <p class="section-description">{{ t('rules.probeDescription') }}</p>
                 </div>
               </div>
-              <p v-if="selectedCandidate.probeBlueprint.checkable">{{ selectedCandidate.probeBlueprint.applicabilityCheck }}</p>
-              <p v-else>{{ selectedCandidate.probeBlueprint.explanation }}</p>
-              <p v-if="selectedCandidate.probeBlueprint.conditionSummary"><strong>Điều kiện trong tài liệu:</strong> {{ selectedCandidate.probeBlueprint.conditionSummary }}</p>
-              <p class="section-description">{{ selectedCandidate.probeBlueprint.feedbackEffect }}</p>
+              <p v-if="selectedCandidate.probeBlueprint.checkable">{{ ruleText(selectedCandidate, 'probe:check', selectedCandidate.probeBlueprint.applicabilityCheck || '') }}</p>
+              <p v-else>{{ ruleText(selectedCandidate, 'probe:explanation', selectedCandidate.probeBlueprint.explanation || '') }}</p>
+              <div v-if="selectedCandidate.probeBlueprint.questionDimensions?.length" class="probe-question-list">
+                <article v-for="(question, index) in selectedCandidate.probeBlueprint.questionDimensions" :key="`${question.type}:${index}`" class="probe-question-pattern">
+                  <div class="probe-question-pattern__meta">
+                    <strong>{{ t('rules.questionNumber', { number: index + 1 }) }}</strong>
+                    <span>{{ questionTypeLabel(question.type) }}</span>
+                    <span v-if="question.componentRuleCodes?.length">{{ t('rules.testsComponents', { codes: question.componentRuleCodes.join(', ') }) }}</span>
+                  </div>
+                  <p>{{ renderQuestionPattern(selectedCandidate, `probe:question:${index}`, question.questionPattern) }}</p>
+                  <dl>
+                    <div><dt>{{ t('rules.questionPurpose') }}</dt><dd>{{ ruleText(selectedCandidate, `probe:purpose:${index}`, question.purpose) }}</dd></div>
+                    <div><dt>{{ t('rules.collectedData') }}</dt><dd>{{ collectedFieldLabel(question.collectedField) }}</dd></div>
+                  </dl>
+                </article>
+              </div>
+              <div v-if="selectedCandidate.probeBlueprint.requiredData" class="probe-question-pattern">
+                <strong>{{ t('rules.requiredAggregateData') }}</strong>
+                <p>{{ ruleText(selectedCandidate, 'probe:requiredData', selectedCandidate.probeBlueprint.requiredData) }}</p>
+              </div>
+              <div v-if="selectedCandidate.probeBlueprint.expectedPattern" class="probe-validation-contract">
+                <div><strong>{{ t('rules.expectedPattern') }}</strong><p>{{ ruleText(selectedCandidate, 'probe:expectedPattern', selectedCandidate.probeBlueprint.expectedPattern) }}</p></div>
+                <div v-if="selectedCandidate.probeBlueprint.supportCriterion" class="probe-validation-contract--supports"><strong>{{ t('rules.supportCriterion') }}</strong><p>{{ ruleText(selectedCandidate, 'probe:supportCriterion', selectedCandidate.probeBlueprint.supportCriterion) }}</p></div>
+                <div v-if="selectedCandidate.probeBlueprint.weakeningCriterion" class="probe-validation-contract--weakens"><strong>{{ t('rules.weakeningCriterion') }}</strong><p>{{ ruleText(selectedCandidate, 'probe:weakeningCriterion', selectedCandidate.probeBlueprint.weakeningCriterion) }}</p></div>
+                <div v-if="selectedCandidate.probeBlueprint.inconclusiveCriterion"><strong>{{ t('rules.inconclusiveCriterion') }}</strong><p>{{ ruleText(selectedCandidate, 'probe:inconclusiveCriterion', selectedCandidate.probeBlueprint.inconclusiveCriterion) }}</p></div>
+              </div>
+              <p v-if="selectedCandidate.probeBlueprint.checkable && !selectedCandidate.oracleEligible" class="probe-inactive">{{ t('rules.probeInactive') }}</p>
+              <p v-if="selectedCandidate.probeBlueprint.conditionSummary"><strong>{{ t('rules.conditionInSource') }}</strong> {{ ruleText(selectedCandidate, 'probe:condition', selectedCandidate.probeBlueprint.conditionSummary) }}</p>
+              <p class="section-description">{{ ruleText(selectedCandidate, 'probe:feedback', selectedCandidate.probeBlueprint.feedbackEffect) }}</p>
             </section>
 
             <section class="content-card feedback-card">
               <div class="section-heading">
                 <div>
-                  <h3>Phản hồi khi áp dụng vào giấc mơ</h3>
-                  <p class="section-description">Câu hỏi được viết lại theo từng giấc mơ; thống kê này đo mức phù hợp thực tế, không làm thay đổi điểm học thuật.</p>
+                  <h3>{{ selectedCandidate.probeBlueprint?.verificationMode === 'aggregate_dataset' ? t('rules.aggregateFeedbackTitle') : t('rules.feedbackTitle') }}</h3>
+                  <p class="section-description">{{ selectedCandidate.probeBlueprint?.verificationMode === 'aggregate_dataset' ? t('rules.aggregateFeedbackDescription') : t('rules.feedbackDescription') }}</p>
                 </div>
-                <strong>{{ feedbackStats.applicabilityRate === null ? 'Chưa đủ dữ liệu' : `${feedbackStats.applicabilityRate}% phù hợp` }}</strong>
+                <strong>{{ feedbackStats.applicabilityScore === null ? t('rules.insufficientData') : t('rules.applicablePercent', { percent: feedbackStats.applicabilityScore }) }}</strong>
               </div>
-              <div class="feedback-bar" :aria-label="`${feedbackStats.total} lượt phản hồi`">
+              <div class="feedback-bar" :aria-label="t('rules.feedbackCount', { count: feedbackStats.total })">
                 <span class="feedback-bar__yes" :style="{ width: `${feedbackPercent('supports')}%` }"></span>
                 <span class="feedback-bar__no" :style="{ width: `${feedbackPercent('weakens')}%` }"></span>
                 <span class="feedback-bar__unsure" :style="{ width: `${feedbackPercent('unresolved')}%` }"></span>
               </div>
               <div class="feedback-reactions">
-                <span><b>✓</b> Áp dụng phù hợp · {{ feedbackStats.supports }}</span>
-                <span><b>×</b> Không phù hợp trường hợp · {{ feedbackStats.weakens }}</span>
-                <span><b>?</b> Chưa đủ thông tin · {{ feedbackStats.unresolved }}</span>
+                <span><b>✓</b> {{ t('rules.supports') }} · {{ feedbackStats.supports }}</span>
+                <span><b>×</b> {{ t('rules.weakens') }} · {{ feedbackStats.weakens }}</span>
+                <span><b>?</b> {{ t('rules.unresolved') }} · {{ feedbackStats.unresolved }}</span>
               </div>
-              <p v-if="feedbackStats.total === 0" class="feedback-empty">Chưa có phản hồi vì quy luật chưa được áp dụng vào một kết quả phân tích giấc mơ có câu hỏi xác nhận.</p>
+              <p v-if="feedbackStats.total === 0" class="feedback-empty">{{ selectedCandidate.probeBlueprint?.verificationMode === 'aggregate_dataset' ? t('rules.aggregatePending') : t('rules.noFeedback') }}</p>
             </section>
 
             <section v-if="evidenceExcerpts.length" class="content-card citations-card">
               <div class="section-heading">
                 <div>
-                  <h3>Trích dẫn nguồn đã kiểm chứng</h3>
-                  <p class="section-description">Mỗi đoạn dưới đây được lấy từ đúng chunk và đã đối chiếu nguyên văn.</p>
+                  <h3>{{ t('rules.verifiedEvidence') }}</h3>
+                  <p class="section-description">{{ t('rules.verifiedEvidenceDescription') }}</p>
                 </div>
-                <span class="verified-badge">Khớp nguyên văn</span>
               </div>
               <div class="citation-list">
                 <article v-for="excerpt in evidenceExcerpts" :key="excerpt.evidenceGroupId" class="citation-item">
                   <div class="citation-meta">
-                    <span>{{ excerpt.sourceTitle || 'Tài liệu chưa xác định' }} · {{ excerpt.sectionTitle || excerpt.sectionType || 'Đoạn văn' }}</span>
-                    <span v-if="excerpt.pageStart">Trang {{ excerpt.pageStart }}<template v-if="excerpt.pageEnd && excerpt.pageEnd !== excerpt.pageStart">–{{ excerpt.pageEnd }}</template></span>
+                    <span translate="no">{{ excerpt.sourceTitle || t('rules.unknownSource') }} · {{ excerpt.sectionTitle || excerpt.sectionType || t('rules.paragraph') }}</span>
+                    <span v-if="componentCodeForExcerpt(excerpt)">{{ t('rules.supportsComponent', { code: componentCodeForExcerpt(excerpt) }) }}</span>
+                    <span v-if="excerpt.pageStart">{{ t('rules.page', { page: excerpt.pageStart }) }}<template v-if="excerpt.pageEnd && excerpt.pageEnd !== excerpt.pageStart">–{{ excerpt.pageEnd }}</template></span>
                   </div>
-                  <blockquote>{{ excerpt.excerpt }}</blockquote>
+                  <blockquote translate="no">{{ excerpt.excerpt }}</blockquote>
                   <button
                     v-if="hasWiderContext(excerpt)"
                     type="button"
                     class="context-button"
                     @click="toggleContext(excerpt.evidenceGroupId)"
                   >
-                    {{ visibleContexts[excerpt.evidenceGroupId] ? 'Ẩn ngữ cảnh' : 'Xem ngữ cảnh rộng' }}
+                    {{ visibleContexts[excerpt.evidenceGroupId] ? t('rules.hideContext') : t('rules.showContext') }}
                   </button>
-                  <p v-if="visibleContexts[excerpt.evidenceGroupId]" class="context-text">{{ chunkPreview(excerpt.chunkId) }}</p>
+                  <p v-if="visibleContexts[excerpt.evidenceGroupId]" class="context-text" translate="no">{{ chunkPreview(excerpt.chunkId) }}</p>
                 </article>
               </div>
             </section>
 
             <section v-if="selectedCandidate.status === 'pending'" class="action-bar">
               <div>
-                <strong>Quyết định kiểm duyệt</strong>
-                <span>{{ selectedCandidate.qualityAccepted === false ? 'Quy luật này không thể duyệt vì chưa vượt qua kiểm tra chất lượng.' : 'Chỉ duyệt khi kết luận phản ánh đúng bằng chứng và có ích cho phân tích.' }}</span>
+                <strong>{{ t('rules.moderationDecision') }}</strong>
+                <span>{{ selectedCandidate.qualityAccepted === false ? t('rules.cannotApprove') : t('rules.approvalGuidance') }}</span>
               </div>
               <div class="action-buttons">
-                <AppButton variant="danger-outline" :loading="isRejecting" @click="showRejectModal = true">Từ chối</AppButton>
-                <AppButton variant="smart" :disabled="selectedCandidate.qualityAccepted === false" :loading="isApproving" @click="showApproveModal = true">Phê duyệt</AppButton>
+                <AppButton variant="danger-outline" :loading="isRejecting" @click="showRejectModal = true">{{ t('rules.reject') }}</AppButton>
+                <AppButton variant="smart" :disabled="selectedCandidate.qualityAccepted === false" :loading="isApproving" @click="showApproveModal = true">{{ t('rules.approve') }}</AppButton>
               </div>
             </section>
           </article>
@@ -269,11 +343,34 @@
       <Transition name="modal-fade">
         <div v-if="showApproveModal" class="modal-overlay" role="dialog" aria-modal="true" @click.self="showApproveModal = false">
           <div class="modal-container">
-            <div class="modal-header"><h3>Phê duyệt quy luật?</h3><button @click="showApproveModal = false">×</button></div>
-            <div class="modal-body"><p>Quy luật sẽ được đưa vào kho tri thức đang hoạt động cùng các trích dẫn đã kiểm chứng.</p></div>
+            <div class="modal-header"><h3>{{ t('rules.approveModalTitle') }}</h3><button @click="showApproveModal = false">×</button></div>
+            <div class="modal-body"><p>{{ t('rules.approveModalMessage') }}</p></div>
             <div class="modal-footer">
-              <AppButton variant="secondary" @click="showApproveModal = false">Hủy</AppButton>
-              <AppButton variant="smart" :loading="isApproving" @click="confirmApproval">Phê duyệt</AppButton>
+              <AppButton variant="secondary" @click="showApproveModal = false">{{ t('rules.cancel') }}</AppButton>
+              <AppButton variant="smart" :loading="isApproving" @click="confirmApproval">{{ t('rules.approve') }}</AppButton>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <Teleport to="body">
+      <Transition name="modal-fade">
+        <div v-if="showMergeModal" class="modal-overlay" role="dialog" aria-modal="true" @click.self="showMergeModal = false">
+          <div class="modal-container">
+            <div class="modal-header"><h3>{{ t('rules.mergeModalTitle') }}</h3><button @click="showMergeModal = false">×</button></div>
+            <div class="modal-body">
+              <p>{{ t('rules.mergeModalMessage', { count: mergeableRelationships.length + 1 }) }}</p>
+              <ul class="merge-preview-list">
+                <li v-if="selectedCandidate">{{ ruleText(selectedCandidate, 'label', selectedCandidate.label) }}</li>
+                <li v-for="item in mergeableRelationships" :key="item.ruleId">{{ relatedRuleText(item) }}</li>
+              </ul>
+              <p>{{ t('rules.mergeAuditNote') }}</p>
+              <p v-if="selectedCandidate?.status === 'approved'" class="merge-review-warning">{{ t('rules.approvedMergeReviewWarning') }}</p>
+            </div>
+            <div class="modal-footer">
+              <AppButton variant="secondary" :disabled="isMerging" @click="showMergeModal = false">{{ t('rules.cancel') }}</AppButton>
+              <AppButton variant="smart" :loading="isMerging" @click="confirmMerge">{{ t('rules.mergeCompatible') }}</AppButton>
             </div>
           </div>
         </div>
@@ -287,7 +384,7 @@
             <div class="modal-header"><h3>{{ bulkActionCopy.title }}</h3><button @click="bulkAction = null">×</button></div>
             <div class="modal-body"><p>{{ bulkActionCopy.message }}</p></div>
             <div class="modal-footer">
-              <AppButton variant="secondary" :disabled="isBulkRunning" @click="bulkAction = null">Hủy</AppButton>
+              <AppButton variant="secondary" :disabled="isBulkRunning" @click="bulkAction = null">{{ t('rules.cancel') }}</AppButton>
               <AppButton :variant="bulkActionCopy.danger ? 'danger' : 'smart'" :loading="isBulkRunning" @click="confirmBulkAction">{{ bulkActionCopy.confirm }}</AppButton>
             </div>
           </div>
@@ -299,11 +396,11 @@
       <Transition name="modal-fade">
         <div v-if="showRejectModal" class="modal-overlay" role="dialog" aria-modal="true" @click.self="showRejectModal = false">
           <div class="modal-container">
-            <div class="modal-header"><h3>Từ chối quy luật?</h3><button @click="showRejectModal = false">×</button></div>
-            <div class="modal-body"><p>Quy luật sẽ được chuyển sang danh sách bị từ chối. Nội dung học thuật gốc không bị thay đổi.</p></div>
+            <div class="modal-header"><h3>{{ t('rules.rejectModalTitle') }}</h3><button @click="showRejectModal = false">×</button></div>
+            <div class="modal-body"><p>{{ t('rules.rejectModalMessage') }}</p></div>
             <div class="modal-footer">
-              <AppButton variant="secondary" @click="showRejectModal = false">Hủy</AppButton>
-              <AppButton variant="danger" :loading="isRejecting" @click="confirmRejection">Từ chối</AppButton>
+              <AppButton variant="secondary" @click="showRejectModal = false">{{ t('rules.cancel') }}</AppButton>
+              <AppButton variant="danger" :loading="isRejecting" @click="confirmRejection">{{ t('rules.reject') }}</AppButton>
             </div>
           </div>
         </div>
@@ -315,13 +412,20 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/common/AppButton.vue'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import {
+  createBrowserTranslator,
+  translateBrowserText,
+  type BrowserTranslatorInstance,
+} from '@/features/library/services/browserReaderTranslation.service'
+import {
   approveRuleCandidate,
   getRuleCandidateDetail,
   getRuleCandidates,
+  mergeRuleCandidateGroup,
   rejectRuleCandidate,
   runRuleV3BulkAction,
   type RuleV3BulkAction,
@@ -335,17 +439,18 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const { t, locale } = useI18n({ useScope: 'global' })
 
 const isUnauthorized = computed(() => {
   const ids = (import.meta.env.VITE_MODERATOR_USER_IDS || '').split(',').map((id: string) => id.trim().toLowerCase())
   return !authStore.user?._id || !ids.includes(authStore.user._id.toLowerCase())
 })
 
-const statusTabs = [
-  { value: 'pending', label: 'Chờ duyệt' },
-  { value: 'approved', label: 'Đã duyệt' },
-  { value: 'rejected', label: 'Bị từ chối' }
-]
+const statusTabs = computed(() => [
+  { value: 'pending', label: t('rules.statuses.pending') },
+  { value: 'approved', label: t('rules.statuses.approved') },
+  { value: 'rejected', label: t('rules.statuses.rejected') }
+])
 const activeStatus = ref('pending')
 const sourceIdFilter = computed(() => route.query.sourceId ? String(route.query.sourceId) : null)
 const candidates = ref<RuleCandidate[]>([])
@@ -355,45 +460,285 @@ const evidenceChunks = ref<EvidenceChunkPreview[]>([])
 const evidenceExcerpts = ref<EvidenceExcerpt[]>([])
 type RuleRelationshipRow = NonNullable<CandidateDetailResponse['ruleRelationships']>[number]
 const ruleRelationships = ref<RuleRelationshipRow[]>([])
-const emptyFeedbackStats = () => ({ supports: 0, weakens: 0, unresolved: 0, total: 0, applicabilityRate: null as number | null })
+const emptyFeedbackStats = () => ({
+  supports: 0,
+  weakens: 0,
+  unresolved: 0,
+  total: 0,
+  applicabilityRate: null as number | null,
+  applicabilityScore: null as number | null,
+})
 const feedbackStats = ref(emptyFeedbackStats())
 const visibleContexts = ref<Record<string, boolean>>({})
 const isLoadingList = ref(false)
 const isLoadingDetail = ref(false)
 const isApproving = ref(false)
 const isRejecting = ref(false)
+const isMerging = ref(false)
 const showApproveModal = ref(false)
 const showRejectModal = ref(false)
+const showMergeModal = ref(false)
 const openCriterionKey = ref<string | null>(null)
 const bulkAction = ref<RuleV3BulkAction | null>(null)
 const isBulkRunning = ref(false)
 
-const activeTabLabel = computed(() => statusTabs.find(tab => tab.value === activeStatus.value)?.label || '')
+const activeTabLabel = computed(() => statusTabs.value.find(tab => tab.value === activeStatus.value)?.label || '')
+const mergeableRelationships = computed(() => ruleRelationships.value.filter(item => item.mergeEligibility?.canMerge))
+const nonMergeableRelationships = computed(() => ruleRelationships.value.filter(item => !item.mergeEligibility?.canMerge))
+const canMergeSelectedRule = computed(() => Boolean(
+  selectedCandidate.value
+  && !selectedCandidate.value.isComposite
+  && ['pending', 'approved'].includes(selectedCandidate.value.status)
+  && mergeableRelationships.value.length > 0,
+))
 const bulkActionCopy = computed(() => ({
-  approve_pending: { title: 'Duyệt tất cả quy luật đang chờ?', message: 'Chỉ quy luật vượt qua cổng kiểm chứng và tạo được chỉ mục truy hồi mới được duyệt. Các quy luật lỗi sẽ được giữ lại để kiểm tra.', confirm: 'Duyệt tất cả', danger: false },
-  reject_pending: { title: 'Từ chối tất cả quy luật đang chờ?', message: 'Các quy luật trong phạm vi đang xem sẽ được chuyển sang danh sách bị từ chối.', confirm: 'Từ chối tất cả', danger: true },
-  restore_rejected: { title: 'Khôi phục tất cả quy luật?', message: 'Các quy luật bị từ chối trong phạm vi đang xem sẽ trở lại hàng chờ duyệt.', confirm: 'Khôi phục tất cả', danger: false },
-  delete_rejected: { title: 'Xóa vĩnh viễn tất cả quy luật bị từ chối?', message: 'Quy luật và toàn bộ liên kết dẫn chứng của chúng sẽ bị xóa. Thao tác này không thể hoàn tác.', confirm: 'Xóa vĩnh viễn', danger: true }
+  approve_pending: { title: t('rules.bulk.approveTitle'), message: t('rules.bulk.approveMessage'), confirm: t('rules.approveAll'), danger: false },
+  reject_pending: { title: t('rules.bulk.rejectTitle'), message: t('rules.bulk.rejectMessage'), confirm: t('rules.rejectAll'), danger: true },
+  restore_rejected: { title: t('rules.bulk.restoreTitle'), message: t('rules.bulk.restoreMessage'), confirm: t('rules.restoreAll'), danger: false },
+  delete_rejected: { title: t('rules.bulk.deleteTitle'), message: t('rules.bulk.deleteMessage'), confirm: t('rules.bulk.deleteConfirm'), danger: true }
 } as const)[bulkAction.value || 'approve_pending'])
 const groupedCandidates = computed(() => {
   const groups: Record<string, RuleCandidate[]> = {}
   for (const candidate of candidates.value) {
-    const title = candidate.sourceTitle || 'Tài liệu chưa xác định'
+    const title = candidate.sourceTitle || t('rules.unknownSource')
     if (!groups[title]) groups[title] = []
     groups[title].push(candidate)
   }
   return groups
 })
 
+function candidateSections(items: RuleCandidate[]) {
+  const groups = new Map<string, RuleCandidate[]>()
+  for (const candidate of items) {
+    const key = candidate.mergeCluster?.clusterId || `single:${candidate._id}`
+    const members = groups.get(key) || []
+    members.push(candidate)
+    groups.set(key, members)
+  }
+  return [...groups.entries()].map(([key, clusterItems]) => ({
+    key,
+    items: clusterItems,
+    mergeable: Boolean(clusterItems[0]?.mergeCluster && clusterItems.length > 1),
+    reasons: clusterItems[0]?.mergeCluster?.reasons || [],
+  })).sort((left, right) => Number(left.mergeable) - Number(right.mergeable)
+    || left.items[0].label.localeCompare(right.items[0].label))
+}
+
+function mergeReasonList(reasons: string[] = []) {
+  const labels: Record<string, string> = {
+    same_canonical_paragraph: t('rules.mergeReasons.same_canonical_paragraph'),
+    equivalent_subject_and_outcome: t('rules.mergeReasons.equivalent_subject_and_outcome'),
+    same_meaningful_subject: t('rules.mergeReasons.same_meaningful_subject'),
+    same_meaningful_outcome: t('rules.mergeReasons.same_meaningful_outcome'),
+    same_question_and_semantics: t('rules.mergeReasons.same_question_and_semantics'),
+  }
+  return reasons.map(reason => labels[reason] || reason).join(', ')
+}
+
+function relationshipSignalList(item: RuleRelationshipRow) {
+  const labels: Record<string, string> = {
+    same_source_document: t('rules.relationshipSignals.same_source_document'),
+    same_canonical_paragraph: t('rules.relationshipSignals.same_canonical_paragraph'),
+    related_subject: t('rules.relationshipSignals.related_subject'),
+    related_outcome: t('rules.relationshipSignals.related_outcome'),
+    similar_statement: t('rules.relationshipSignals.similar_statement'),
+    same_question_kind: t('rules.relationshipSignals.same_question_kind'),
+  }
+  return (item.mergeEligibility?.signals || []).map(signal => labels[signal] || signal)
+}
+
+function relationshipBadge(item: RuleRelationshipRow) {
+  if (item.relationship === 'contradictory') return t('rules.relationshipBadges.contradictory')
+  if (item.relationship === 'reverse_direction') return t('rules.relationshipBadges.reverse_direction')
+  if (item.relationship === 'scope_tension') return t('rules.relationshipBadges.scope_tension')
+  const signals = item.mergeEligibility?.signals || []
+  if (signals.includes('same_canonical_paragraph')) return t('rules.relationshipBadges.same_canonical_paragraph')
+  if (signals.includes('related_subject') && signals.includes('related_outcome')) return t('rules.relationshipBadges.related_subject_outcome')
+  if (signals.includes('related_subject')) return t('rules.relationshipBadges.related_subject')
+  if (signals.includes('related_outcome')) return t('rules.relationshipBadges.related_outcome')
+  if (signals.includes('same_question_kind')) return t('rules.relationshipBadges.same_question_kind')
+  return t('rules.relationshipBadges.similar_content')
+}
+
+function relationshipWhyShown(item: RuleRelationshipRow) {
+  const signals = relationshipSignalList(item)
+  const similarity = signals.length
+    ? t('rules.relatedBecause', { signals: signals.join(', ') })
+    : t('rules.relatedBecauseFallback')
+  if (item.mergeEligibility?.canMerge) return similarity
+  const differences: Record<string, string> = {
+    equivalent: t('rules.relationshipDifferences.equivalent'),
+    overlapping: t('rules.relationshipDifferences.overlapping'),
+    complementary: t('rules.relationshipDifferences.complementary'),
+    scope_tension: t('rules.relationshipDifferences.scope_tension'),
+    shared_context: t('rules.relationshipDifferences.shared_context'),
+    contradictory: t('rules.relationshipDifferences.contradictory'),
+    reverse_direction: t('rules.relationshipDifferences.reverse_direction'),
+  }
+  const difference = differences[item.relationship] || differences.complementary
+  const boundary = item.mergeEligibility?.blockedByState === 'composite_review_boundary'
+    ? ` ${t('rules.relationshipState.composite_review_boundary')}`
+    : item.mergeEligibility?.blockedByState === 'different_status'
+      ? ` ${t('rules.relationshipState.different_status')}`
+      : ''
+  return `${similarity} ${t('rules.keptSeparateBecause', { difference })}${boundary}`
+}
+
 const formattedSource = computed(() => {
   const candidate = selectedCandidate.value
   if (!candidate) return ''
-  const authors = candidate.sourceAuthors?.length ? candidate.sourceAuthors.join(', ') : 'Chưa xác định tác giả'
+  const authors = candidate.sourceAuthors?.length ? candidate.sourceAuthors.join(', ') : t('rules.unknownAuthor')
   const year = candidate.sourceYear ? ` (${candidate.sourceYear})` : ''
-  const title = candidate.sourceTitle || 'Tài liệu chưa có tiêu đề'
+  const title = candidate.sourceTitle || t('rules.untitledSource')
   const doi = candidate.sourceDoi ? ` · DOI ${candidate.sourceDoi}` : ''
   return `${authors}${year} · ${title}${doi}`
 })
+
+const translatedRuleFields = ref(new Map<string, string>())
+const translatorPromises = new Map<string, Promise<BrowserTranslatorInstance>>()
+const unavailableLanguagePairs = new Set<string>()
+let translationRunId = 0
+
+function inferContentLanguage(value: string, fallback?: string): 'vi' | 'en' | null {
+  if (/[ăâđêôơưáàảãạéèẻẽẹíìỉĩịóòỏõọúùủũụýỳỷỹỵ]/iu.test(value)) return 'vi'
+  if (/\b(?:the|and|dream|sleep|memory|evidence|participants?|associated|future|source|condition|rule)\b/iu.test(value)) return 'en'
+  return fallback === 'vi' || fallback === 'en' ? fallback : null
+}
+
+function dynamicRuleKey(ruleId: string, field: string, value: string): string {
+  return `${locale.value}:${ruleId}:${field}:${value}`
+}
+
+function questionPlaceholderReplacements(): Record<string, string> {
+  return {
+    __DREAM_FEATURE__: t('rules.placeholders.dreamFeature'),
+    __DREAM_REACTION__: t('rules.placeholders.dreamReaction'),
+    __COMPARISON_CONTEXT__: t('rules.placeholders.comparisonContext'),
+    __NEAR_TERM_EVENT__: t('rules.placeholders.nearTermEvent'),
+    __LONG_TERM_PLAN__: t('rules.placeholders.longTermPlan'),
+    __UPCOMING_EVENT__: t('rules.placeholders.upcomingEvent'),
+    __CURRENT_PRESSURE__: t('rules.placeholders.currentPressure'),
+    __MATCHED_PROBLEM__: t('rules.placeholders.matchedProblem'),
+    __MATCHED_PERSON__: t('rules.placeholders.matchedPerson'),
+    __MATCHED_FRAGMENTS__: t('rules.placeholders.matchedFragments'),
+    __MATCHED_FUTURE_EVENT__: t('rules.placeholders.matchedFutureEvent'),
+    __MATCHED_SOLUTION__: t('rules.placeholders.matchedSolution'),
+    __SLEEP_STIMULUS__: t('rules.placeholders.sleepStimulus'),
+  }
+}
+
+function materializeQuestionPlaceholders(value: string): string {
+  let rendered = value
+  for (const [marker, localized] of Object.entries(questionPlaceholderReplacements())) {
+    rendered = rendered.replaceAll(marker, localized)
+  }
+  return rendered
+}
+
+function ruleText(candidate: RuleCandidate, field: string, value: string): string {
+  if (!value) return value
+  return translatedRuleFields.value.get(dynamicRuleKey(candidate._id, field, value)) || value
+}
+
+function localizedRuleExplanation(
+  localized: Partial<Record<'vi' | 'en', string>> | undefined,
+  candidate: RuleCandidate,
+  field: string,
+  fallback: string,
+): string {
+  const target = locale.value === 'en' ? 'en' : 'vi'
+  return localized?.[target] || ruleText(candidate, field, fallback)
+}
+
+function translatedRuleList(candidate: RuleCandidate, field: string, values: string[]): string[] {
+  return values.map((value, index) => ruleText(candidate, `${field}:${index}`, value))
+}
+
+function relatedRuleText(item: RuleRelationshipRow): string {
+  return translatedRuleFields.value.get(dynamicRuleKey(item.ruleId, 'relationshipLabel', item.label)) || item.label
+}
+
+async function getBrowserRuleTranslator(source: 'vi' | 'en', target: 'vi' | 'en'): Promise<BrowserTranslatorInstance> {
+  const pair = `${source}:${target}`
+  if (unavailableLanguagePairs.has(pair)) throw new Error('browser_translation_unavailable')
+  let pending = translatorPromises.get(pair)
+  if (!pending) {
+    pending = createBrowserTranslator(source, target).then(result => result.translator).catch(error => {
+      unavailableLanguagePairs.add(pair)
+      translatorPromises.delete(pair)
+      throw error
+    })
+    translatorPromises.set(pair, pending)
+  }
+  return pending
+}
+
+async function translateRuleField(candidateId: string, field: string, value: string, fallbackLanguage?: string, runId = translationRunId) {
+  // Replace machine-only markers before browser translation. Otherwise Chrome
+  // interprets the surrounding underscores as formatting and can produce
+  // broken strings such as "__matched_future_event..." in the review UI.
+  const clean = materializeQuestionPlaceholders(String(value || '')).trim()
+  if (!clean || !/[\p{L}]/u.test(clean)) return
+  const target = locale.value === 'en' ? 'en' : 'vi'
+  const sourceLanguage = inferContentLanguage(clean, fallbackLanguage)
+  if (!sourceLanguage || sourceLanguage === target) return
+  const key = dynamicRuleKey(candidateId, field, value)
+  if (translatedRuleFields.value.has(key)) return
+  try {
+    const translator = await getBrowserRuleTranslator(sourceLanguage, target)
+    const translated = await translateBrowserText(translator, clean, sourceLanguage, target)
+    if (runId === translationRunId && translated.trim() && translated.trim() !== clean) {
+      translatedRuleFields.value.set(key, translated)
+    }
+  } catch {
+    // Browser translation is a presentation enhancement. The canonical rule
+    // remains visible when this browser does not expose a translation model.
+  }
+}
+
+async function translateVisibleRuleContent() {
+  const runId = ++translationRunId
+  const jobs: Promise<void>[] = []
+  for (const candidate of candidates.value) {
+    jobs.push(translateRuleField(candidate._id, 'label', candidate.label, candidate.sourceLanguage, runId))
+  }
+  const candidate = selectedCandidate.value
+  if (candidate) {
+    const fields: Array<[string, string]> = [
+      ['label', candidate.label], ['statement', candidate.fullStatement || ''], ['factor', candidate.factor || ''],
+      ['outcome', candidate.inputSource || ''], ['qualitySummary', candidate.qualitySummary || ''],
+      ['explanation', candidate.expandedExplanation || candidate.fullStatement || ''],
+      ['probe:check', candidate.probeBlueprint?.applicabilityCheck || ''], ['probe:explanation', candidate.probeBlueprint?.explanation || ''],
+      ['probe:questionPattern', candidate.probeBlueprint?.questionPattern || ''],
+      ['probe:requiredData', candidate.probeBlueprint?.requiredData || ''],
+      ['probe:expectedPattern', candidate.probeBlueprint?.expectedPattern || ''],
+      ['probe:supportCriterion', candidate.probeBlueprint?.supportCriterion || ''],
+      ['probe:weakeningCriterion', candidate.probeBlueprint?.weakeningCriterion || ''],
+      ['probe:inconclusiveCriterion', candidate.probeBlueprint?.inconclusiveCriterion || ''],
+      ['probe:condition', candidate.probeBlueprint?.conditionSummary || ''], ['probe:feedback', candidate.probeBlueprint?.feedbackEffect || ''],
+    ]
+    candidate.probeBlueprint?.questionDimensions?.forEach((question, index) => {
+      fields.push([`probe:question:${index}`, question.questionPattern], [`probe:purpose:${index}`, question.purpose])
+    })
+    candidate.compositeComponents?.forEach((component, index) => {
+      fields.push(
+        [`component:${index}:subject`, component.subject],
+        [`component:${index}:outcome`, component.outcome],
+        [`component:${index}:statement`, component.statement],
+        [`component:${index}:explanation`, component.expandedExplanation || component.statement],
+      )
+    })
+    candidate.conditionsList?.forEach((value, index) => fields.push([`condition:${index}`, value]))
+    candidate.limitationsList?.forEach((value, index) => fields.push([`limitation:${index}`, value]))
+    reviewDreamTags.value.forEach((value, index) => fields.push([`dreamTag:${index}`, value]))
+    candidate.scoreCriteria?.forEach(item => {
+      fields.push([`reason:${item.key}`, item.reason], [`rubric:${item.key}`, item.rubric])
+    })
+    for (const [field, value] of fields) jobs.push(translateRuleField(candidate._id, field, value, candidate.sourceLanguage, runId))
+  }
+  for (const item of ruleRelationships.value) jobs.push(translateRuleField(item.ruleId, 'relationshipLabel', item.label, undefined, runId))
+  await Promise.all(jobs)
+}
 
 const scoreCriteriaRows = computed(() => selectedCandidate.value?.scoreCriteria || [])
 const reviewConditions = computed(() => (selectedCandidate.value?.conditionsList || []).filter(item => {
@@ -407,6 +752,12 @@ const reviewDreamTags = computed(() => (selectedCandidate.value?.dreamFeatureTag
     && !/^(?:memory|emotion|sleep|dream|dreams|dream content|trí nhớ|cảm xúc|giấc ngủ|giấc mơ)$/iu.test(item)
     && !/\b(?:neural|brain|cortex|cortical|EEG|activation|neuron)\b/iu.test(item)))
 
+watch(
+  [() => locale.value, candidates, selectedCandidate, ruleRelationships],
+  () => { void translateVisibleRuleContent() },
+  { flush: 'post' },
+)
+
 function punctuatedList(items: string[], separator: string) {
   const value = items.map(item => item.trim()).filter(Boolean).join(separator)
   return /[.!?]$/u.test(value) ? value : `${value}.`
@@ -417,10 +768,10 @@ const evidenceScoreConclusion = computed(() => {
   const score = candidate?.evidenceCredibilityScore || 0
   const citations = candidate?.supportingCitationCount || 0
   const sources = candidate?.independentSourceCount || 0
-  if (score >= 80) return `Bằng chứng hỗ trợ mạnh: ${citations} trích dẫn hỗ trợ đã kiểm chứng từ ${sources} nguồn độc lập.`
-  if (score >= 60) return `Bằng chứng đã có mức xác nhận vừa phải; hiện có ${citations} trích dẫn hỗ trợ từ ${sources} nguồn.`
-  if (score >= 40) return `Bằng chứng còn giới hạn: kết luận có dẫn chứng trực tiếp nhưng độ phủ hoặc xác nhận từ nguồn độc lập còn thiếu.`
-  return 'Bằng chứng yếu hoặc chưa đủ trực tiếp; không nên dùng quy luật này để diễn giải giấc mơ ở trạng thái hiện tại.'
+  if (score >= 80) return t('rules.scoreConclusions.strong', { citations, sources })
+  if (score >= 60) return t('rules.scoreConclusions.moderate', { citations, sources })
+  if (score >= 40) return t('rules.scoreConclusions.limited')
+  return t('rules.scoreConclusions.weak')
 })
 
 watch(
@@ -448,11 +799,13 @@ async function confirmBulkAction() {
   try {
     const response = await runRuleV3BulkAction(bulkAction.value, confirmations[bulkAction.value], sourceIdFilter.value || undefined)
     const failed = response.data.failed
-    settingsStore.showToast(failed ? `Đã xử lý ${response.data.processed} quy luật; ${failed} quy luật cần kiểm tra riêng.` : `Đã xử lý ${response.data.processed} quy luật.`, failed ? 'error' : 'success')
+    settingsStore.showToast(failed
+      ? t('rules.toasts.bulkPartial', { processed: response.data.processed, failed })
+      : t('rules.toasts.bulkDone', { processed: response.data.processed }), failed ? 'error' : 'success')
     bulkAction.value = null
     await fetchCandidates()
   } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || 'Không thể thực hiện thao tác hàng loạt.', 'error')
+    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.bulkFailed'), 'error')
   } finally {
     isBulkRunning.value = false
   }
@@ -485,7 +838,7 @@ async function fetchCandidates() {
       feedbackStats.value = emptyFeedbackStats()
     }
   } catch {
-    settingsStore.showToast('Không thể tải danh sách Rule V3.', 'error')
+    settingsStore.showToast(t('rules.toasts.listFailed'), 'error')
   } finally {
     isLoadingList.value = false
   }
@@ -506,7 +859,7 @@ async function selectCandidate(id: string) {
     selectedCandidate.value = null
     ruleRelationships.value = []
     feedbackStats.value = emptyFeedbackStats()
-    settingsStore.showToast('Không thể tải chi tiết Rule V3.', 'error')
+    settingsStore.showToast(t('rules.toasts.detailFailed'), 'error')
   } finally {
     isLoadingDetail.value = false
   }
@@ -518,10 +871,10 @@ async function confirmApproval() {
   try {
     await approveRuleCandidate(selectedCandidate.value._id)
     showApproveModal.value = false
-    settingsStore.showToast('Đã phê duyệt quy luật.', 'success')
+    settingsStore.showToast(t('rules.toasts.approved'), 'success')
     await fetchCandidates()
   } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || 'Không thể phê duyệt quy luật.', 'error')
+    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.approveFailed'), 'error')
   } finally {
     isApproving.value = false
   }
@@ -533,17 +886,39 @@ async function confirmRejection() {
   try {
     await rejectRuleCandidate(selectedCandidate.value._id, '')
     showRejectModal.value = false
-    settingsStore.showToast('Đã từ chối quy luật.', 'success')
+    settingsStore.showToast(t('rules.toasts.rejected'), 'success')
     await fetchCandidates()
   } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || 'Không thể từ chối quy luật.', 'error')
+    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.rejectFailed'), 'error')
   } finally {
     isRejecting.value = false
   }
 }
 
+async function confirmMerge() {
+  if (!selectedCandidate.value || !canMergeSelectedRule.value) return
+  isMerging.value = true
+  try {
+    const result = await mergeRuleCandidateGroup(selectedCandidate.value._id)
+    showMergeModal.value = false
+    settingsStore.showToast(t('rules.toasts.merged', { count: result.data.componentCount }), 'success')
+    if (result.data.requiresReview) activeStatus.value = 'pending'
+    await fetchCandidates()
+    if (candidates.value.some(item => item._id === result.data.primaryRuleId)) await selectCandidate(result.data.primaryRuleId)
+  } catch (error: any) {
+    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.mergeFailed'), 'error')
+  } finally {
+    isMerging.value = false
+  }
+}
+
 function chunkPreview(chunkId: string) {
   return evidenceChunks.value.find(item => item.chunkId === chunkId)?.chunkPreview || ''
+}
+
+function componentCodeForExcerpt(excerpt: EvidenceExcerpt) {
+  if (!selectedCandidate.value?.isComposite || !excerpt.ruleId) return ''
+  return selectedCandidate.value.compositeComponents?.find(component => component.sourceRuleId === excerpt.ruleId)?.ruleCode || ''
 }
 
 function hasWiderContext(excerpt: EvidenceExcerpt) {
@@ -572,29 +947,36 @@ function closeCriterionHelp() {
 }
 
 onMounted(() => document.addEventListener('click', closeCriterionHelp))
-onBeforeUnmount(() => document.removeEventListener('click', closeCriterionHelp))
+onBeforeUnmount(() => {
+  document.removeEventListener('click', closeCriterionHelp)
+  for (const pending of translatorPromises.values()) void pending.then(translator => translator.destroy?.()).catch(() => undefined)
+  translatorPromises.clear()
+})
 
 function statusLabel(status: string) {
-  return ({ pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Bị từ chối' } as Record<string, string>)[status] || status
+  return ({ pending: t('rules.statuses.pending'), approved: t('rules.statuses.approved'), rejected: t('rules.statuses.rejected') } as Record<string, string>)[status] || status
 }
 
 function scoreCriterionLabel(value: string) {
-  return ({
-    source_breadth: 'Số nguồn độc lập hỗ trợ',
-    research_fit: 'Độ phù hợp của thiết kế nghiên cứu',
-    evidence_breadth: 'Độ phủ dẫn chứng theo chunk',
-    scope_definition: 'Phạm vi và giới hạn được nêu rõ',
-    conflict_handling: 'Kiểm tra bằng chứng trái chiều'
-  } as Record<string, string>)[value] || value
+  return t(`rules.criteria.${value}`, value)
 }
 
-function relationshipLabel(value: string) {
+function questionTypeLabel(value: string) {
+  const known = ['dream_feature_confirmation', 'dream_reaction_confirmation', 'comparison_group_context', 'multiple_future_horizons', 'recent_experience_incorporation', 'anticipated_event', 'current_stress', 'avoidance_pressure', 'attachment_support_under_stress', 'external_sleep_stimulus', 'waking_concern_incorporation', 'priority_pressure', 'recent_direct_exposure', 'preparation_behavior', 'stress_impact', 'approaching_consequence', 'recent_support_seeking', 'sleep_environment_context', 'recent_day_activity', 'weak_association_recombination', 'creative_problem_preoccupation', 'implausible_future_scenario', 'waking_prospective_difference', 'novel_solution_origin']
+  return known.includes(value) ? t(`rules.questionTypes.${value}`) : value
+}
+
+function renderQuestionPattern(candidate: RuleCandidate, field: string, value: string) {
+  return materializeQuestionPlaceholders(ruleText(candidate, field, value))
+}
+
+function collectedFieldLabel(value: string) {
+  const prefix = value.split(':', 1)[0]
   return ({
-    equivalent: 'Cùng nội dung',
-    overlapping: 'Liên quan nhưng khác phạm vi',
-    contradictory: 'Kết luận trái chiều',
-    reverse_direction: 'Quan hệ đảo chiều'
-  } as Record<string, string>)[value] || value
+    presence: t('rules.collectedFields.presence'),
+    comparison_context: t('rules.collectedFields.comparisonContext'),
+    case_applicability: t('rules.collectedFields.caseApplicability'),
+  } as Record<string, string>)[prefix] || value
 }
 
 function feedbackPercent(key: 'supports' | 'weakens' | 'unresolved') {
@@ -610,7 +992,7 @@ function sourceGroupStyle(title: string) {
 
 function scoreLevelLabel(score?: number) {
   const value = score || 0
-  return value >= 80 ? 'Mạnh' : value >= 60 ? 'Vừa phải' : value >= 40 ? 'Có giới hạn' : 'Yếu'
+  return value >= 80 ? t('rules.scores.strong') : value >= 60 ? t('rules.scores.moderate') : value >= 40 ? t('rules.scores.limited') : t('rules.scores.weak')
 }
 
 function scoreLevelClass(score?: number) {
@@ -648,11 +1030,17 @@ function scoreColor(score?: number) {
 .source-group h2 { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin: 2px 3px 9px; color: var(--color-text-secondary); font-size: .72rem; line-height: 1.4; letter-spacing: .035em; }
 .source-group h2 span { min-width: 0; }.source-group h2 small { flex: 0 0 auto; color: var(--color-text-muted); font-size: .66rem; font-weight: 600; white-space: nowrap; }
 .source-rule-list { display: flex; flex-direction: column; gap: 6px; }
+.concept-cluster { display: flex; flex-direction: column; gap: 6px; }.concept-cluster + .concept-cluster { margin-top: 5px; }
+.concept-cluster__heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; border-left: 2px solid hsl(var(--source-group-hue) 55% 64% / .7); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: hsl(var(--source-group-hue) 45% 55% / .07); color: var(--color-text-secondary); font-size: .67rem; font-weight: 700; }.concept-cluster__heading small { color: var(--color-text-muted); font-size: .63rem; font-weight: 600; }
 .candidate-card { width: 100%; display: flex; flex-direction: column; gap: 9px; padding: 12px; margin: 0; text-align: left; border: 1px solid transparent; border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-bg-base) 98%, hsl(var(--source-group-hue) 45% 55%)); color: inherit; cursor: pointer; }
 .candidate-card:hover { border-color: var(--color-border); background: var(--color-bg-hover); }.candidate-card.selected { border-color: var(--accent); background: rgba(59,130,246,.07); }
 .candidate-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; font-size: .9rem; font-weight: 650; line-height: 1.4; color: var(--color-text-primary); }
 .candidate-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: var(--color-text-muted); font-size: .7rem; }
+.composite-badge { display: inline-flex; width: fit-content; margin-top: 8px; padding: 4px 8px; border-radius: 999px; background: rgba(99,102,241,.12); color: #a5b4fc; font-size: .68rem; font-weight: 700; }.composite-claims { display: grid; gap: 12px; margin-top: 16px; }.composite-claim { padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.composite-claim__header { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: var(--color-text-secondary); font-size: .7rem; }.composite-claim__header span { color: var(--color-text-muted); }.composite-claim .relationship-flow { margin-top: 0; }.composite-claim .rule-explanation { margin-top: 10px; }.merge-preview-list { display: grid; gap: 8px; margin: 12px 0; padding-left: 20px; }.merge-preview-list li { color: var(--color-text-secondary); line-height: 1.45; }
+.score-aggregation-note { margin: 10px 0 0; padding: 10px 12px; border: 1px solid rgba(245,158,11,.25); border-radius: var(--radius-sm); background: rgba(245,158,11,.06); color: var(--color-text-secondary); font-size: .74rem; line-height: 1.5; }.score-aggregation-note strong { color: #fbbf24; }
+.merge-review-warning { margin-top: 12px !important; padding: 10px 12px; border-radius: var(--radius-sm); background: rgba(245,158,11,.08); color: #fbbf24; font-size: .75rem; }
 .score-chip { color: #93c5fd; font-weight: 700; }.status-chip { display: inline-flex; width: fit-content; padding: 3px 8px; border-radius: 999px; font-size: .68rem; font-weight: 700; }
+.composite-list-chip { color: #a5b4fc; font-weight: 700; }
 .status-pending { color: #fbbf24; background: rgba(245,158,11,.12); }.status-approved { color: #34d399; background: rgba(16,185,129,.12); }.status-rejected { color: #f87171; background: rgba(239,68,68,.12); }
 .loading-state, .empty-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; min-height: 180px; padding: var(--space-5); text-align: center; color: var(--color-text-muted); }
 .empty-panel h3, .empty-panel p { margin: 0; }.empty-panel.compact { min-height: 320px; }.detail-empty, .detail-loading { height: 100%; min-height: 650px; }
@@ -667,15 +1055,19 @@ function scoreColor(score?: number) {
 .section-heading h3 { margin: 0; color: var(--color-text-primary); }.section-description { margin: 5px 0 0; color: var(--color-text-muted); font-size: .76rem; line-height: 1.45; }.rule-explanation { margin: 16px 0 0; padding: 13px 14px; border-left: 3px solid #818cf8; border-radius: 0 var(--radius-md) var(--radius-md) 0; background: rgba(49,46,129,.16); color: var(--color-text-primary); line-height: 1.6; }.relationship-flow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: stretch; margin-top: 18px; }
 .relationship-flow > div:not(.relationship-arrow) { padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.relationship-flow span { display: block; margin-bottom: 6px; color: var(--color-text-muted); font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }.relationship-flow strong { color: var(--color-text-primary); line-height: 1.45; }.relationship-arrow { align-self: center; color: var(--accent); font-size: 1.4rem; }
 .rule-reading-guide { display: grid; gap: 8px; margin: 15px 0 0; padding: 0; list-style: none; color: var(--color-text-secondary); font-size: .82rem; line-height: 1.5; }.rule-reading-guide li { padding-left: 15px; position: relative; }.rule-reading-guide li::before { content: '•'; position: absolute; left: 0; color: #818cf8; }.rule-reading-guide strong { color: var(--color-text-primary); }
-.assessment-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }.assessment-card h3 { font-size: 1.45rem; }.level-badge, .verified-badge { padding: 5px 9px; border-radius: 999px; font-size: .7rem; font-weight: 750; }.level-good, .verified-badge { color: #34d399; background: rgba(16,185,129,.12); }.level-moderate { color: #60a5fa; background: rgba(59,130,246,.12); }.level-caution { color: #fbbf24; background: rgba(245,158,11,.12); }
+.assessment-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }.assessment-card h3 { font-size: 1.45rem; }.level-badge { padding: 5px 9px; border-radius: 999px; font-size: .7rem; font-weight: 750; }.level-good { color: #34d399; background: rgba(16,185,129,.12); }.level-moderate { color: #60a5fa; background: rgba(59,130,246,.12); }.level-caution { color: #fbbf24; background: rgba(245,158,11,.12); }
 .assessment-title { font-size: .95rem !important; }.score-number { display: block; margin-top: 5px; font-size: 1.65rem; line-height: 1; }.score-track { width: 100%; height: 9px; margin: 14px 0; border: 1px solid rgba(148,163,184,.16); border-radius: 999px; overflow: hidden; background: #111827; }.score-track span { display: block; min-width: 2px; height: 100%; border-radius: inherit; transition: width .25s ease; }.score-conclusion { margin: 0 0 7px; color: var(--color-text-primary); font-size: .8rem; line-height: 1.5; }.score-note { color: var(--color-text-muted); font-size: .76rem; line-height: 1.5; }
 .criteria-list { display: flex; flex-direction: column; margin: 16px 0 0; border-top: 1px solid var(--color-border); }.criterion-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }.criterion-row dt { display: flex; align-items: center; gap: 7px; color: var(--color-text-secondary); }.criterion-row dd { margin: 0; color: var(--color-text-primary); font-weight: 700; }.criterion-help { position: relative; }.criterion-help button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid var(--color-border); border-radius: 50%; background: transparent; color: var(--color-text-muted); cursor: pointer; font-size: .68rem; font-weight: 700; }.criterion-help > div { position: absolute; z-index: 20; top: 25px; left: 0; width: min(350px, 72vw); padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); box-shadow: 0 12px 30px rgba(0,0,0,.24); color: var(--color-text-secondary); font-size: .75rem; line-height: 1.45; }.criterion-help > div strong { color: var(--color-text-primary); }.criterion-help > div p { margin: 5px 0 0; }.criterion-help > div ul { margin: 7px 0 12px; padding-left: 20px; list-style: disc outside; }.criterion-help > div li { margin: 5px 0; padding-left: 2px; }.quality-blocked { display: flex; flex-direction: column; gap: 3px; margin-top: 15px; padding: 11px 13px; border: 1px solid rgba(239,68,68,.32); border-radius: var(--radius-md); color: #fca5a5; font-size: .78rem; }.quality-blocked span { color: var(--color-text-secondary); }
 .citation-list { display: flex; flex-direction: column; gap: 12px; margin-top: 17px; }.citation-item { padding: 15px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.citation-meta { display: flex; justify-content: space-between; gap: 10px; color: var(--color-text-muted); font-size: .7rem; }.citation-item blockquote { margin: 12px 0; padding-left: 14px; border-left: 3px solid var(--accent); color: var(--color-text-primary); font-size: .9rem; line-height: 1.65; }.context-button { padding: 0; border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: .76rem; }.context-text { margin: 12px 0 0; padding: 12px; border-radius: var(--radius-md); background: var(--color-bg-base); color: var(--color-text-secondary); font-size: .78rem; line-height: 1.55; white-space: pre-wrap; }
 .relationship-card { display: grid; gap: 9px; }.related-rule { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); color: inherit; text-align: left; cursor: pointer; }.related-rule:hover { border-color: rgba(129,140,248,.42); }.related-rule strong { min-width: 0; color: var(--color-text-primary); font-size: .8rem; line-height: 1.4; }.related-rule small { color: var(--color-text-muted); white-space: nowrap; }.relation-kind { padding: 3px 7px; border-radius: 999px; color: #a5b4fc; background: rgba(99,102,241,.1); font-size: .65rem; font-weight: 700; }.relation-kind--contradictory { color: #fca5a5; background: rgba(239,68,68,.1); }.relation-kind--reverse_direction { color: #fcd34d; background: rgba(245,158,11,.1); }
+.relationship-group { display: grid; gap: 8px; padding: 11px; border: 1px solid var(--color-border); border-radius: var(--radius-md); }.relationship-group--mergeable { border-color: rgba(52,211,153,.25); background: rgba(16,185,129,.035); }.relationship-group__title { color: var(--color-text-primary); font-size: .78rem; }.relationship-group > p { margin: -3px 0 2px; color: var(--color-text-muted); font-size: .7rem; line-height: 1.45; }.related-rule__content { display: grid; min-width: 0; gap: 3px; }.related-rule__content small { overflow: hidden; text-overflow: ellipsis; white-space: normal; line-height: 1.35; }
 .feedback-card { display: grid; gap: 12px; }.feedback-card .section-heading > strong { color: var(--color-text-primary); font-size: .8rem; }.feedback-bar { display: flex; width: 100%; height: 7px; overflow: hidden; border-radius: 999px; background: var(--color-bg-elevated); }.feedback-bar span { display: block; height: 100%; transition: width .25s ease; }.feedback-bar__yes { background: #34d399; }.feedback-bar__no { background: #f87171; }.feedback-bar__unsure { background: #94a3b8; }.feedback-reactions { display: flex; flex-wrap: wrap; gap: 8px; }.feedback-reactions span { padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-bg-elevated); color: var(--color-text-secondary); font-size: .72rem; }.feedback-reactions b { color: var(--color-text-primary); }.feedback-empty { margin: 0; color: var(--color-text-muted); font-size: .75rem; line-height: 1.5; }
 .probe-card { display: grid; gap: 13px; }.probe-facts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 0; }.probe-facts div { padding: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.probe-facts dt { color: var(--color-text-muted); font-size: .68rem; }.probe-facts dd { margin: 5px 0 0; color: var(--color-text-primary); font-size: .78rem; line-height: 1.45; }.probe-heading { color: var(--color-text-primary); font-size: .78rem; }.probe-questions { display: grid; gap: 7px; margin: 0; padding-left: 20px; color: var(--color-text-secondary); font-size: .78rem; line-height: 1.5; }
+.probe-question-pattern { padding: 12px; border-left: 3px solid #3b82f6; border-radius: 0 var(--radius-md) var(--radius-md) 0; background: rgba(59,130,246,.08); }.probe-question-pattern strong { color: #93c5fd; font-size: .72rem; }.probe-question-pattern p { margin: 6px 0 0; color: var(--color-text-primary); font-size: .82rem; line-height: 1.55; }.probe-inactive { margin: 0; padding: 10px 12px; border: 1px solid rgba(245,158,11,.28); border-radius: var(--radius-md); background: rgba(245,158,11,.07); color: #fbbf24; font-size: .76rem; line-height: 1.5; }
+.probe-question-list { display: grid; gap: 10px; }.probe-question-pattern__meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }.probe-question-pattern__meta span { padding: 3px 7px; border-radius: 999px; background: rgba(59,130,246,.14); color: #bfdbfe; font-size: .66rem; }.probe-question-pattern dl { display: grid; gap: 6px; margin: 10px 0 0; }.probe-question-pattern dl div { display: grid; grid-template-columns: 118px 1fr; gap: 8px; }.probe-question-pattern dt { color: var(--color-text-muted); font-size: .68rem; font-weight: 700; }.probe-question-pattern dd { margin: 0; color: var(--color-text-secondary); font-size: .72rem; line-height: 1.45; }
+.probe-validation-contract { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }.probe-validation-contract > div { padding: 11px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.probe-validation-contract strong { color: var(--color-text-secondary); font-size: .7rem; }.probe-validation-contract p { margin: 6px 0 0; color: var(--color-text-secondary); font-size: .74rem; line-height: 1.5; }.probe-validation-contract .probe-validation-contract--supports { border-color: rgba(16,185,129,.3); background: rgba(16,185,129,.06); }.probe-validation-contract .probe-validation-contract--supports strong { color: #6ee7b7; }.probe-validation-contract .probe-validation-contract--weakens { border-color: rgba(239,68,68,.3); background: rgba(239,68,68,.06); }.probe-validation-contract .probe-validation-contract--weakens strong { color: #fca5a5; }
 .action-bar { position: sticky; bottom: -30px; display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: var(--space-5) -30px -30px; padding: 14px 30px; border-top: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-bg-elevated) 94%, transparent); backdrop-filter: blur(10px); }.action-bar strong, .action-bar span { display: block; }.action-bar span { margin-top: 3px; color: var(--color-text-muted); font-size: .72rem; }.action-buttons { display: flex; gap: 10px; }
 .modal-overlay { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.64); }.modal-container { width: min(440px,100%); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-elevated); box-shadow: 0 20px 60px rgba(0,0,0,.35); }.modal-header, .modal-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 18px; }.modal-header { border-bottom: 1px solid var(--color-border); }.modal-header h3 { margin: 0; }.modal-header button { border: 0; background: transparent; color: var(--color-text-muted); font-size: 1.5rem; cursor: pointer; }.modal-body { padding: 18px; color: var(--color-text-secondary); }.modal-body p { margin: 0; line-height: 1.55; }.modal-footer { justify-content: flex-end; border-top: 1px solid var(--color-border); }
 @media (max-width: 1050px) { .review-layout { grid-template-columns: 280px minmax(0,1fr); }.assessment-grid { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .rule-review-page { height: auto; min-height: calc(100dvh - 72px); overflow: visible; }.page-header { align-items: flex-start; flex-direction: column; }.header-actions { width: 100%; justify-content: flex-start; }.bulk-actions { justify-content: flex-start; }.header-count { display: none; }.review-layout { grid-template-columns: 1fr; }.candidate-list { height: 300px; min-height: 300px; }.rule-document { height: auto; min-height: 620px; }.relationship-flow, .probe-facts { grid-template-columns: 1fr; }.relationship-arrow { transform: rotate(90deg); justify-self: center; }.action-bar { position: static; flex-direction: column; align-items: stretch; margin: var(--space-5) 0 0; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); }.action-buttons { justify-content: flex-end; } }
+@media (max-width: 760px) { .rule-review-page { height: auto; min-height: calc(100dvh - 72px); overflow: visible; }.page-header { align-items: flex-start; flex-direction: column; }.header-actions { width: 100%; justify-content: flex-start; }.bulk-actions { justify-content: flex-start; }.header-count { display: none; }.review-layout { grid-template-columns: 1fr; }.candidate-list { height: 300px; min-height: 300px; }.rule-document { height: auto; min-height: 620px; }.relationship-flow, .probe-facts, .probe-validation-contract { grid-template-columns: 1fr; }.relationship-arrow { transform: rotate(90deg); justify-self: center; }.action-bar { position: static; flex-direction: column; align-items: stretch; margin: var(--space-5) 0 0; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); }.action-buttons { justify-content: flex-end; } }
 </style>

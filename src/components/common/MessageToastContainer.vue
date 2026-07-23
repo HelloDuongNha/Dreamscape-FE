@@ -1,99 +1,65 @@
 <template>
   <div class="message-toast-container" role="log" aria-live="polite">
-    <!-- Dedicated pinned lane for Oracle notifications at the absolute top (Top 1) -->
-    <div
-      v-if="oracleStore.isPinnedVisible && oracleStore.trackedDream"
-      :class="['oracle-pinned-toast', { 'oracle-pinned-toast--terminal': oracleStore.completedDream || oracleStore.failedDream }]"
-      @click="handleOraclePinnedClick"
+    <TransitionGroup
+      name="pinned-task-list"
+      tag="div"
+      class="pinned-task-lane"
     >
-      <div class="oracle-pinned-toast__header">
-        <span class="oracle-pinned-toast__title">Oracle: {{ oracleTitle }}</span>
-        <button
-          class="oracle-pinned-toast__close"
-          aria-label="Dismiss notification"
-          @click.stop="oracleStore.dismissPinned()"
-        >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-      <p class="oracle-pinned-toast__body">{{ oracleMessage }}</p>
+      <PinnedTaskToast
+        v-if="showOracleChatRun"
+        key="oracle-chat-run"
+        kind="oracle-chat"
+        title="Oracle"
+        :message="oracleChatStore.backgroundRun ? oracleRunMessage : t('oracle.backgroundCompleted')"
+        :progress="oracleChatStore.backgroundRun ? oracleRunProgress : 100"
+        :terminal="Boolean(oracleChatStore.completedRun)"
+        @open="openOracleChatRun"
+      />
 
-      <!-- Progress Bar (only shown when pending) -->
-      <div v-if="oracleStore.trackedDream.ai_status === 'pending' && !oracleStore.completedDream && !oracleStore.failedDream" class="oracle-pinned-toast__progress-bar-bg">
-        <div class="oracle-pinned-toast__progress-bar-fill" :style="{ width: `${oracleStore.progress}%` }"></div>
-      </div>
-    </div>
+      <PinnedTaskToast
+        v-if="oracleStore.isPinnedVisible && oracleStore.trackedDream"
+        key="dream-analysis-run"
+        kind="dream-analysis"
+        :title="`Oracle: ${oracleTitle}`"
+        :message="oracleMessage"
+        :progress="oracleStore.trackedDream.ai_status === 'pending' && !oracleStore.completedDream && !oracleStore.failedDream ? oracleStore.progress : 100"
+        :terminal="Boolean(oracleStore.completedDream || oracleStore.failedDream)"
+        @open="handleOraclePinnedClick"
+      />
 
-    <!-- Dedicated pinned lane for Extraction notifications (Top 2) -->
-    <div
-      v-if="extractionStore.isPinnedVisible && extractionStore.sourceId"
-      :class="['extraction-pinned-toast', { 'pinned-toast--terminal': extractionStore.status !== 'pending' }]"
-      @click="handleExtractionPinnedClick"
-    >
-      <div class="extraction-pinned-toast__header">
-        <span class="extraction-pinned-toast__title">Phân tích: {{ extractionTitle }}</span>
-        <button
-          class="extraction-pinned-toast__close"
-          aria-label="Dismiss notification"
-          @click.stop="extractionStore.dismissPinned()"
-        >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-      <p class="extraction-pinned-toast__body">{{ extractionMessage }}</p>
+      <PinnedTaskToast
+        v-if="extractionStore.isPinnedVisible && extractionStore.sourceId"
+        key="rule-analysis-run"
+        kind="rule-analysis"
+        :title="`Phân tích Rule: ${extractionTitle}`"
+        :message="extractionMessage"
+        :progress="extractionStore.status === 'pending' ? extractionStore.progress : 100"
+        :terminal="extractionStore.status !== 'pending'"
+        @open="handleExtractionPinnedClick"
+      />
 
-      <!-- Progress Bar (only shown when pending) -->
-      <div v-if="extractionStore.status === 'pending'" class="extraction-pinned-toast__progress-bar-bg">
-        <div class="extraction-pinned-toast__progress-bar-fill" :style="{ width: `${extractionStore.progress}%` }"></div>
-      </div>
-    </div>
+      <PinnedTaskToast
+        v-if="sourceProgressStore.isPinnedVisible && sourceProgressStore.contributionId"
+        key="source-import-run"
+        kind="source-import"
+        :title="`Nguồn: ${sourceTitle}`"
+        :message="sourceMessage"
+        :progress="sourceProgressStore.status === 'pending' ? sourceProgressStore.progress : 100"
+        :terminal="sourceProgressStore.status !== 'pending'"
+        preserve-lines
+        @open="handleSourcePinnedClick"
+      />
 
-    <!-- Dedicated pinned lane for Source Pipeline notifications (Top 3) -->
-    <div
-      v-if="sourceProgressStore.isPinnedVisible && sourceProgressStore.contributionId"
-      :class="['source-pinned-toast', { 'pinned-toast--terminal': sourceProgressStore.status !== 'pending' }]"
-      @click="handleSourcePinnedClick"
-    >
-      <div class="source-pinned-toast__header">
-        <span class="source-pinned-toast__title">Nguồn: {{ sourceTitle }}</span>
-        <button
-          class="source-pinned-toast__close"
-          aria-label="Dismiss notification"
-          @click.stop="sourceProgressStore.dismissPinned()"
-        >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-      <p class="source-pinned-toast__body" style="white-space: pre-line;">{{ sourceMessage }}</p>
-
-      <!-- Progress Bar (only shown when pending) -->
-      <div v-if="sourceProgressStore.status === 'pending'" class="source-pinned-toast__progress-bar-bg">
-        <div class="source-pinned-toast__progress-bar-fill" :style="{ width: `${sourceProgressStore.progress}%` }"></div>
-      </div>
-    </div>
-
-    <div
-      v-for="(job, index) in academicQueue.queuedJobs"
-      :key="job.id"
-      class="source-pinned-toast academic-queue-toast"
-    >
-      <div class="source-pinned-toast__header">
-        <span class="source-pinned-toast__title">Đang chờ #{{ index + 1 }}</span>
-      </div>
-      <p class="source-pinned-toast__body">
-        {{ queueKindLabel(job.kind) }} · {{ job.title }}
-      </p>
-      <p class="academic-queue-toast__hint">Sẽ tự chạy khi tác vụ phía trước hoàn tất.</p>
-    </div>
+      <PinnedTaskToast
+        v-for="(job, index) in academicQueue.queuedJobs"
+        :key="job.id"
+        kind="queue"
+        :title="`Đang chờ #${index + 1}`"
+        :message="`${queueKindLabel(job.kind)} · ${job.title}`"
+        hint="Sẽ tự chạy khi tác vụ phía trước hoàn tất."
+        @open="openQueuedJob(job)"
+      />
+    </TransitionGroup>
 
     <TransitionGroup name="stack-list" tag="div" class="stack-list-wrapper">
       <div
@@ -119,7 +85,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useMessageToastStore } from '@/store/useMessageToastStore'
 import { useRouter }            from 'vue-router'
 import { useChatStore }         from '@/store/useChatStore'
@@ -128,6 +95,8 @@ import { useExtractionStore }   from '@/store/useExtractionStore'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
 import { useAcademicJobQueueStore } from '@/store/useAcademicJobQueueStore'
 import MessageToast             from './MessageToast.vue'
+import PinnedTaskToast from './PinnedTaskToast.vue'
+import { useOracleChatStore } from '@/store/useOracleChatStore'
 
 const toastStore = useMessageToastStore()
 const chatStore  = useChatStore()
@@ -136,12 +105,126 @@ const oracleStore = useOracleStore()
 const extractionStore = useExtractionStore()
 const sourceProgressStore = useSourceProgressStore()
 const academicQueue = useAcademicJobQueueStore()
+const oracleChatStore = useOracleChatStore()
+const { t } = useI18n()
+const oracleClock = ref(Date.now())
+let oracleClockTimer: ReturnType<typeof setInterval> | null = null
+
+function syncOracleClock(active: boolean) {
+  if (active && !oracleClockTimer) {
+    oracleClock.value = Date.now()
+    oracleClockTimer = setInterval(() => { oracleClock.value = Date.now() }, 1000)
+    return
+  }
+  if (!active && oracleClockTimer) {
+    clearInterval(oracleClockTimer)
+    oracleClockTimer = null
+  }
+}
+const showOracleChatRun = computed(
+  () => router.currentRoute.value.path !== '/oracle'
+    && Boolean(oracleChatStore.backgroundRun || oracleChatStore.completedRun),
+)
+const oracleRunProgress = computed(() => {
+  const run = oracleChatStore.backgroundRun
+  if (!run) return 100
+  const elapsed = Math.max(0, oracleClock.value - new Date(run.startedAt).getTime())
+  const expected = Number(run.expectedMaxMs) || 0
+  if (!expected) {
+    return Math.min(92, Math.max(0, Math.round(18 * Math.log1p(elapsed / 30_000))))
+  }
+  if (elapsed <= expected) {
+    return Math.min(90, Math.max(0, Math.round(90 * Math.pow(elapsed / expected, 0.82))))
+  }
+  const overrun = elapsed - expected
+  const tail = 9 * (1 - Math.exp(-overrun / Math.max(60_000, expected * 0.65)))
+  return Math.min(99, Math.max(90, Math.round(90 + tail)))
+})
+
+function compactDuration(ms: number): string {
+  const seconds = ms > 0 ? Math.max(1, Math.round(ms / 1000)) : 0
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+}
+
+const oracleRunMessage = computed(() => {
+  const run = oracleChatStore.backgroundRun
+  if (!run) return t('oracle.backgroundCompleted')
+  const elapsed = Math.max(0, oracleClock.value - new Date(run.startedAt).getTime())
+  if (run.stage === 'preparing') {
+    const stageStartedAt = run.stageStartedAt
+      ? new Date(run.stageStartedAt).getTime()
+      : oracleClock.value
+    const thought = Math.max(0, stageStartedAt - new Date(run.startedAt).getTime())
+    const preparing = Math.max(0, oracleClock.value - stageStartedAt)
+    if (!run.expectedMaxMs) {
+      return t('oracle.backgroundPreparing', { elapsed: compactDuration(elapsed) })
+    }
+    if (run.expectedMaxMs && elapsed >= run.expectedMaxMs) {
+      return t('oracle.backgroundPreparingOverExpected', {
+        thought: compactDuration(thought),
+        preparing: compactDuration(preparing),
+        over: compactDuration(Math.max(1_000, elapsed - run.expectedMaxMs)),
+      })
+    }
+    return t('oracle.backgroundPreparingWithEta', {
+      thought: compactDuration(thought),
+      preparing: compactDuration(preparing),
+      high: compactDuration(Math.max(0, run.expectedMaxMs - elapsed)),
+    })
+  }
+  if (run.expectedMaxMs) {
+    if (elapsed < run.expectedMaxMs) {
+      return t('oracle.backgroundEtaUpper', {
+        elapsed: compactDuration(elapsed),
+        high: compactDuration(run.expectedMaxMs - elapsed),
+      })
+    }
+    return t('oracle.backgroundOverExpected', {
+      elapsed: compactDuration(elapsed),
+      over: compactDuration(Math.max(1_000, elapsed - run.expectedMaxMs)),
+    })
+  }
+  return t('oracle.backgroundEstimating', { elapsed: compactDuration(elapsed) })
+})
+
+onMounted(() => {
+  syncOracleClock(Boolean(oracleChatStore.backgroundRun))
+  void oracleChatStore.loadThreads().catch(() => undefined)
+  void oracleStore.restoreTracking()
+  void extractionStore.restoreTracking()
+  sourceProgressStore.restoreTracking()
+})
+
+watch(
+  () => Boolean(oracleChatStore.backgroundRun),
+  (active) => syncOracleClock(active),
+)
+
+onUnmounted(() => {
+  if (oracleClockTimer) clearInterval(oracleClockTimer)
+})
+
+async function openOracleChatRun() {
+  const tracked = oracleChatStore.backgroundRun || oracleChatStore.completedRun
+  if (!tracked) return
+  oracleChatStore.selectThread(tracked.threadId)
+  await router.push({ path: '/oracle', query: { thread: tracked.threadId } })
+}
 
 function queueKindLabel(kind: string) {
   if (kind === 'pdf') return 'Dựng bản đọc từ PDF'
   if (kind === 'structured') return 'Nhập lại từ DOI / HTML / XML'
   if (kind === 'rules') return 'Phân tích luật'
   return 'Xử lý nguồn'
+}
+
+function openQueuedJob(job: { sourceId: string; kind: string }) {
+  if (job.kind === 'rules') {
+    void router.push({ path: '/moderation/rule-candidates', query: { sourceId: job.sourceId } })
+    return
+  }
+  void router.push(`/library/sources/${job.sourceId}`)
 }
 
 const sourceTitle = computed(() => {
@@ -357,204 +440,33 @@ async function handleToastClick(conversationId: string) {
 <style scoped>
 .message-toast-container {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: 10px;
+  right: 5px;
   z-index: 9999;
-  width: 320px;
+  width: min(292px, calc(100vw - 10px));
   display: flex;
   flex-direction: column;
   pointer-events: none; /* Let clicks pass through gaps */
 }
 
-/* Pinned Oracle toast styling */
-.oracle-pinned-toast {
-  position: relative;
-  overflow: hidden;
-  width: 100%;
-  background: #181818;
-  border: 1px solid #262626;
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-  margin-bottom: 12px; /* space before normal message toasts */
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  cursor: pointer;
-  pointer-events: auto;
-  box-sizing: border-box;
-  box-shadow: none;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+.pinned-task-lane {
+  margin-top: var(--header-height, 64px);
 }
 
-.oracle-pinned-toast--terminal::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 2px;
-  background: #6e8cff;
-  animation: oracle-terminal-drain 3s linear forwards;
+.pinned-task-list-enter-active,
+.pinned-task-list-leave-active {
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.extraction-pinned-toast.pinned-toast--terminal,
-.source-pinned-toast.pinned-toast--terminal {
-  position: relative;
-  overflow: hidden;
+.pinned-task-list-enter-from,
+.pinned-task-list-leave-to {
+  /* The View bookmark protrudes 54px to the left of the card. Move the
+     complete component far enough that even its left edge exits the screen. */
+  transform: translate3d(calc(100% + 76px), 0, 0);
 }
 
-.pinned-toast--terminal::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 2px;
-  background: #6e8cff;
-  animation: oracle-terminal-drain 3s linear forwards;
-}
-
-@keyframes oracle-terminal-drain {
-  from { width: 100%; }
-  to { width: 0; }
-}
-
-.oracle-pinned-toast:hover {
-  border-color: #3e3e3e;
-  background: var(--color-bg-hover);
-}
-
-.oracle-pinned-toast__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.oracle-pinned-toast__title {
-  font-size: 11px;
-  font-weight: 700;
-  color: #3b82f6;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.oracle-pinned-toast__body {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  margin: 0;
-  line-height: var(--line-height-normal);
-}
-
-.oracle-pinned-toast__progress-bar-bg {
-  width: 100%;
-  height: 4px;
-  background: #262626;
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  margin-top: 2px;
-}
-
-.oracle-pinned-toast__progress-bar-fill {
-  height: 100%;
-  background: #3b82f6;
-  border-radius: var(--radius-full);
-  transition: width 0.3s ease;
-}
-
-.oracle-pinned-toast__close {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.5;
-  transition: opacity var(--transition-fast);
-}
-
-.oracle-pinned-toast__close:hover {
-  opacity: 1;
-  color: var(--color-text-primary);
-}
-
-/* Pinned Extraction toast styling */
-.extraction-pinned-toast {
-  width: 100%;
-  background: #181818;
-  border: 1px solid #262626;
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-  margin-bottom: 12px; /* space before normal message toasts */
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  cursor: pointer;
-  pointer-events: auto;
-  box-sizing: border-box;
-  box-shadow: none;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
-}
-
-.extraction-pinned-toast:hover {
-  border-color: #3e3e3e;
-  background: var(--color-bg-hover);
-}
-
-.extraction-pinned-toast__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.extraction-pinned-toast__title {
-  font-size: 11px;
-  font-weight: 700;
-  color: #3b82f6;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.extraction-pinned-toast__body {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  margin: 0;
-  line-height: var(--line-height-normal);
-}
-
-.extraction-pinned-toast__progress-bar-bg {
-  width: 100%;
-  height: 4px;
-  background: #262626;
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  margin-top: 2px;
-}
-
-.extraction-pinned-toast__progress-bar-fill {
-  height: 100%;
-  background: #3b82f6;
-  border-radius: var(--radius-full);
-  transition: width 0.3s ease;
-}
-
-.extraction-pinned-toast__close {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.5;
-  transition: opacity var(--transition-fast);
-}
-
-.extraction-pinned-toast__close:hover {
-  opacity: 1;
-  color: var(--color-text-primary);
+.pinned-task-list-move {
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .stack-list-wrapper {
@@ -573,15 +485,11 @@ async function handleToastClick(conversationId: string) {
 /* Transitions for stacks shifting vertically when another conversation arrives/leaves */
 .stack-list-enter-active,
 .stack-list-leave-active {
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.stack-list-enter-from {
-  opacity: 0;
-  transform: translateX(100px);
-}
+.stack-list-enter-from,
 .stack-list-leave-to {
-  opacity: 0;
-  transform: translateX(100px);
+  transform: translate3d(calc(100% + 12px), 0, 0);
 }
 .stack-list-move {
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -590,107 +498,13 @@ async function handleToastClick(conversationId: string) {
 /* Transitions for cards piled up within a stack */
 .card-pile-enter-active,
 .card-pile-leave-active {
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease;
 }
-.card-pile-enter-from {
-  opacity: 0;
-  transform: translateY(-20px) scale(0.9);
-}
+.card-pile-enter-from,
 .card-pile-leave-to {
   opacity: 0;
-  transform: scale(0.9);
-}
-/* Pinned Source toast styling */
-.source-pinned-toast {
-  width: 100%;
-  background: #181818;
-  border: 1px solid #262626;
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  cursor: pointer;
-  pointer-events: auto;
-  box-sizing: border-box;
-  box-shadow: none;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
-}
-
-.source-pinned-toast:hover {
-  border-color: #3e3e3e;
-  background: var(--color-bg-hover);
-}
-
-.source-pinned-toast__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.source-pinned-toast__title {
-  font-size: 11px;
-  font-weight: 700;
-  color: #10b981;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.source-pinned-toast__body {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  margin: 0;
-  line-height: var(--line-height-normal);
-}
-
-.source-pinned-toast__progress-bar-bg {
-  width: 100%;
-  height: 4px;
-  background: #262626;
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  margin-top: 2px;
-}
-
-.source-pinned-toast__progress-bar-fill {
-  height: 100%;
-  background: #10b981;
-  border-radius: var(--radius-full);
-  transition: width 0.3s ease;
-}
-
-.source-pinned-toast__close {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.5;
-  transition: opacity var(--transition-fast);
-}
-
-.source-pinned-toast__close:hover {
-  opacity: 1;
-  color: var(--color-text-primary);
-}
-
-.academic-queue-toast {
-  cursor: default;
-  border-style: dashed;
-  background: #151515;
-}
-
-.academic-queue-toast .source-pinned-toast__title {
-  color: #94a3b8;
-}
-
-.academic-queue-toast__hint {
-  margin: 0;
-  color: #737373;
-  font-size: 10px;
+  transform: translate3d(calc(100% + 12px), 0, 0) !important;
 }
 </style>

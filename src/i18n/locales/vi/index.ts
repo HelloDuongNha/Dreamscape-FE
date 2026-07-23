@@ -8,6 +8,8 @@ import errors from './errors.js'
 import toasts from './toasts.js'
 import home from './home.js'
 import library from './library.js'
+import rules from './rules.js'
+import oracle from './oracle.js'
 
 export default {
   common,
@@ -20,4 +22,6 @@ export default {
   toasts,
   home,
   library,
+  rules,
+  oracle,
 }

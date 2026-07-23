@@ -73,6 +73,7 @@ export default {
   reader: {
     loadingSource: 'Đang tải thông tin tài liệu...', loadSourceError: 'Không thể tải thông tin chi tiết tài liệu học thuật.', back: 'Thư viện',
     decreaseFont: 'Thu nhỏ chữ', increaseFont: 'Phóng to chữ', smart: 'Bản đọc thông minh', original: 'Bản gốc',
+    ocrRepair: 'Sửa lỗi OCR', ocrRepairOn: 'Đang sửa OCR', ocrRepairHelp: 'Bật hoặc tắt lớp sửa lỗi ký tự do PDF/OCR; không thay đổi dữ liệu gốc.',
     compareRequired: 'Cần đối chiếu', layoutNotOptimal: 'Cấu trúc layout chưa tối ưu', hideNotice: 'Ẩn thông báo',
     onlinePdfFailed: 'Không thể lấy PDF online mới. PDF đang lưu trên Cloudinary vẫn được giữ nguyên.', attemptedSources: 'Chi tiết các nguồn đã thử ({count})',
     status: 'Trạng thái:', recaptcha: 'reCAPTCHA / Cần xác minh', publisherBlocked: '403 / Bị chặn bởi nhà xuất bản',
@@ -92,6 +93,19 @@ export default {
     noText: 'Tài liệu này không chứa dữ liệu văn bản.', importAvailable: 'Có bản đọc hợp pháp, chờ nhập vào DreamScape. Bạn có thể sử dụng nút "Nhập bản đọc thông minh" ở thanh bên để nạp toàn văn tài liệu.',
     importFailed: 'Quá trình nhập bản đọc tự động thất bại. Bạn có thể thử lại bằng cách bấm "Nhập bản đọc thông minh" ở thanh bên.',
     citationOnly: 'Tài liệu này hiện chỉ có thông tin trích dẫn. Nếu bạn là quản trị viên, hãy nhấp vào "Nhập bản đọc thông minh" ở thanh bên để thử tải tự động hoặc tải lên PDF thủ công.'
+  },
+  translation: {
+    viewOriginal: 'Xem bản gốc',
+    translateToVietnamese: 'Dịch sang tiếng Việt',
+    viewTranslation: 'Xem bản dịch',
+    statusOriginal: 'Bản gốc',
+    statusDownloading: 'Đang chuẩn bị bộ dịch trên thiết bị...',
+    statusTranslating: 'Đang dịch...',
+    statusTranslated: 'Bản dịch',
+    statusPartial: 'Dịch một phần',
+    statusFailed: 'Lỗi dịch thuật',
+    statusUnavailable: 'Bản dịch chưa khả dụng',
+    statusUnknown: 'Không rõ ngôn ngữ nguồn / bản dịch chưa khả dụng'
   },
   system: {
     documentProperties: 'Thuộc tính tài liệu', reject: 'Từ chối', approve: 'Duyệt', testingTools: 'Công cụ kiểm thử',

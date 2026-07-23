@@ -37,6 +37,13 @@
               <p class="source-subtitle">{{ modalSubtitle }}</p>
             </div>
 
+            <ol v-if="sourceProgressStore.pipelineKind === 'pdf'" class="docling-stage-list" :aria-label="t('common.sourceProgress.doclingStagesLabel')">
+              <li v-for="stage in doclingStages" :key="stage.label" :class="[`is-${stage.state}`]">
+                <span aria-hidden="true">{{ stage.state === 'done' ? '✓' : stage.state === 'active' ? '●' : '○' }}</span>
+                <div><strong>{{ stage.label }}</strong><small>{{ stage.detail }}</small></div>
+              </li>
+            </ol>
+
             <!-- Pending Loading Content -->
             <PipelineProgressPanel
               :progress="sourceProgressStore.progress"
@@ -54,10 +61,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
 import PipelineProgressPanel from './PipelineProgressPanel.vue'
 
 const sourceProgressStore = useSourceProgressStore()
+const { t } = useI18n()
 
 const modalTitle = computed(() => {
   if (sourceProgressStore.pipelineKind === 'structured') return 'Nhập lại bản đọc'
@@ -73,6 +82,21 @@ const modalSubtitle = computed(() => {
     return 'Hệ thống đang phân tích PDF bằng Docling và dựng Bản đọc thông minh.'
   }
   return 'Hệ thống đang tiền xử lý nguồn, tải PDF và xây dựng Bản đọc thông minh tự động...'
+})
+
+const doclingStages = computed(() => {
+  const progress = sourceProgressStore.progress
+  const stages = [
+    { threshold: 20, label: t('common.sourceProgress.receivePdf'), detail: t('common.sourceProgress.receivePdfDetail') },
+    { threshold: 40, label: t('common.sourceProgress.inspectOcr'), detail: t('common.sourceProgress.inspectOcrDetail') },
+    { threshold: 68, label: t('common.sourceProgress.parseDocling'), detail: t('common.sourceProgress.parseDoclingDetail') },
+    { threshold: 85, label: t('common.sourceProgress.cleanOcr'), detail: t('common.sourceProgress.cleanOcrDetail') },
+    { threshold: 100, label: t('common.sourceProgress.buildReader'), detail: t('common.sourceProgress.buildReaderDetail') },
+  ]
+  return stages.map((stage, index) => ({
+    ...stage,
+    state: progress >= stage.threshold ? 'done' : progress >= (stages[index - 1]?.threshold || 0) ? 'active' : 'pending',
+  }))
 })
 </script>
 
@@ -159,6 +183,14 @@ const modalSubtitle = computed(() => {
   color: var(--color-text-muted);
   margin: 0;
 }
+
+.docling-stage-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.docling-stage-list li { display: grid; grid-template-columns: 18px 1fr; gap: 9px; padding: 8px 10px; border: 1px solid #292929; border-radius: var(--radius-md); color: var(--color-text-muted); }
+.docling-stage-list li > span { padding-top: 1px; font-size: 11px; text-align: center; }
+.docling-stage-list strong { display: block; color: inherit; font-size: var(--font-size-xs); }
+.docling-stage-list small { display: block; margin-top: 2px; color: var(--color-text-muted); font-size: 10px; line-height: 1.4; }
+.docling-stage-list .is-active { border-color: rgba(59,130,246,.42); color: #93c5fd; background: rgba(59,130,246,.06); }
+.docling-stage-list .is-done { color: #6ee7b7; }
 
 .pending-analysis-box {
   display: flex;

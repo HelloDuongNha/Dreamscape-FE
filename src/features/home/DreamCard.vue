@@ -32,6 +32,9 @@
         <span v-if="isEdited" class="dream-card__edited-badge" :title="t('home.editedTitle')">
           {{ t('home.edited') }}
         </span>
+        <span v-if="dream.additions?.length" class="dream-card__edited-badge">
+          {{ t('home.additionsCount', { count: dream.additions.length }) }}
+        </span>
         <span class="dream-card__mood" :class="`dream-card__mood--${moodClass}`" translate="no">
           {{ dream.mood_tag }}
         </span>

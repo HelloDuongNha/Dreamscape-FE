@@ -466,12 +466,14 @@
               <span class="meta-key">Mã định danh:</span>
               <div class="meta-doi-wrapper">
                 <span class="attribute-value code-font">{{ displayDoi }}</span>
-                <button class="copy-doi-btn" @click="copyDoi" title="Sao chép DOI">
-                  <svg class="copy-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                  </svg>
-                </button>
+                <AppCopyButton
+                  class="copy-doi-btn"
+                  :text="displayDoi"
+                  label="Sao chép DOI"
+                  copied-label="Đã sao chép"
+                  success-message="Đã sao chép mã DOI."
+                  error-message="Không thể sao chép mã DOI."
+                />
               </div>
             </div>
           </div>
@@ -602,6 +604,7 @@ import { useOriginalPdfViewer } from '@/composables/useOriginalPdfViewer'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import AppButton from '@/components/common/AppButton.vue'
+import AppCopyButton from '@/components/common/AppCopyButton.vue'
 
 // Helpers duplicate of LibrarySourceDetailView to process content
 function countWords(str: string): number {
@@ -1434,13 +1437,6 @@ const displayDoi = computed(() => {
   if (!props.source?.doi) return ''
   return props.source.doi.replace(/^(doi|DOI):\s*/, '')
 })
-
-function copyDoi() {
-  if (!props.source?.doi) return
-  const cleanDoi = props.source.doi.replace(/^(doi|DOI):\s*/, '')
-  navigator.clipboard.writeText(cleanDoi)
-  settingsStore.showToast('Đã sao chép mã DOI.', 'success')
-}
 
 // Technical metadata fields mapping
 const extractionEngine = computed(() => {

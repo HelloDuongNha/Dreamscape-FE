@@ -1,4 +1,5 @@
 import apiClient from './client'
+import type { TranslateReaderRequest, TranslateReaderResponse } from '../features/library/services/smartReaderTranslation.types'
 
 export interface ReviewSourcePayload {
   reviewStatus: 'approved' | 'rejected'
@@ -82,6 +83,69 @@ export interface ModerationSourcesResponse {
     limit: number
     pages: number
   }
+}
+
+export interface OracleEvidenceGapItem {
+  _id: string
+  status: 'unresolved' | 'candidate_found' | 'resolved'
+  claim: string
+  claimKey: string
+  localizedClaims: {
+    vi: string
+    en: string
+  }
+  meaning: string
+  evidenceNeeded: string[]
+  expectedRule: {
+    subject: string
+    outcome: string
+    requiredFields: string[]
+  }
+  searchTerms: string[]
+  deepResearchPrompt: string
+  deepResearchPrompts: {
+    vi: string
+    en: string
+  }
+  candidateRules: Array<{
+    _id: string
+    ruleCode: string
+    statement: string
+    subject: string
+    outcome: string
+    evidenceScore: number
+    supportingSourceCount: number
+    status: string
+  }>
+  resolvedRules: OracleEvidenceGapItem['candidateRules']
+  resolutionCitationIndex?: number | null
+  occurrenceCount: number
+  relatedClaims: string[]
+  localizedRelatedClaims: {
+    vi: string[]
+    en: string[]
+  }
+  resolvedAt?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export const getOracleEvidenceGaps = async (params: {
+  status?: 'active' | 'unresolved' | 'candidate_found' | 'resolved'
+  page?: number
+  limit?: number
+} = {}): Promise<{
+  gaps: OracleEvidenceGapItem[]
+  pagination: ModerationSourcesResponse['pagination']
+}> => {
+  const { data } = await apiClient.get<{
+    success: boolean
+    data: {
+      gaps: OracleEvidenceGapItem[]
+      pagination: ModerationSourcesResponse['pagination']
+    }
+  }>('/moderation/oracle-evidence-gaps', { params })
+  return data.data
 }
 
 /**
@@ -178,6 +242,7 @@ export const getSourcePreview = async (
     source: any
     fullText: any
     sections: any[]
+    readerIdentity?: any
   }
 }> => {
   const { data } = await apiClient.get<{
@@ -235,5 +300,21 @@ export const deleteModerationSourceOriginalPdf = async (id: string): Promise<any
  */
 export const processUploadedPdfForContribution = async (id: string, forceReplace = false, structuredFirst = false): Promise<any> => {
   const { data } = await apiClient.post<any>(`/moderation/sources/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst })
+  return data
+}
+
+/**
+ * Translates targeted Smart Reader elements for a source contribution preview.
+ */
+export const translateSourcePreviewText = async (
+  id: string,
+  payload: TranslateReaderRequest,
+  signal?: AbortSignal
+): Promise<TranslateReaderResponse> => {
+  const { data } = await apiClient.post<TranslateReaderResponse>(
+    `/moderation/sources/${id}/preview/translate`,
+    payload,
+    { signal }
+  )
   return data
 }

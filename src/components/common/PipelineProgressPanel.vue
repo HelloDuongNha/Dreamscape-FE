@@ -14,7 +14,7 @@
     </div>
 
     <div class="pipeline-progress__meta">
-      <span>Đã chạy {{ elapsedLabel }}</span>
+      <span>{{ t('common.progress.elapsed', { duration: elapsedLabel }) }}</span>
       <span v-if="processedLabel">{{ processedLabel }}</span>
       <span>{{ remainingLabel }}</span>
     </div>
@@ -23,6 +23,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n({ useScope: 'global' })
 
 const props = defineProps<{
   progress: number
@@ -36,12 +39,14 @@ const props = defineProps<{
 
 function durationLabel(totalSeconds: number): string {
   const seconds = Math.max(0, Math.floor(totalSeconds))
-  if (seconds < 60) return `${seconds} giây`
+  if (seconds < 60) return t('common.progress.seconds', { count: seconds })
   const minutes = Math.floor(seconds / 60)
   const remain = seconds % 60
-  if (minutes < 60) return `${minutes} phút${remain ? ` ${remain} giây` : ''}`
+  if (minutes < 60) return remain
+    ? t('common.progress.minutesSeconds', { minutes, seconds: remain })
+    : t('common.progress.minutes', { count: minutes })
   const hours = Math.floor(minutes / 60)
-  return `${hours} giờ ${minutes % 60} phút`
+  return t('common.progress.hoursMinutes', { hours, minutes: minutes % 60 })
 }
 
 const elapsedLabel = computed(() => durationLabel(props.elapsedSeconds || 0))
@@ -49,10 +54,10 @@ const remainingLabel = computed(() => {
   if (props.remainingText) return props.remainingText
   const estimate = props.estimatedRemainingSeconds
   if (typeof estimate !== 'number') {
-    return 'Đang đo tốc độ xử lý để ước tính'
+    return t('common.progress.measuring')
   }
-  if (estimate < 0) return `Vượt ước tính ${durationLabel(Math.abs(estimate))} · vẫn đang xử lý`
-  return `Còn khoảng ${durationLabel(estimate)}`
+  if (estimate < 0) return t('common.progress.overdue', { duration: durationLabel(Math.abs(estimate)) })
+  return t('common.progress.remaining', { duration: durationLabel(estimate) })
 })
 </script>
 

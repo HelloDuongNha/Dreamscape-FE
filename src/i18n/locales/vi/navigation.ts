@@ -46,6 +46,6 @@ export default {
   titleLibrarySourceDetail: 'Chi tiết tài liệu — DreamScape',
   titleModerationSources: 'Duyệt nguồn — DreamScape',
   titleModerationSourcePreview: 'Xem trước tài liệu — DreamScape',
-  titleModerationRuleCandidates: 'Ứng viên quy luật — DreamScape',
+  titleModerationRuleCandidates: 'Duyệt quy luật — DreamScape',
   titleFallback: 'DreamScape',
 } as const
