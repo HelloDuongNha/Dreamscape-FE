@@ -46,9 +46,10 @@
             </span>
           </div>
           <div v-if="showHypothesisActions" class="oracle-feedback__actions">
-            <button :class="['feedback-btn', 'feedback-btn--yes', { 'feedback-btn--active': feedbackSelections[questionKey(item, idx)] === 'yes' }]" @click="selectFeedback(idx, 'yes')"><span aria-hidden="true">✓</span> Có</button>
-            <button :class="['feedback-btn', 'feedback-btn--no', { 'feedback-btn--active': feedbackSelections[questionKey(item, idx)] === 'no' }]" @click="selectFeedback(idx, 'no')"><span aria-hidden="true">×</span> Không</button>
-            <button :class="['feedback-btn', 'feedback-btn--unsure', { 'feedback-btn--active': feedbackSelections[questionKey(item, idx)] === 'unsure' }]" @click="selectFeedback(idx, 'unsure')"><span aria-hidden="true">?</span> Chưa biết</button>
+            <AppFeedbackChoiceGroup
+              :model-value="(feedbackSelections[questionKey(item, idx)] as 'yes' | 'no' | 'unsure' | undefined)"
+              @update:model-value="selectFeedback(idx, $event)"
+            />
           </div>
           <p v-if="feedbackSelections[questionKey(item, idx)] === 'yes' && item.ifYesMeaning" class="oracle-verification-card__result">{{ item.ifYesMeaning }}</p>
           <p v-else-if="feedbackSelections[questionKey(item, idx)] === 'no' && item.ifNoMeaning" class="oracle-verification-card__result">{{ item.ifNoMeaning }}</p>
@@ -375,13 +376,13 @@
           <span>Dữ kiện về điều kiện ngủ <strong>{{ analysis.grounding_summary.sleepContextFactCount ?? 0 }}</strong></span>
         </div>
         <p v-if="analysis.grounding_summary.explanatoryRuleCount === 0 && (analysis.grounding_summary.exploratoryRuleCount ?? 0) > 0">
-          Kết quả có quy luật đã duyệt nhưng bằng chứng học thuật còn yếu. Hệ thống chỉ dùng chúng để đặt câu hỏi và đối chiếu cấu trúc của trường hợp này; câu trả lời không làm tăng điểm học thuật của quy luật.
+          Kết quả có lập luận đã duyệt nhưng mức hỗ trợ còn yếu. Hệ thống dùng chúng để đặt câu hỏi và đối chiếu cấu trúc của trường hợp này; câu trả lời Có/Không sẽ cộng hoặc trừ trực tiếp vào điểm lập luận.
         </p>
         <p v-else-if="analysis.grounding_summary.explanatoryRuleCount === 0">
-          Thư viện hiện chưa có quy luật cơ chế phù hợp cho trường hợp này. Các mạch diễn giải phía trên được suy ra từ trình tự lời kể và câu trả lời của bạn, không được trình bày như một kết luận khoa học.
+          Thư viện hiện chưa có lập luận cơ chế phù hợp cho trường hợp này. Các mạch diễn giải phía trên được suy ra từ trình tự lời kể và câu trả lời của bạn, không được trình bày như một kết luận khoa học.
         </p>
         <p v-else>
-          Chỉ phần “Điều có thể đang diễn ra bên dưới giấc mơ” được phép dùng quy luật cơ chế và trích dẫn học thuật. Các chi tiết theo ngữ cảnh vẫn chỉ có giá trị trong chính lời kể này.
+          Chỉ phần “Điều có thể đang diễn ra bên dưới giấc mơ” được phép dùng lập luận cơ chế và trích dẫn học thuật. Các chi tiết theo ngữ cảnh vẫn chỉ có giá trị trong chính lời kể này.
         </p>
       </details>
 
@@ -434,6 +435,7 @@ import { useSettingsStore } from '@/store/useSettingsStore'
 import { usePostStore } from '@/store/usePostStore'
 import { useDreamStore } from '@/store/useDreamStore'
 import apiClient from '@/api/client'
+import AppFeedbackChoiceGroup, { type FeedbackChoice } from '@/components/common/AppFeedbackChoiceGroup.vue'
 
 const props = withDefaults(defineProps<{
   analysis: AiDreamAnalysisResult | null | undefined
@@ -631,7 +633,7 @@ const settingsStore = useSettingsStore()
 const postStore = usePostStore()
 const dreamStore = useDreamStore()
 
-async function selectFeedback(hypothesisIdx: number, val: 'yes' | 'no' | 'unsure') {
+async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null) {
   const targetDreamId = props.dreamId || postStore.focusedDream?._id
   if (!targetDreamId) {
     console.error('Cannot save hypothesis feedback: dreamId is missing')
@@ -641,7 +643,7 @@ async function selectFeedback(hypothesisIdx: number, val: 'yes' | 'no' | 'unsure
   const hypothesisItem = props.analysis?.real_life_hypotheses?.[hypothesisIdx]
   const feedbackKey = questionKey(hypothesisItem, hypothesisIdx)
   const questionText = hypothesisItem?.followUpQuestion || ''
-  const submittedAnswer = feedbackSelections.value[feedbackKey] === val ? null : val
+  const submittedAnswer = val
 
   try {
     const response = await apiClient.post(`/dreams/${targetDreamId}/hypothesis-feedback`, {
@@ -667,7 +669,20 @@ async function selectFeedback(hypothesisIdx: number, val: 'yes' | 'no' | 'unsure
         props.analysis.feedback_revision = response.data.data?.feedbackRevision || []
         props.analysis.feedback_conclusion = response.data.data?.feedbackConclusion || null
       }
-      settingsStore.showToast(submittedAnswer === null ? 'Đã bỏ lựa chọn.' : 'Đã ghi nhận phản hồi.', 'success')
+      const scoreUpdates = Array.isArray(response.data.data?.ruleScoreUpdates)
+        ? response.data.data.ruleScoreUpdates
+        : []
+      const directDelta = scoreUpdates
+        .filter((item: any) => item?.relation === 'direct')
+        .reduce((total: number, item: any) => total + (Number(item?.scoreDelta) || 0), 0)
+      const scoreMessage = directDelta > 0
+        ? `Đã cộng ${directDelta} điểm vào lập luận.`
+        : directDelta < 0
+          ? `Đã trừ ${Math.abs(directDelta)} điểm khỏi lập luận.`
+          : submittedAnswer === null
+            ? 'Đã bỏ lựa chọn.'
+            : 'Đã lưu lựa chọn; điểm lập luận không đổi.'
+      settingsStore.showToast(scoreMessage, 'success')
 
       // Update state mirror in stores
       if (postStore.focusedDream && postStore.focusedDream._id === targetDreamId) {
@@ -1690,31 +1705,6 @@ function hasRealSource(source: string | undefined | null): boolean {
   display: flex;
   gap: var(--space-2);
 }
-
-.feedback-btn {
-  min-height: 32px;
-  padding: 0 var(--space-3);
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-surface);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-.feedback-btn span { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-right: 4px; border-radius: 50%; background: var(--color-bg-elevated); }
-.feedback-btn:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-  border-color: #3a3a3a;
-}
-.feedback-btn--active {
-  color: var(--color-text-primary);
-}
-.feedback-btn--yes.feedback-btn--active { background: rgba(16,185,129,.14); border-color: rgba(52,211,153,.5); color: #6ee7b7; }
-.feedback-btn--no.feedback-btn--active { background: rgba(239,68,68,.12); border-color: rgba(248,113,113,.5); color: #fca5a5; }
-.feedback-btn--unsure.feedback-btn--active { background: rgba(148,163,184,.12); border-color: rgba(148,163,184,.45); color: #cbd5e1; }
 
 .oracle-similar__rail {
   display: grid;

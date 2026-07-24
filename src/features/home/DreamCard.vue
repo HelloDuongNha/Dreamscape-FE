@@ -123,9 +123,9 @@
         <div class="spinner-small" aria-hidden="true"></div>
         <span>{{ t('home.oracleAnalyzing') }}</span>
       </div>
-      <div v-else-if="dream.ai_status === 'failed'" class="dream-card__status-failed">
+      <div v-else-if="dream.ai_status === 'failed' || dream.ai_status === 'cancelled'" class="dream-card__status-failed">
         <span class="warning-icon" aria-hidden="true">⚠️</span>
-        <span class="error-msg-text">{{ t('home.oracleFailed') }}</span>
+        <span class="error-msg-text">{{ dream.ai_status === 'cancelled' ? t('home.oracleCancelled') : t('home.oracleFailed') }}</span>
         <button
           v-if="isOwner"
           type="button"

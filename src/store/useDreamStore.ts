@@ -124,10 +124,13 @@ export const useDreamStore = defineStore('dream', () => {
   async function appendDreamAddition(dreamId: string, content: string): Promise<ApiDream> {
     const { data } = await apiClient.post<UpdateDreamResponse>(`/dreams/${dreamId}/additions`, { content })
     const idx = dreams.value.findIndex(d => d._id === dreamId)
-    if (idx !== -1) dreams.value[idx] = data.data
+    const updatedDream = idx === -1
+      ? data.data
+      : { ...data.data, userId: dreams.value[idx].userId }
+    if (idx !== -1) dreams.value[idx] = updatedDream
     const { useOracleStore } = await import('@/store/useOracleStore')
-    useOracleStore().startTracking(data.data)
-    return data.data
+    useOracleStore().startTracking(updatedDream)
+    return updatedDream
   }
 
   /**

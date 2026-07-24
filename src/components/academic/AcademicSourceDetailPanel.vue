@@ -601,7 +601,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useOriginalPdfViewer } from '@/composables/useOriginalPdfViewer'
-import { useSettingsStore } from '@/store/useSettingsStore'
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import AppButton from '@/components/common/AppButton.vue'
 import AppCopyButton from '@/components/common/AppCopyButton.vue'
@@ -1359,7 +1358,6 @@ const props = defineProps<{
   hasError: boolean
 }>()
 
-const settingsStore = useSettingsStore()
 const isModeratorUser = computed(() => {
   return true // All moderators / librarians can access actions
 })

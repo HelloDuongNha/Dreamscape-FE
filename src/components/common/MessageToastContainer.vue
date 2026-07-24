@@ -23,7 +23,7 @@
         :title="`Oracle: ${oracleTitle}`"
         :message="oracleMessage"
         :progress="oracleStore.trackedDream.ai_status === 'pending' && !oracleStore.completedDream && !oracleStore.failedDream ? oracleStore.progress : 100"
-        :terminal="Boolean(oracleStore.completedDream || oracleStore.failedDream)"
+        :terminal="Boolean(oracleStore.completedDream || oracleStore.failedDream || oracleStore.cancelledDream)"
         @open="handleOraclePinnedClick"
       />
 
@@ -42,7 +42,7 @@
         v-if="sourceProgressStore.isPinnedVisible && sourceProgressStore.contributionId"
         key="source-import-run"
         kind="source-import"
-        :title="`Nguồn: ${sourceTitle}`"
+        :title="`${t('common.sourceProgress.pin.prefix')}: ${sourceTitle}`"
         :message="sourceMessage"
         :progress="sourceProgressStore.status === 'pending' ? sourceProgressStore.progress : 100"
         :terminal="sourceProgressStore.status !== 'pending'"
@@ -228,14 +228,61 @@ function openQueuedJob(job: { sourceId: string; kind: string }) {
 }
 
 const sourceTitle = computed(() => {
-  if (sourceProgressStore.status === 'success') return 'Hoàn thành'
-  if (sourceProgressStore.status === 'failed') return 'Thất bại'
-  return 'Đang tiền xử lý...'
+  if (sourceProgressStore.status === 'success') return t('common.sourceProgress.pin.successTitle')
+  if (sourceProgressStore.status === 'failed') return t('common.sourceProgress.pin.failedTitle')
+  if (sourceProgressStore.status === 'cancelled') return t('common.sourceProgress.pin.cancelledTitle')
+  return t('common.sourceProgress.pin.runningTitle')
+})
+
+const localizedPdfStep = computed(() => {
+  if (sourceProgressStore.pipelineKind !== 'pdf') return sourceProgressStore.stepText
+  const keys: Record<string, string> = {
+    received: 'receivePdf',
+    inspecting_text: 'inspectOcr',
+    ocr_processing: 'recognizeOcr',
+    parsing_layout: 'parseDocling',
+    cleaning_ocr: 'cleanOcr',
+    compiling_reader: 'buildReader',
+  }
+  const key = keys[sourceProgressStore.pdfStage || '']
+  return key ? t(`common.sourceProgress.${key}`) : sourceProgressStore.stepText
+})
+
+function compactProgressDuration(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds))
+  if (seconds < 60) return t('common.progress.seconds', { count: seconds })
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  if (minutes < 60) {
+    return remainder
+      ? t('common.progress.minutesSeconds', { minutes, seconds: remainder })
+      : t('common.progress.minutes', { count: minutes })
+  }
+  return t('common.progress.hoursMinutes', {
+    hours: Math.floor(minutes / 60),
+    minutes: minutes % 60,
+  })
+}
+
+const sourceTimingMessage = computed(() => {
+  const estimate = sourceProgressStore.estimatedRemainingSeconds
+  if (typeof estimate !== 'number') return t('common.progress.measuring')
+  if (estimate < 0) {
+    return t('common.progress.overdue', {
+      duration: compactProgressDuration(Math.abs(estimate)),
+    })
+  }
+  return t('common.progress.remaining', {
+    duration: compactProgressDuration(estimate),
+  })
 })
 
 const sourceMessage = computed(() => {
   if (sourceProgressStore.status === 'pending') {
-    return `${sourceProgressStore.stepText} (${sourceProgressStore.progress}%)`
+    return `${localizedPdfStep.value} (${sourceProgressStore.progress}%) · ${sourceTimingMessage.value}`
+  }
+  if (sourceProgressStore.status === 'cancelled') {
+    return t('common.sourceProgress.pin.cancelledMessage')
   }
 
   if (sourceProgressStore.pipelineKind === 'structured') {
@@ -245,14 +292,17 @@ const sourceMessage = computed(() => {
         html: 'HTML',
         pdf_text: 'PDF',
         docling_pdf: 'Docling PDF',
-        none: 'Nguồn có cấu trúc'
+        none: t('common.sourceProgress.pin.sourceStructured'),
       }
-      const sourceMsg = sourceMap[sourceProgressStore.selectedSource] || 'Nguồn có cấu trúc'
-      return `Nhập lại bản đọc hoàn tất.\n• Bản đọc thông minh: Thành công\n• Nguồn bản đọc: ${sourceMsg}`
+      const sourceMsg = sourceMap[sourceProgressStore.selectedSource]
+        || t('common.sourceProgress.pin.sourceStructured')
+      return t('common.sourceProgress.pin.structuredSuccess', { source: sourceMsg })
     }
 
     if (sourceProgressStore.status === 'failed') {
-      return `Nhập lại bản đọc thất bại.\n• Bản đọc thông minh: Không tạo được\n• Chi tiết: ${sourceProgressStore.stepText}`
+      return t('common.sourceProgress.pin.structuredFailed', {
+        detail: sourceProgressStore.stepText,
+      })
     }
   }
 
@@ -262,9 +312,17 @@ const sourceMessage = computed(() => {
     sourceProgressStore.pdfResult === 'success'
   ) {
     if (sourceProgressStore.smartReaderResult === 'ocr_needed') {
-      return `Xử lý tài liệu PDF hoàn tất.\n• PDF gốc: Đã lưu\n• Bản đọc thông minh: Cần OCR`
+      return t('common.sourceProgress.pin.pdfPartialOcr')
     }
-    return `Xử lý tài liệu PDF hoàn tất.\n• PDF gốc: Đã lưu\n• Bản đọc thông minh: Không tạo được\n• Chi tiết: ${sourceProgressStore.stepText}`
+    return t('common.sourceProgress.pin.pdfPartialFailed', {
+      detail: sourceProgressStore.stepText,
+    })
+  }
+
+  if (sourceProgressStore.status === 'failed') {
+    return t('common.sourceProgress.pin.genericFailed', {
+      detail: sourceProgressStore.stepText,
+    })
   }
 
   if (sourceProgressStore.status === 'success') {
@@ -273,11 +331,11 @@ const sourceMessage = computed(() => {
       sourceProgressStore.selectedSource &&
       sourceProgressStore.selectedSource !== 'none'
     ) {
-      let readerMsg = 'Thành công'
+      let readerMsg = t('common.sourceProgress.pin.readerSuccess')
       if (sourceProgressStore.smartReaderResult === 'ocr_needed') {
-        readerMsg = 'Cần OCR'
+        readerMsg = t('common.sourceProgress.pin.readerOcrNeeded')
       } else if (sourceProgressStore.smartReaderResult === 'failed') {
-        readerMsg = 'Không tạo được'
+        readerMsg = t('common.sourceProgress.pin.readerFailed')
       }
 
       const sourceMap: Record<string, string> = {
@@ -285,44 +343,55 @@ const sourceMessage = computed(() => {
         html: 'HTML',
         pdf_text: 'PDF parser',
         docling_pdf: 'Docling PDF',
-        none: 'Không có'
+        none: t('common.sourceProgress.pin.sourceNone'),
       }
-      let sourceMsg = sourceMap[sourceProgressStore.selectedSource] || 'Không xác định'
+      const sourceMsg = sourceMap[sourceProgressStore.selectedSource]
+        || t('common.sourceProgress.pin.sourceUnknown')
 
-      let idMsg = ''
+      let identifiers = ''
       const ids = (sourceProgressStore.detectedIdentifiers as any) || {}
       if (ids.doi || ids.isbn || ids.pmcid) {
         const found = []
         if (ids.doi) found.push(`DOI: ${ids.doi}`)
         if (ids.isbn) found.push(`ISBN: ${ids.isbn}`)
         if (ids.pmcid) found.push(`PMCID: ${ids.pmcid}`)
-        idMsg = `\n• Định danh: ${found.join(', ')}`
+        identifiers = t('common.sourceProgress.pin.identifiers', { value: found.join(', ') })
       }
 
-      return `Xử lý tài liệu PDF hoàn tất.\n• PDF gốc: Đã lưu\n• Bản đọc thông minh: ${readerMsg}\n• Nguồn bản đọc: ${sourceMsg}${idMsg}`
+      return t('common.sourceProgress.pin.pdfSuccess', {
+        reader: readerMsg,
+        source: sourceMsg,
+        identifiers,
+      })
     }
 
-    let readerMsg = sourceProgressStore.smartReaderResult === 'success'
-      ? 'Thành công'
-      : (sourceProgressStore.smartReaderResult === 'failed' ? 'Không nhập được' : 'Bị giới hạn nguồn')
+    const readerMsg = sourceProgressStore.smartReaderResult === 'success'
+      ? t('common.sourceProgress.pin.readerSuccess')
+      : sourceProgressStore.smartReaderResult === 'failed'
+        ? t('common.sourceProgress.pin.readerFailed')
+        : t('common.sourceProgress.pin.readerRestricted')
     
     const pdfMap: Record<string, string> = {
-      success: 'Đã lưu Cloudinary',
-      blocked: 'Bị chặn bởi nguồn',
-      external_only: 'Có link ngoài — không lưu tự động',
-      no_candidate: 'Không có PDF online',
-      failed: 'Không lưu được',
-      none: 'Không có PDF online'
+      success: t('common.sourceProgress.pin.pdfStored'),
+      blocked: t('common.sourceProgress.pin.pdfBlocked'),
+      external_only: t('common.sourceProgress.pin.pdfExternalOnly'),
+      no_candidate: t('common.sourceProgress.pin.pdfUnavailable'),
+      failed: t('common.sourceProgress.pin.pdfFailed'),
+      none: t('common.sourceProgress.pin.pdfUnavailable'),
     }
-    let pdfMsg = pdfMap[sourceProgressStore.pdfResult] || 'Không xác định'
+    const pdfMsg = pdfMap[sourceProgressStore.pdfResult]
+      || t('common.sourceProgress.pin.sourceUnknown')
     
-    return `Nguồn đã được gửi vào hàng chờ duyệt.\n• Bản đọc thông minh: ${readerMsg}\n• PDF gốc online: ${pdfMsg}`
+    return t('common.sourceProgress.pin.importSuccess', {
+      reader: readerMsg,
+      pdf: pdfMsg,
+    })
   }
   return `${sourceProgressStore.stepText} (${sourceProgressStore.progress}%)`
 })
 
 function handleSourcePinnedClick() {
-  if (sourceProgressStore.status === 'success' || sourceProgressStore.status === 'failed') {
+  if (sourceProgressStore.status === 'success' || sourceProgressStore.status === 'failed' || sourceProgressStore.status === 'cancelled') {
     sourceProgressStore.stopTracking()
   } else {
     sourceProgressStore.openDialog()
@@ -332,6 +401,7 @@ function handleSourcePinnedClick() {
 const oracleTitle = computed(() => {
   if (oracleStore.completedDream) return 'Hoàn thành'
   if (oracleStore.failedDream) return 'Thất bại'
+  if (oracleStore.cancelledDream) return 'Đã hủy'
   return 'Phân tích...'
 })
 
@@ -341,6 +411,9 @@ const oracleMessage = computed(() => {
   }
   if (oracleStore.failedDream) {
     return 'Oracle chưa thể phân tích giấc mơ này. Vui lòng thử lại sau.'
+  }
+  if (oracleStore.cancelledDream) {
+    return 'Hủy tác vụ thành công.'
   }
   const minutes = Math.floor(oracleStore.elapsedSeconds / 60)
   const seconds = oracleStore.elapsedSeconds % 60
@@ -353,6 +426,8 @@ function handleOraclePinnedClick() {
     oracleStore.openDialog()
   } else if (oracleStore.failedDream) {
     oracleStore.stopTracking()
+  } else if (oracleStore.cancelledDream) {
+    oracleStore.openDialog()
   } else {
     oracleStore.openDialog()
   }
@@ -367,6 +442,7 @@ const extractionTitle = computed(() => {
     return 'Phân tích hoàn thành'
   }
   if (extractionStore.status === 'stopped') {
+    if (extractionStore.outcome === 'user_cancelled') return 'Đã hủy phân tích'
     if (extractionStore.outcome === 'stopped_domain_irrelevant') return 'Tài liệu không phù hợp'
     if (extractionStore.outcome === 'stopped_no_eligible_chunks') return 'Chưa có dữ liệu học thuật hợp lệ'
     if (extractionStore.outcome === 'stopped_llm_returned_zero') return 'Chưa rút ra được luật rõ ràng'
@@ -383,6 +459,7 @@ const extractionMessage = computed(() => {
     return extractionStore.message || 'Hoàn tất phân tích Rule V3.'
   }
   if (extractionStore.status === 'stopped') {
+    if (extractionStore.outcome === 'user_cancelled') return 'Phần lập luận chưa hoàn tất không được lưu.'
     if (extractionStore.outcome === 'stopped_domain_irrelevant') {
       return 'Tài liệu này không thuộc phạm vi giấc mơ, giấc ngủ hoặc tâm lý học nên hệ thống không tạo luật từ tài liệu này.'
     }

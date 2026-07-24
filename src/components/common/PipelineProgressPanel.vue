@@ -35,6 +35,8 @@ const props = defineProps<{
   processedLabel?: string
   estimatedRemainingSeconds?: number | null
   remainingText?: string
+  timingDeltaSeconds?: number | null
+  completed?: boolean
 }>()
 
 function durationLabel(totalSeconds: number): string {
@@ -52,6 +54,12 @@ function durationLabel(totalSeconds: number): string {
 const elapsedLabel = computed(() => durationLabel(props.elapsedSeconds || 0))
 const remainingLabel = computed(() => {
   if (props.remainingText) return props.remainingText
+  if (props.completed && typeof props.timingDeltaSeconds === 'number') {
+    if (Math.abs(props.timingDeltaSeconds) <= 2) return t('common.progress.finishedOnTime')
+    return props.timingDeltaSeconds < 0
+      ? t('common.progress.finishedEarly', { duration: durationLabel(Math.abs(props.timingDeltaSeconds)) })
+      : t('common.progress.finishedLate', { duration: durationLabel(props.timingDeltaSeconds) })
+  }
   const estimate = props.estimatedRemainingSeconds
   if (typeof estimate !== 'number') {
     return t('common.progress.measuring')

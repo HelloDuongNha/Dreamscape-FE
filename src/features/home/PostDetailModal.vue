@@ -52,9 +52,28 @@
             <!-- Full dream content (un-truncated) -->
             <div class="modal-content-block">
               <p class="modal-content-text" translate="no">{{ postStore.focusedDream.content }}</p>
-              <div v-for="(addition, idx) in postStore.focusedDream.additions || []" :key="`${addition.sequence}:${addition.addedAt}`" class="modal-dream-addition" translate="no">
+              <div
+                v-for="(addition, idx) in postStore.focusedDream.additions || []"
+                :key="`${addition.sequence}:${addition.addedAt}`"
+                class="modal-dream-addition"
+                :class="{ 'modal-dream-addition--unanalyzed': addition.analysisState === 'unanalyzed' }"
+                translate="no"
+              >
                 <strong>{{ (postStore.focusedDream.additions?.length || 0) === 1 ? t('home.additionLabel') : t('home.numberedAdditionLabel', { number: idx + 1 }) }}</strong>
                 <p>{{ addition.content }}</p>
+                <div v-if="addition.analysisState === 'unanalyzed'" class="modal-dream-addition__warning">
+                  <span>{{ t('home.additionNotAnalyzed') }}</span>
+                  <AppButton
+                    v-if="isOwner"
+                    type="button"
+                    variant="danger-outline"
+                    size="sm"
+                    :loading="isRetryingAnalysis"
+                    @click.stop="retryAnalysis(postStore.focusedDream._id)"
+                  >
+                    {{ t('home.retryAdditionAnalysis') }}
+                  </AppButton>
+                </div>
               </div>
               <div v-if="isOwner" class="modal-addition-controls">
                 <AppButton v-if="!showAdditionForm" variant="ghost" size="sm" @click="showAdditionForm = true">
@@ -95,9 +114,9 @@
                 <div class="spinner-small" aria-hidden="true"></div>
                 <span>{{ t('home.oracleAnalyzing') }}</span>
               </div>
-              <div v-else-if="postStore.focusedDream.ai_status === 'failed'" class="modal-oracle-failed">
+              <div v-else-if="postStore.focusedDream.ai_status === 'failed' || postStore.focusedDream.ai_status === 'cancelled'" class="modal-oracle-failed">
                 <span class="warning-icon" aria-hidden="true">⚠️</span>
-                <span class="error-msg-text">{{ t('home.oracleFailed') }}</span>
+                <span class="error-msg-text">{{ postStore.focusedDream.ai_status === 'cancelled' ? t('home.oracleCancelled') : t('home.oracleFailed') }}</span>
                 <button
                   v-if="isOwner"
                   type="button"
@@ -269,6 +288,7 @@ const bodyRef      = ref<HTMLElement | null>(null)
 const showAdditionForm = ref(false)
 const additionText = ref('')
 const isAddingDetail = ref(false)
+const isRetryingAnalysis = ref(false)
 
 function cancelAddition() {
   showAdditionForm.value = false
@@ -299,22 +319,28 @@ const isOwner = computed(() => {
 })
 
 async function retryAnalysis(dreamId: string) {
+  if (isRetryingAnalysis.value) return
+  isRetryingAnalysis.value = true
   try {
     const { data } = await apiClient.post(`/dreams/${dreamId}/analyze`)
     if (data.success) {
+      const currentUser = postStore.focusedDream?.userId
       if (postStore.focusedDream) {
-        postStore.focusedDream.ai_status = 'pending'
+        Object.assign(postStore.focusedDream, data.data, { userId: currentUser })
       }
       
       const idx = dreamStore.dreams.findIndex(d => d._id === dreamId)
       if (idx !== -1) {
-        dreamStore.dreams[idx].ai_status = 'pending'
+        const storedUser = dreamStore.dreams[idx].userId
+        dreamStore.dreams[idx] = { ...data.data, userId: storedUser }
       }
       
-      oracleStore.startTracking(data.data)
+      oracleStore.startTracking(postStore.focusedDream || data.data)
     }
   } catch (err) {
     console.error('Failed to retry analysis:', err)
+  } finally {
+    isRetryingAnalysis.value = false
   }
 }
 
@@ -568,6 +594,29 @@ watch(() => postStore.focusedId, (val) => {
   margin: 0;
   white-space: pre-wrap;
   color: var(--color-text-primary);
+  line-height: var(--line-height-relaxed);
+}
+.modal-dream-addition--unanalyzed {
+  border: 1px solid rgba(237, 73, 86, .7);
+  border-left-width: 3px;
+  border-radius: var(--radius-lg);
+  background: rgba(237, 73, 86, .07);
+}
+.modal-dream-addition--unanalyzed strong {
+  color: #ff8a95;
+}
+.modal-dream-addition__warning {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid rgba(237, 73, 86, .24);
+}
+.modal-dream-addition__warning > span {
+  width: 100%;
+  color: #ff9aa3;
+  font-size: var(--font-size-xs);
   line-height: var(--line-height-relaxed);
 }
 .modal-addition-controls {

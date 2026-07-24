@@ -16,6 +16,8 @@ export const useOracleStore = defineStore('oracle', () => {
   const statusMessage = ref('Oracle đang phân tích giấc mơ...')
   const completedDream = ref<ApiDream | null>(null)
   const failedDream = ref<ApiDream | null>(null)
+  const cancelledDream = ref<ApiDream | null>(null)
+  const isCancelling = ref(false)
 
   let pollInterval: ReturnType<typeof setInterval> | null = null
   let progressInterval: ReturnType<typeof setInterval> | null = null
@@ -34,6 +36,10 @@ export const useOracleStore = defineStore('oracle', () => {
       handleFailure(dream)
       return
     }
+    if (dream.ai_status === 'cancelled') {
+      handleCancelled(dream)
+      return
+    }
     isDialogVisible.value = true
     isPinnedVisible.value = false
     progress.value = Math.max(0, Math.min(99, dream.analysisMetadata?.progress || 0))
@@ -44,6 +50,7 @@ export const useOracleStore = defineStore('oracle', () => {
     statusMessage.value = dream.analysisMetadata?.statusMessage || 'Oracle đang phân tích giấc mơ...'
     completedDream.value = null
     failedDream.value = null
+    cancelledDream.value = null
 
     startElapsedClock()
 
@@ -60,7 +67,7 @@ export const useOracleStore = defineStore('oracle', () => {
     localStorage.setItem(ORACLE_DREAM_TASK_KEY, JSON.stringify({
       dreamId: trackedDream.value._id,
       visible: isPinnedVisible.value,
-      status: completedDream.value ? 'completed' : failedDream.value ? 'failed' : 'pending',
+      status: completedDream.value ? 'completed' : cancelledDream.value ? 'cancelled' : failedDream.value ? 'failed' : 'pending',
       expiresAt: expiresAt || null,
     }))
   }
@@ -78,7 +85,12 @@ export const useOracleStore = defineStore('oracle', () => {
       startTracking(data.data)
       isDialogVisible.value = false
       isPinnedVisible.value = true
-      persistTask(saved.expiresAt || undefined)
+      const isTerminal = ['completed', 'failed', 'cancelled'].includes(data.data.ai_status)
+      const expiresAt = saved.expiresAt || (isTerminal ? Date.now() + 3000 : undefined)
+      if (expiresAt) {
+        scheduleTerminalDismiss(expiresAt - Date.now())
+      }
+      persistTask(expiresAt)
     } catch {
       // A persisted task is optional UI state; authentication recovery handles real failures.
     }
@@ -117,6 +129,8 @@ export const useOracleStore = defineStore('oracle', () => {
             handleSuccess(currentDream)
           } else if (currentDream.ai_status === 'failed') {
             handleFailure(currentDream)
+          } else if (currentDream.ai_status === 'cancelled') {
+            handleCancelled(currentDream)
           }
         }
       } catch (err) {
@@ -155,6 +169,41 @@ export const useOracleStore = defineStore('oracle', () => {
     persistTask(Date.now() + 3000)
   }
 
+  function handleCancelled(dream: ApiDream) {
+    clearCompletionTimer()
+    progress.value = 100
+    trackedDream.value = dream
+    cancelledDream.value = dream
+    failedDream.value = null
+    completedDream.value = null
+    statusMessage.value = dream.analysisMetadata?.statusMessage || 'Hủy tác vụ thành công.'
+    clearTimers()
+    isDialogVisible.value = false
+    isPinnedVisible.value = true
+    const expiresAt = Date.now() + 3000
+    scheduleTerminalDismiss()
+    persistTask(expiresAt)
+  }
+
+  async function cancelAnalysis() {
+    const dreamId = trackedDream.value?._id
+    if (!dreamId || trackedDream.value?.ai_status !== 'pending' || isCancelling.value) return
+    isCancelling.value = true
+    try {
+      const { data } = await apiClient.post<{ success: boolean; data: ApiDream }>(`/dreams/${dreamId}/analysis/cancel`)
+      if (data.success) handleCancelled(data.data)
+    } finally {
+      isCancelling.value = false
+    }
+  }
+
+  async function retryAnalysis() {
+    const dreamId = trackedDream.value?._id
+    if (!dreamId) return
+    const { data } = await apiClient.post<{ success: boolean; data: ApiDream }>(`/dreams/${dreamId}/analyze`)
+    if (data.success) startTracking(data.data)
+  }
+
   function clearTimers() {
     if (pollInterval) clearInterval(pollInterval)
     if (progressInterval) clearInterval(progressInterval)
@@ -176,16 +225,18 @@ export const useOracleStore = defineStore('oracle', () => {
     progress.value = 0
     completedDream.value = null
     failedDream.value = null
+    cancelledDream.value = null
+    isCancelling.value = false
     localStorage.removeItem(ORACLE_DREAM_TASK_KEY)
   }
 
-  function scheduleTerminalDismiss() {
+  function scheduleTerminalDismiss(delayMs = 3000) {
     clearCompletionTimer()
     completionTimer = setTimeout(() => {
       isPinnedVisible.value = false
       localStorage.removeItem(ORACLE_DREAM_TASK_KEY)
       completionTimer = null
-    }, 3000)
+    }, Math.max(0, delayMs))
   }
 
   /** Hide is a presentation action. It must never cancel polling for a job. */
@@ -203,7 +254,11 @@ export const useOracleStore = defineStore('oracle', () => {
     if (trackedDream.value) {
       isPinnedVisible.value = true
       persistTask()
-      if (completedDream.value || failedDream.value) scheduleTerminalDismiss()
+      if (completedDream.value || failedDream.value || cancelledDream.value) {
+        const expiresAt = Date.now() + 3000
+        scheduleTerminalDismiss()
+        persistTask(expiresAt)
+      }
     }
   }
 
@@ -221,6 +276,7 @@ export const useOracleStore = defineStore('oracle', () => {
     trackedDream.value = dream
     completedDream.value = dream
     failedDream.value = null
+    cancelledDream.value = null
     progress.value = 100
     statusMessage.value = dream.analysisMetadata?.statusMessage || 'Phân tích hoàn tất.'
     localStartedAt = dream.analysisMetadata?.startedAt
@@ -242,12 +298,16 @@ export const useOracleStore = defineStore('oracle', () => {
     statusMessage,
     completedDream,
     failedDream,
+    cancelledDream,
+    isCancelling,
     startTracking,
     stopTracking,
     dismissPinned,
     minimizeDialog,
     openDialog,
     openCompletedDialog,
+    cancelAnalysis,
+    retryAnalysis,
     restoreTracking,
   }
 })

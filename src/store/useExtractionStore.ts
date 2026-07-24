@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getRuleV3ExtractionProgress, startRuleV3Extraction } from '@/api/ruleCandidateApi'
+import { cancelRuleV3Extraction, getRuleV3ExtractionProgress, startRuleV3Extraction } from '@/api/ruleCandidateApi'
 import { useAcademicJobQueueStore } from './useAcademicJobQueueStore'
 
 const EXTRACTION_TASK_KEY = 'dreamscape:pinned-task:rule-extraction:v1'
@@ -32,12 +32,14 @@ export const useExtractionStore = defineStore('extraction', () => {
   const verifiedCandidateCount = ref(0)
   const timingDeltaSeconds = ref<number | null>(null)
   const currentRunId = ref<string | null>(null)
+  const isCancelling = ref(false)
 
   let clockInterval: ReturnType<typeof setInterval> | null = null
   let terminalTimer: ReturnType<typeof setTimeout> | null = null
   let localStartedAt = 0
   let etaAnchorAt = 0
   let etaAnchorSeconds: number | null = null
+  let etaExpectedTotalSeconds: number | null = null
   let plannedDurationSeconds: number | null = null
 
   function startClock(startedAt = Date.now()) {
@@ -88,6 +90,8 @@ export const useExtractionStore = defineStore('extraction', () => {
       if (status.value === 'pending') {
         startClock(Number(saved.startedAt) || Date.now())
         await pollRuleV3Run(saved.runId, false)
+      } else if (saved.expiresAt) {
+        scheduleTerminalDismiss(saved.expiresAt - Date.now())
       }
     } catch {
       // Keep page startup independent from optional notification restoration.
@@ -103,6 +107,7 @@ export const useExtractionStore = defineStore('extraction', () => {
     etaAnchorSeconds = seconds
     etaAnchorAt = Date.now()
     estimatedRemainingSeconds.value = seconds === null ? null : Math.ceil(seconds)
+    etaExpectedTotalSeconds = seconds === null ? null : elapsedSeconds.value + seconds
   }
 
   async function runExtraction(id: string, title: string, promotedFromQueue = false, replaceExisting = false, baselineTotalSeconds: number | null = null) {
@@ -126,6 +131,7 @@ export const useExtractionStore = defineStore('extraction', () => {
     stageDetail.value = 'Đang đọc cấu trúc section, ngôn ngữ và loại hình nghiên cứu.'
     estimatedRemainingSeconds.value = null
     etaAnchorSeconds = null
+    etaExpectedTotalSeconds = null
     plannedDurationSeconds = baselineTotalSeconds && baselineTotalSeconds > 0 ? baselineTotalSeconds : null
     processedLabel.value = ''
     currentStage.value = 'initializing'
@@ -167,6 +173,7 @@ export const useExtractionStore = defineStore('extraction', () => {
   async function pollRuleV3Run(runId: string, replaceExisting: boolean) {
     while (true) {
       await new Promise(resolve => window.setTimeout(resolve, 1500))
+      if (status.value !== 'pending') return
       const response = await getRuleV3ExtractionProgress(runId)
       const run = response.data
       const total = Math.max(0, run.totalBatches || 0)
@@ -188,21 +195,27 @@ export const useExtractionStore = defineStore('extraction', () => {
         progress.value = 10 + Math.round(ratio * 80)
         stepText.value = `Đang trích xuất và kiểm tra trích dẫn… (${processed}/${total})`
         processedLabel.value = total > 0 ? `${processed}/${total} lô bằng chứng` : ''
-        stageDetail.value = `Đã nhận ${run.rawCandidateCount} kết luận thô; giữ ${run.verifiedCandidateCount} quy luật có dẫn chứng hợp lệ.`
+        stageDetail.value = `Đã nhận ${run.rawCandidateCount} kết luận thô; giữ ${run.verifiedCandidateCount} lập luận có dẫn chứng hợp lệ.`
         // Freeze one honest schedule for the entire run. A completed run for
         // this exact source becomes the next run's baseline; first runs use a
         // conservative per-batch estimate. Progress observations never make
         // the countdown jump around.
         if (etaAnchorSeconds === null && total > 0) {
-          setEtaAnchor(plannedDurationSeconds ?? total * 32 + 8)
+          setEtaAnchor(plannedDurationSeconds !== null
+            ? Math.max(1, plannedDurationSeconds - elapsedSeconds.value)
+            : total * 32 + 8)
         }
       } else if (run.currentStage === 'saving_candidates') {
         progress.value = 95
-        stepText.value = 'Đang gộp quy luật và lưu bằng chứng…'
+        stepText.value = 'Đang gộp lập luận và lưu bằng chứng…'
         stageDetail.value = replaceExisting
-          ? 'Bộ kết quả cũ chỉ được thay khi toàn bộ quy luật đã kiểm chứng lưu thành công.'
-          : 'Quy luật không đáp ứng hợp đồng lưu trữ sẽ bị loại và ghi rõ lý do.'
-        if (etaAnchorSeconds === null) setEtaAnchor(plannedDurationSeconds ?? 8)
+          ? 'Bộ kết quả cũ chỉ được thay khi toàn bộ lập luận đã kiểm chứng lưu thành công.'
+          : 'Lập luận không đáp ứng hợp đồng lưu trữ sẽ bị loại và ghi rõ lý do.'
+        if (etaAnchorSeconds === null) {
+          setEtaAnchor(plannedDurationSeconds !== null
+            ? Math.max(1, plannedDurationSeconds - elapsedSeconds.value)
+            : 8)
+        }
       }
 
       if (run.status === 'success') {
@@ -212,8 +225,8 @@ export const useExtractionStore = defineStore('extraction', () => {
       if (run.status === 'failed') {
         const code = run.sanitizedErrorCode || 'failed_system_error'
         const safeFailureMessages: Record<string, string> = {
-          all_verified_candidates_rejected: 'Các quy luật có dẫn chứng hợp lệ nhưng không quy luật nào vượt qua hợp đồng lưu trữ. Hệ thống không ghi dữ liệu rỗng.',
-          replacement_persistence_incomplete: 'Bộ quy luật thay thế lưu không đầy đủ. Hệ thống đã khôi phục nguyên trạng các quy luật trước lần chạy này.',
+          all_verified_candidates_rejected: 'Các lập luận có dẫn chứng hợp lệ nhưng không lập luận nào vượt qua hợp đồng lưu trữ. Hệ thống không ghi dữ liệu rỗng.',
+          replacement_persistence_incomplete: 'Bộ lập luận thay thế lưu không đầy đủ. Hệ thống đã khôi phục nguyên trạng các lập luận trước lần chạy này.',
           provider_unavailable: 'Mô hình trích xuất hiện không khả dụng.',
           provider_timeout: 'Mô hình trích xuất phản hồi quá thời gian cho phép.',
           provider_schema_invalid: 'Mô hình trả về dữ liệu không đúng cấu trúc Rule V3.',
@@ -222,6 +235,33 @@ export const useExtractionStore = defineStore('extraction', () => {
         handleFailure(safeFailureMessages[code] || 'Phân tích Rule V3 thất bại.', code)
         return
       }
+      if (run.status === 'cancelled') {
+        handleCancelled()
+        return
+      }
+    }
+  }
+
+  function handleCancelled() {
+    status.value = 'stopped'
+    outcome.value = 'user_cancelled'
+    stepText.value = 'Đã hủy phân tích.'
+    stageDetail.value = 'Không có lập luận chưa hoàn tất nào được lưu.'
+    isDialogVisible.value = false
+    isPinnedVisible.value = true
+    stopClock()
+    scheduleTerminalDismiss()
+    persistTask(Date.now() + 3000)
+  }
+
+  async function cancelExtraction() {
+    if (!currentRunId.value || status.value !== 'pending' || isCancelling.value) return
+    isCancelling.value = true
+    try {
+      await cancelRuleV3Extraction(currentRunId.value)
+      handleCancelled()
+    } finally {
+      isCancelling.value = false
     }
   }
 
@@ -243,11 +283,11 @@ export const useExtractionStore = defineStore('extraction', () => {
     verifiedCount.value = verified
 
     if (saved > 0) {
-      handleSuccess(saved, 'success_with_new_candidates', `Đã tạo ${saved} quy luật mới${merged > 0 ? ` và bổ sung bằng chứng vào ${merged} quy luật tương tự` : ''}.`)
+      handleSuccess(saved, 'success_with_new_candidates', `Đã tạo ${saved} lập luận mới${merged > 0 ? ` và bổ sung bằng chứng vào ${merged} lập luận tương tự` : ''}.`)
     } else if (resultCount > 0 || merged > 0) {
       handleSuccess(0, 'success_with_existing_candidates', reused
-        ? `Kết quả đã có sẵn: ${resultCount} quy luật từ đúng bản đọc và cấu hình mô hình này.`
-        : `Không tạo bản trùng; đã bổ sung bằng chứng vào ${Math.max(merged, resultCount)} quy luật hiện có.`)
+        ? `Kết quả đã có sẵn: ${resultCount} lập luận từ đúng bản đọc và cấu hình mô hình này.`
+        : `Không tạo bản trùng; đã bổ sung bằng chứng vào ${Math.max(merged, resultCount)} lập luận hiện có.`)
     } else if (verified === 0) {
       const reasonCounts = new Map<string, { message: string; count: number }>()
       for (const item of run.rejectionDiagnostics || []) {
@@ -262,10 +302,10 @@ export const useExtractionStore = defineStore('extraction', () => {
       handleSuccess(
         0,
         'success_no_verified_candidates',
-        `Không có quy luật nào vượt qua kiểm chứng dẫn chứng. Đã loại ${rejected} đề xuất.${reasonSummary ? ` Lý do chính: ${reasonSummary}` : ''}${replacementRequested ? ' Kết quả Rule V3 cũ được giữ nguyên.' : ''}`
+        `Không có lập luận nào vượt qua kiểm chứng dẫn chứng. Đã loại ${rejected} đề xuất.${reasonSummary ? ` Lý do chính: ${reasonSummary}` : ''}${replacementRequested ? ' Kết quả Rule V3 cũ được giữ nguyên.' : ''}`
       )
     } else {
-      handleFailure('Có quy luật đã kiểm chứng nhưng không quy luật nào lưu được.', 'all_verified_candidates_rejected')
+      handleFailure('Có lập luận đã kiểm chứng nhưng không lập luận nào lưu được.', 'all_verified_candidates_rejected')
     }
   }
 
@@ -276,12 +316,12 @@ export const useExtractionStore = defineStore('extraction', () => {
     createdCount.value = count
     message.value = msgText
     stepText.value = outcomeVal === 'success_no_verified_candidates'
-      ? 'Không có quy luật đạt kiểm chứng'
+      ? 'Không có lập luận đạt kiểm chứng'
       : 'Hoàn tất phân tích!'
     currentStage.value = 'completed'
-    timingDeltaSeconds.value = etaAnchorSeconds === null
+    timingDeltaSeconds.value = etaExpectedTotalSeconds === null
       ? null
-      : Math.round(etaAnchorSeconds - elapsedSeconds.value)
+      : Math.round(elapsedSeconds.value - etaExpectedTotalSeconds)
     isDialogVisible.value = false
     isPinnedVisible.value = true
     stopClock()
@@ -302,13 +342,13 @@ export const useExtractionStore = defineStore('extraction', () => {
     persistTask(Date.now() + 3000)
   }
 
-  function scheduleTerminalDismiss() {
+  function scheduleTerminalDismiss(delayMs = 3000) {
     if (terminalTimer) clearTimeout(terminalTimer)
     terminalTimer = setTimeout(() => {
       isPinnedVisible.value = false
       localStorage.removeItem(EXTRACTION_TASK_KEY)
       terminalTimer = null
-    }, 3000)
+    }, Math.max(0, delayMs))
   }
 
   function dismissPinned() {
@@ -343,6 +383,7 @@ export const useExtractionStore = defineStore('extraction', () => {
     elapsedSeconds.value = 0
     estimatedRemainingSeconds.value = null
     etaAnchorSeconds = null
+    etaExpectedTotalSeconds = null
     processedLabel.value = ''
     currentStage.value = 'initializing'
     totalBatches.value = 0
@@ -351,6 +392,7 @@ export const useExtractionStore = defineStore('extraction', () => {
     verifiedCandidateCount.value = 0
     timingDeltaSeconds.value = null
     currentRunId.value = null
+    isCancelling.value = false
     localStorage.removeItem(EXTRACTION_TASK_KEY)
   }
 
@@ -394,11 +436,13 @@ export const useExtractionStore = defineStore('extraction', () => {
     rawCandidateCount,
     verifiedCandidateCount,
     timingDeltaSeconds,
+    isCancelling,
     startExtraction,
     stopTracking,
     dismissPinned,
     minimizeDialog,
     openDialog,
     restoreTracking,
+    cancelExtraction,
   }
 })

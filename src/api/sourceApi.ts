@@ -1,5 +1,6 @@
 import apiClient from './client'
 import type { TranslateReaderRequest, TranslateReaderResponse } from '../features/library/services/smartReaderTranslation.types'
+import type { PdfImportProgressResponse } from './moderationApi'
 
 export interface ContributeSourcePayload {
   doi?: string
@@ -188,9 +189,20 @@ export const deleteApprovedSourceOriginalPdf = async (id: string): Promise<any> 
 /**
  * Triggers PDF ingestion processing for approved academic sources.
  */
-export const processUploadedPdfForApprovedSource = async (id: string, forceReplace = false, structuredFirst = false): Promise<any> => {
-  const { data } = await apiClient.post<any>(`/sources/approved/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst })
+export const processUploadedPdfForApprovedSource = async (id: string, forceReplace = false, structuredFirst = false, signal?: AbortSignal): Promise<any> => {
+  const { data } = await apiClient.post<any>(`/sources/approved/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst }, { signal })
   return data
+}
+
+export const cancelUploadedPdfImportForApprovedSource = async (id: string): Promise<void> => {
+  await apiClient.post(`/sources/approved/${id}/pdf-import-cancel`)
+}
+
+export const getUploadedPdfImportProgressForApprovedSource = async (id: string): Promise<PdfImportProgressResponse> => {
+  const { data } = await apiClient.get<{ success: boolean; data: PdfImportProgressResponse }>(
+    `/sources/approved/${id}/pdf-import-progress`
+  )
+  return data.data
 }
 
 /**

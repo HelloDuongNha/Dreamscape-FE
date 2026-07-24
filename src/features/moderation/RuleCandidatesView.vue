@@ -275,27 +275,6 @@
               <p class="section-description">{{ ruleText(selectedCandidate, 'probe:feedback', selectedCandidate.probeBlueprint.feedbackEffect) }}</p>
             </section>
 
-            <section class="content-card feedback-card">
-              <div class="section-heading">
-                <div>
-                  <h3>{{ selectedCandidate.probeBlueprint?.verificationMode === 'aggregate_dataset' ? t('rules.aggregateFeedbackTitle') : t('rules.feedbackTitle') }}</h3>
-                  <p class="section-description">{{ selectedCandidate.probeBlueprint?.verificationMode === 'aggregate_dataset' ? t('rules.aggregateFeedbackDescription') : t('rules.feedbackDescription') }}</p>
-                </div>
-                <strong>{{ feedbackStats.applicabilityScore === null ? t('rules.insufficientData') : t('rules.applicablePercent', { percent: feedbackStats.applicabilityScore }) }}</strong>
-              </div>
-              <div class="feedback-bar" :aria-label="t('rules.feedbackCount', { count: feedbackStats.total })">
-                <span class="feedback-bar__yes" :style="{ width: `${feedbackPercent('supports')}%` }"></span>
-                <span class="feedback-bar__no" :style="{ width: `${feedbackPercent('weakens')}%` }"></span>
-                <span class="feedback-bar__unsure" :style="{ width: `${feedbackPercent('unresolved')}%` }"></span>
-              </div>
-              <div class="feedback-reactions">
-                <span><b>✓</b> {{ t('rules.supports') }} · {{ feedbackStats.supports }}</span>
-                <span><b>×</b> {{ t('rules.weakens') }} · {{ feedbackStats.weakens }}</span>
-                <span><b>?</b> {{ t('rules.unresolved') }} · {{ feedbackStats.unresolved }}</span>
-              </div>
-              <p v-if="feedbackStats.total === 0" class="feedback-empty">{{ selectedCandidate.probeBlueprint?.verificationMode === 'aggregate_dataset' ? t('rules.aggregatePending') : t('rules.noFeedback') }}</p>
-            </section>
-
             <section v-if="evidenceExcerpts.length" class="content-card citations-card">
               <div class="section-heading">
                 <div>
@@ -460,15 +439,6 @@ const evidenceChunks = ref<EvidenceChunkPreview[]>([])
 const evidenceExcerpts = ref<EvidenceExcerpt[]>([])
 type RuleRelationshipRow = NonNullable<CandidateDetailResponse['ruleRelationships']>[number]
 const ruleRelationships = ref<RuleRelationshipRow[]>([])
-const emptyFeedbackStats = () => ({
-  supports: 0,
-  weakens: 0,
-  unresolved: 0,
-  total: 0,
-  applicabilityRate: null as number | null,
-  applicabilityScore: null as number | null,
-})
-const feedbackStats = ref(emptyFeedbackStats())
 const visibleContexts = ref<Record<string, boolean>>({})
 const isLoadingList = ref(false)
 const isLoadingDetail = ref(false)
@@ -835,7 +805,6 @@ async function fetchCandidates() {
       evidenceChunks.value = []
       evidenceExcerpts.value = []
       ruleRelationships.value = []
-      feedbackStats.value = emptyFeedbackStats()
     }
   } catch {
     settingsStore.showToast(t('rules.toasts.listFailed'), 'error')
@@ -853,12 +822,10 @@ async function selectCandidate(id: string) {
     evidenceChunks.value = response.data.evidenceChunks || []
     evidenceExcerpts.value = (response.data.evidenceExcerpts || []).filter(item => item.excerpt?.trim())
     ruleRelationships.value = response.data.ruleRelationships || []
-    feedbackStats.value = response.data.feedbackStats || emptyFeedbackStats()
     visibleContexts.value = {}
   } catch {
     selectedCandidate.value = null
     ruleRelationships.value = []
-    feedbackStats.value = emptyFeedbackStats()
     settingsStore.showToast(t('rules.toasts.detailFailed'), 'error')
   } finally {
     isLoadingDetail.value = false
@@ -979,10 +946,6 @@ function collectedFieldLabel(value: string) {
   } as Record<string, string>)[prefix] || value
 }
 
-function feedbackPercent(key: 'supports' | 'weakens' | 'unresolved') {
-  return feedbackStats.value.total > 0 ? Math.round(feedbackStats.value[key] / feedbackStats.value.total * 100) : 0
-}
-
 function sourceGroupStyle(title: string) {
   let hash = 0
   for (const char of title) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
@@ -1061,7 +1024,6 @@ function scoreColor(score?: number) {
 .citation-list { display: flex; flex-direction: column; gap: 12px; margin-top: 17px; }.citation-item { padding: 15px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.citation-meta { display: flex; justify-content: space-between; gap: 10px; color: var(--color-text-muted); font-size: .7rem; }.citation-item blockquote { margin: 12px 0; padding-left: 14px; border-left: 3px solid var(--accent); color: var(--color-text-primary); font-size: .9rem; line-height: 1.65; }.context-button { padding: 0; border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: .76rem; }.context-text { margin: 12px 0 0; padding: 12px; border-radius: var(--radius-md); background: var(--color-bg-base); color: var(--color-text-secondary); font-size: .78rem; line-height: 1.55; white-space: pre-wrap; }
 .relationship-card { display: grid; gap: 9px; }.related-rule { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); color: inherit; text-align: left; cursor: pointer; }.related-rule:hover { border-color: rgba(129,140,248,.42); }.related-rule strong { min-width: 0; color: var(--color-text-primary); font-size: .8rem; line-height: 1.4; }.related-rule small { color: var(--color-text-muted); white-space: nowrap; }.relation-kind { padding: 3px 7px; border-radius: 999px; color: #a5b4fc; background: rgba(99,102,241,.1); font-size: .65rem; font-weight: 700; }.relation-kind--contradictory { color: #fca5a5; background: rgba(239,68,68,.1); }.relation-kind--reverse_direction { color: #fcd34d; background: rgba(245,158,11,.1); }
 .relationship-group { display: grid; gap: 8px; padding: 11px; border: 1px solid var(--color-border); border-radius: var(--radius-md); }.relationship-group--mergeable { border-color: rgba(52,211,153,.25); background: rgba(16,185,129,.035); }.relationship-group__title { color: var(--color-text-primary); font-size: .78rem; }.relationship-group > p { margin: -3px 0 2px; color: var(--color-text-muted); font-size: .7rem; line-height: 1.45; }.related-rule__content { display: grid; min-width: 0; gap: 3px; }.related-rule__content small { overflow: hidden; text-overflow: ellipsis; white-space: normal; line-height: 1.35; }
-.feedback-card { display: grid; gap: 12px; }.feedback-card .section-heading > strong { color: var(--color-text-primary); font-size: .8rem; }.feedback-bar { display: flex; width: 100%; height: 7px; overflow: hidden; border-radius: 999px; background: var(--color-bg-elevated); }.feedback-bar span { display: block; height: 100%; transition: width .25s ease; }.feedback-bar__yes { background: #34d399; }.feedback-bar__no { background: #f87171; }.feedback-bar__unsure { background: #94a3b8; }.feedback-reactions { display: flex; flex-wrap: wrap; gap: 8px; }.feedback-reactions span { padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-bg-elevated); color: var(--color-text-secondary); font-size: .72rem; }.feedback-reactions b { color: var(--color-text-primary); }.feedback-empty { margin: 0; color: var(--color-text-muted); font-size: .75rem; line-height: 1.5; }
 .probe-card { display: grid; gap: 13px; }.probe-facts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 0; }.probe-facts div { padding: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.probe-facts dt { color: var(--color-text-muted); font-size: .68rem; }.probe-facts dd { margin: 5px 0 0; color: var(--color-text-primary); font-size: .78rem; line-height: 1.45; }.probe-heading { color: var(--color-text-primary); font-size: .78rem; }.probe-questions { display: grid; gap: 7px; margin: 0; padding-left: 20px; color: var(--color-text-secondary); font-size: .78rem; line-height: 1.5; }
 .probe-question-pattern { padding: 12px; border-left: 3px solid #3b82f6; border-radius: 0 var(--radius-md) var(--radius-md) 0; background: rgba(59,130,246,.08); }.probe-question-pattern strong { color: #93c5fd; font-size: .72rem; }.probe-question-pattern p { margin: 6px 0 0; color: var(--color-text-primary); font-size: .82rem; line-height: 1.55; }.probe-inactive { margin: 0; padding: 10px 12px; border: 1px solid rgba(245,158,11,.28); border-radius: var(--radius-md); background: rgba(245,158,11,.07); color: #fbbf24; font-size: .76rem; line-height: 1.5; }
 .probe-question-list { display: grid; gap: 10px; }.probe-question-pattern__meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }.probe-question-pattern__meta span { padding: 3px 7px; border-radius: 999px; background: rgba(59,130,246,.14); color: #bfdbfe; font-size: .66rem; }.probe-question-pattern dl { display: grid; gap: 6px; margin: 10px 0 0; }.probe-question-pattern dl div { display: grid; grid-template-columns: 118px 1fr; gap: 8px; }.probe-question-pattern dt { color: var(--color-text-muted); font-size: .68rem; font-weight: 700; }.probe-question-pattern dd { margin: 0; color: var(--color-text-secondary); font-size: .72rem; line-height: 1.45; }

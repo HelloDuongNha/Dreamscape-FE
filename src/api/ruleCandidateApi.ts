@@ -191,18 +191,10 @@ export interface CandidateDetailResponse {
       statementSimilarity: number
     }
   }>
-  feedbackStats?: {
-    supports: number
-    weakens: number
-    unresolved: number
-    total: number
-    applicabilityRate: number | null
-    applicabilityScore: number | null
-  }
 }
 
 /**
- * Lấy danh sách quy luật ứng viên.
+ * Lấy danh sách lập luận ứng viên.
  */
 export const getRuleCandidates = async (params: {
   status?: string
@@ -219,7 +211,7 @@ export const getRuleCandidates = async (params: {
 }
 
 /**
- * Lấy chi tiết quy luật ứng viên (kèm chunk previews).
+ * Lấy chi tiết lập luận ứng viên (kèm chunk previews).
  */
 export const getRuleCandidateDetail = async (
   id: string
@@ -235,7 +227,7 @@ export const getRuleCandidateDetail = async (
 }
 
 /**
- * Phê duyệt quy luật ứng viên thành live rule.
+ * Phê duyệt lập luận ứng viên thành live rule.
  */
 export const approveRuleCandidate = async (
   id: string
@@ -253,7 +245,7 @@ export const approveRuleCandidate = async (
 }
 
 /**
- * Từ chối quy luật ứng viên.
+ * Từ chối lập luận ứng viên.
  */
 export const rejectRuleCandidate = async (
   id: string,
@@ -294,8 +286,8 @@ export const runRuleV3BulkAction = async (
 
 export interface RuleV3ExtractionRun {
   _id: string
-  status: 'pending' | 'success' | 'failed'
-  currentStage: 'initializing' | 'extracting_candidates' | 'saving_candidates' | 'completed' | 'failed'
+  status: 'pending' | 'success' | 'failed' | 'cancelled'
+  currentStage: 'initializing' | 'extracting_candidates' | 'saving_candidates' | 'completed' | 'failed' | 'cancelled'
   totalBatches: number
   processedBatches: number
   rawCandidateCount: number
@@ -315,9 +307,13 @@ export interface RuleV3ExtractionRun {
   resultRuleIds: string[]
 }
 
+export async function cancelRuleV3Extraction(runId: string): Promise<void> {
+  await apiClient.post(`/moderation/rules-v3/runs/${runId}/cancel`)
+}
+
 export interface RuleV3SourceRunSummary {
   runId: string
-  status: 'pending' | 'success' | 'failed'
+  status: 'pending' | 'success' | 'failed' | 'cancelled'
   startedAt: string
   finishedAt: string | null
   durationMs: number | null

@@ -1,7 +1,18 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import { importFullText, reimportFullText, cacheModerationSourceOriginalPdf, processUploadedPdfForContribution } from '@/api/moderationApi'
-import { processUploadedPdfForApprovedSource } from '@/api/sourceApi'
+import {
+  importFullText,
+  reimportFullText,
+  cacheModerationSourceOriginalPdf,
+  processUploadedPdfForContribution,
+  getUploadedPdfImportProgressForContribution,
+  cancelUploadedPdfImportForContribution,
+} from '@/api/moderationApi'
+import {
+  processUploadedPdfForApprovedSource,
+  getUploadedPdfImportProgressForApprovedSource,
+  cancelUploadedPdfImportForApprovedSource,
+} from '@/api/sourceApi'
 import { useAcademicJobQueueStore } from './useAcademicJobQueueStore'
 
 const SOURCE_TASK_KEY = 'dreamscape:pinned-task:source-progress:v1'
@@ -12,26 +23,37 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
   const isDialogVisible = ref(false)
   const isPinnedVisible = ref(false)
   const progress = ref(0)
-  const status = ref<'pending' | 'success' | 'failed' | 'none'>('none')
+  const status = ref<'pending' | 'success' | 'failed' | 'cancelled' | 'none'>('none')
   const stepText = ref('Đang khởi tạo...')
   const stageDetail = ref('Đang chuẩn bị tác vụ và kiểm tra dữ liệu đầu vào.')
   const elapsedSeconds = ref(0)
   const pipelineKind = ref<'submission' | 'pdf' | 'structured' | 'none'>('none')
+  const currentTargetType = ref<'contribution' | 'approved_source'>('contribution')
+  const isCancelling = ref(false)
   
   const smartReaderResult = ref<'success' | 'failed' | 'limited' | 'ocr_needed'>('limited')
   const pdfResult = ref<'success' | 'failed' | 'blocked' | 'external_only' | 'no_candidate' | 'none'>('none')
   const selectedSource = ref<'jats' | 'html' | 'pdf_text' | 'docling_pdf' | 'none'>('none')
   const detectedIdentifiers = ref<{ doi?: string; isbn?: string; pmcid?: string } | null>(null)
   const expectedTotalSeconds = ref<number | null>(null)
+  const timingDeltaSeconds = ref<number | null>(null)
+  const ocrExpected = ref(false)
+  const pdfStage = ref<'received' | 'inspecting_text' | 'ocr_processing' | 'parsing_layout' | 'cleaning_ocr' | 'compiling_reader' | 'completed' | 'failed' | 'cancelled' | null>(null)
   const estimatedRemainingSeconds = computed<number | null>(() => {
     if (status.value !== 'pending' || expectedTotalSeconds.value === null) return null
-    return Math.max(0, expectedTotalSeconds.value - elapsedSeconds.value)
+    return expectedTotalSeconds.value - elapsedSeconds.value
   })
   let clockTimer: ReturnType<typeof setInterval> | null = null
   let smoothTimer: ReturnType<typeof setInterval> | null = null
   let terminalTimer: ReturnType<typeof setTimeout> | null = null
   let clockStartedAt = 0
   let persistedExpiresAt: number | null = null
+  let pdfProgressTimer: ReturnType<typeof setInterval> | null = null
+  let activeRequestController: AbortController | null = null
+
+  function taskWasCancelled(): boolean {
+    return isCancelling.value || status.value === 'cancelled' || activeRequestController?.signal.aborted === true
+  }
 
   function persistTask() {
     if (!contributionId.value || status.value === 'none') {
@@ -49,6 +71,11 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       smartReaderResult: smartReaderResult.value,
       pdfResult: pdfResult.value,
       selectedSource: selectedSource.value,
+      expectedTotalSeconds: expectedTotalSeconds.value,
+      timingDeltaSeconds: timingDeltaSeconds.value,
+      ocrExpected: ocrExpected.value,
+      pdfStage: pdfStage.value,
+      currentTargetType: currentTargetType.value,
       startedAt: clockStartedAt,
       expiresAt: persistedExpiresAt,
     }))
@@ -72,6 +99,11 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       smartReaderResult.value = saved.smartReaderResult || 'limited'
       pdfResult.value = saved.pdfResult || 'none'
       selectedSource.value = saved.selectedSource || 'none'
+      expectedTotalSeconds.value = typeof saved.expectedTotalSeconds === 'number' ? saved.expectedTotalSeconds : null
+      timingDeltaSeconds.value = typeof saved.timingDeltaSeconds === 'number' ? saved.timingDeltaSeconds : null
+      ocrExpected.value = saved.ocrExpected === true
+      pdfStage.value = saved.pdfStage || null
+      currentTargetType.value = saved.currentTargetType === 'approved_source' ? 'approved_source' : 'contribution'
       isDialogVisible.value = false
       isPinnedVisible.value = true
       clockStartedAt = Number(saved.startedAt) || Date.now()
@@ -88,44 +120,10 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     }
   }
 
-  function durationStorageKey() {
-    return contributionId.value && pipelineKind.value !== 'none'
-      ? `dreamscape:academic-duration:${pipelineKind.value}:${contributionId.value}`
-      : ''
-  }
-
-  function loadExpectedDuration() {
-    expectedTotalSeconds.value = null
-    const key = durationStorageKey()
-    if (!key) return
-    try {
-      const samples = JSON.parse(localStorage.getItem(key) || '[]')
-        .filter((value: unknown) => typeof value === 'number' && value > 0)
-        .sort((a: number, b: number) => a - b)
-      if (samples.length > 0) expectedTotalSeconds.value = samples[Math.floor(samples.length / 2)]
-    } catch {
-      expectedTotalSeconds.value = null
-    }
-  }
-
-  function rememberDuration() {
-    const key = durationStorageKey()
-    const duration = Math.max(1, Math.round((Date.now() - clockStartedAt) / 1000))
-    if (!key || !clockStartedAt) return
-    try {
-      const previous = JSON.parse(localStorage.getItem(key) || '[]')
-      const samples = Array.isArray(previous) ? previous.filter(value => typeof value === 'number' && value > 0) : []
-      localStorage.setItem(key, JSON.stringify([...samples, duration].slice(-5)))
-    } catch {
-      // Timing history is optional and must never affect ingestion.
-    }
-  }
-
   function startClock(startedAt = Date.now()) {
     if (clockTimer) clearInterval(clockTimer)
     clockStartedAt = startedAt
     elapsedSeconds.value = Math.max(0, Math.floor((Date.now() - clockStartedAt) / 1000))
-    loadExpectedDuration()
     clockTimer = setInterval(() => {
       elapsedSeconds.value = Math.floor((Date.now() - clockStartedAt) / 1000)
     }, 1000)
@@ -148,13 +146,70 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
 
   function stopTimers() {
     stopSmoothProgress()
+    if (pdfProgressTimer) clearInterval(pdfProgressTimer)
+    pdfProgressTimer = null
     if (clockTimer) clearInterval(clockTimer)
     clockTimer = null
   }
 
   function finishTimers() {
-    rememberDuration()
     stopTimers()
+  }
+
+  function applyPdfStage(stage: typeof pdfStage.value) {
+    if (!stage || stage === pdfStage.value) return
+    pdfStage.value = stage
+    const stageCopy = {
+      received: ['Đã tiếp nhận PDF gốc.', 'Tệp nguồn được giữ nguyên để đối chiếu.', 20],
+      inspecting_text: ['Đang kiểm tra lớp văn bản và nhu cầu OCR...', 'Đếm trang có văn bản và xác định chiến lược nhận dạng.', 35],
+      ocr_processing: ['Đang nhận dạng văn bản tiếng Việt...', 'Docling đang chạy OCR toàn trang với ngôn ngữ tiếng Việt và tiếng Anh.', 52],
+      parsing_layout: ['Đang phân tích bố cục bằng Docling...', 'Khôi phục heading, đoạn văn, bảng, hình và thứ tự đọc.', 62],
+      cleaning_ocr: ['Đang làm sạch kết quả OCR...', 'Chuẩn hóa Unicode, ghép dòng vỡ và loại bỏ nhiễu số hóa trước khi lưu.', 78],
+      compiling_reader: ['Đang dựng Bản đọc thông minh...', 'Chỉ các block đã qua chính sách làm sạch mới được ghi vào bản đọc.', 90],
+      completed: ['Đã dựng Bản đọc thông minh.', 'PDF gốc và nội dung đã làm sạch đã được lưu.', 100],
+      failed: ['Không thể dựng Bản đọc thông minh.', 'PDF gốc vẫn được giữ để kiểm tra lại.', 100],
+      cancelled: ['Đã hủy nhập tài liệu.', 'Phần kết quả chưa hoàn tất không được lưu.', progress.value],
+    } as const
+    const copy = stageCopy[stage]
+    if (!copy) return
+    stepText.value = copy[0]
+    stageDetail.value = copy[1]
+    progress.value = Math.max(progress.value, copy[2])
+  }
+
+  async function syncPdfProgress(id: string, targetType: 'contribution' | 'approved_source') {
+    const response = targetType === 'contribution'
+      ? await getUploadedPdfImportProgressForContribution(id)
+      : await getUploadedPdfImportProgressForApprovedSource(id)
+    const active = response.progress
+    const estimate = Number(active?.expectedDurationSeconds || response.estimateSeconds)
+    if (Number.isFinite(estimate) && estimate > 0) expectedTotalSeconds.value = Math.round(estimate)
+    if (active?.ocrExpected !== undefined) ocrExpected.value = active.ocrExpected === true
+    const serverStartedAt = active?.startedAt ? new Date(active.startedAt).getTime() : Number.NaN
+    const belongsToCurrentRun = Number.isFinite(serverStartedAt) && serverStartedAt >= clockStartedAt - 5000
+    if (belongsToCurrentRun && status.value === 'pending') {
+      if (Number.isFinite(serverStartedAt) && Math.abs(serverStartedAt - clockStartedAt) > 1500) {
+        clockStartedAt = serverStartedAt
+      }
+    }
+    if (belongsToCurrentRun && active?.timingDeltaSeconds !== undefined) timingDeltaSeconds.value = active.timingDeltaSeconds
+    if (belongsToCurrentRun && active?.stage && status.value === 'pending') {
+      applyPdfStage(active.stage)
+      if (active.stage === 'failed' && active.failureMessage) {
+        stepText.value = active.failureMessage
+        stageDetail.value = active.failureCode
+          ? `Mã lỗi: ${active.failureCode}. Bản đọc trước đó vẫn được giữ nguyên.`
+          : 'Bản đọc trước đó vẫn được giữ nguyên.'
+      }
+    }
+  }
+
+  function startPdfProgressPolling(id: string, targetType: 'contribution' | 'approved_source') {
+    if (pdfProgressTimer) clearInterval(pdfProgressTimer)
+    void syncPdfProgress(id, targetType).catch(() => {})
+    pdfProgressTimer = setInterval(() => {
+      void syncPdfProgress(id, targetType).catch(() => {})
+    }, 1500)
   }
 
   async function runPdfOnlyPipeline(id: string, title: string, targetType: 'contribution' | 'approved_source' = 'contribution', forceReplace = false, structuredFirst = false, promotedFromQueue = false) {
@@ -167,10 +222,16 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     stepText.value = 'Đã tải PDF gốc lên hệ thống.'
     stageDetail.value = 'PDF gốc được giữ nguyên; Bản đọc sẽ chỉ lưu phần văn bản đã qua kiểm tra và làm sạch.'
     pipelineKind.value = 'pdf'
+    currentTargetType.value = targetType
     smartReaderResult.value = 'limited'
     pdfResult.value = 'success'
     selectedSource.value = 'none'
     detectedIdentifiers.value = null
+    expectedTotalSeconds.value = null
+    timingDeltaSeconds.value = null
+    ocrExpected.value = false
+    pdfStage.value = 'received'
+    activeRequestController = new AbortController()
     startClock()
 
     // Step 1: Upload is done (0 - 20)
@@ -185,16 +246,22 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     // Step 3: Run processing (40 - 85)
     stepText.value = 'Đang nhận diện thông tin tài liệu...'
     stageDetail.value = 'Docling đang dựng bố cục, bảng và hình; văn bản OCR sẽ được làm sạch tự động trước khi lưu. Sách scan dài có thể cần nhiều phút.'
-    startSmoothProgress(84, 120_000)
+    startSmoothProgress(76, 120_000)
     let finalStatus: 'success' | 'failed' = 'failed'
     let finalSmartReaderResult: 'success' | 'failed' | 'limited' | 'ocr_needed' = 'failed'
     let finalStepText = 'Lỗi xử lý tệp PDF.'
     try {
-      const runRes = targetType === 'contribution'
-        ? await processUploadedPdfForContribution(id, forceReplace, structuredFirst)
-        : await processUploadedPdfForApprovedSource(id, forceReplace, structuredFirst)
+      const request = targetType === 'contribution'
+        ? processUploadedPdfForContribution(id, forceReplace, structuredFirst, activeRequestController.signal)
+        : processUploadedPdfForApprovedSource(id, forceReplace, structuredFirst, activeRequestController.signal)
+      startPdfProgressPolling(id, targetType)
+      const runRes = await request
+      if (runRes.cancelled || taskWasCancelled()) return
       progress.value = 85
       stopSmoothProgress()
+      if (runRes.timing?.expectedDurationSeconds) expectedTotalSeconds.value = runRes.timing.expectedDurationSeconds
+      if (typeof runRes.timing?.timingDeltaSeconds === 'number') timingDeltaSeconds.value = runRes.timing.timingDeltaSeconds
+      if (runRes.resolvedTitle) sourceTitle.value = runRes.resolvedTitle
       if (runRes.success && runRes.readerCreated) {
         finalStatus = 'success'
         finalSmartReaderResult = 'success'
@@ -218,6 +285,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
         finalStepText = runRes.message || 'Lỗi khi xử lý tệp PDF.'
       }
     } catch (err: any) {
+      if (taskWasCancelled()) return
       console.warn('PDF-only processing failed:', err)
       progress.value = 85
       stopSmoothProgress()
@@ -228,11 +296,13 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     }
 
     // Step 4: Finalizing (85 - 100)
+    if (taskWasCancelled()) return
     await new Promise((resolve) => setTimeout(resolve, 800))
     progress.value = 100
     status.value = finalStatus
     smartReaderResult.value = finalSmartReaderResult
     stepText.value = finalStepText
+    pdfStage.value = finalStatus === 'success' ? 'completed' : 'failed'
     isDialogVisible.value = false
     isPinnedVisible.value = true // Show completion notification
     finishTimers()
@@ -248,8 +318,13 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     status.value = 'pending'
     stepText.value = 'Đang gửi nguồn vào hàng chờ duyệt...'
     pipelineKind.value = 'submission'
+    currentTargetType.value = 'contribution'
+    activeRequestController = new AbortController()
     smartReaderResult.value = 'limited'
     pdfResult.value = 'none'
+    expectedTotalSeconds.value = null
+    timingDeltaSeconds.value = null
+    pdfStage.value = null
     stageDetail.value = 'Đang chuẩn bị nguồn và kiểm tra quyền truy cập nội dung.'
     startClock()
 
@@ -261,7 +336,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     stageDetail.value = 'Đang thử JATS/XML và HTML có cấu trúc trước để giữ heading, bảng và hình tốt nhất.'
     startSmoothProgress(44, 30_000)
     try {
-      const importRes = await importFullText(id)
+      const importRes = await importFullText(id, activeRequestController.signal)
       if (importRes.success) {
         smartReaderResult.value = 'success'
       } else {
@@ -271,6 +346,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       console.warn('Smart reader import failed in preprocessing:', err)
       smartReaderResult.value = 'failed'
     }
+    if (taskWasCancelled()) return
     progress.value = 45
     stopSmoothProgress()
 
@@ -280,7 +356,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     stageDetail.value = 'Đang thử các nguồn PDF hợp pháp và lưu bản gốc vào Firebase Storage khi tìm thấy.'
     startSmoothProgress(74, 45_000)
     try {
-      const cacheRes = await cacheModerationSourceOriginalPdf(id)
+      const cacheRes = await cacheModerationSourceOriginalPdf(id, undefined, activeRequestController.signal)
       if (cacheRes.success) {
         const st = cacheRes.status as string
         if (st === 'cached' || st === 'already_cached' || st === 'recached') {
@@ -308,6 +384,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
         pdfResult.value = 'failed'
       }
     }
+    if (taskWasCancelled()) return
     progress.value = 75
     stopSmoothProgress()
 
@@ -318,7 +395,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       stageDetail.value = 'Docling đang phục hồi thứ tự đọc, heading, table và figure; bước làm sạch OCR chạy tự động trước khi lưu.'
       startSmoothProgress(92, 120_000)
       try {
-        const doclingRes = await processUploadedPdfForContribution(id, false, false)
+        const doclingRes = await processUploadedPdfForContribution(id, false, false, activeRequestController.signal)
         if (doclingRes.success && doclingRes.readerCreated) {
           smartReaderResult.value = 'success'
           selectedSource.value = doclingRes.selectedSource || 'pdf_text'
@@ -335,6 +412,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
         smartReaderResult.value = 'failed'
         stepText.value = err.response?.data?.message || err.message || 'Không thể xử lý PDF bằng Docling.'
       }
+      if (taskWasCancelled()) return
       stopSmoothProgress()
     }
 
@@ -364,6 +442,8 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     progress.value = 10
     status.value = 'pending'
     pipelineKind.value = 'structured'
+    currentTargetType.value = 'contribution'
+    activeRequestController = new AbortController()
     stepText.value = reimport
       ? 'Đang nhập lại từ DOI / HTML / XML...'
       : 'Đang nhập từ DOI / HTML / XML...'
@@ -371,6 +451,9 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     pdfResult.value = 'none'
     selectedSource.value = 'none'
     detectedIdentifiers.value = null
+    expectedTotalSeconds.value = null
+    timingDeltaSeconds.value = null
+    pdfStage.value = null
     stageDetail.value = 'Đang tìm nguồn có cấu trúc phù hợp và kiểm tra nội dung trả về.'
     startClock()
 
@@ -378,8 +461,8 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       progress.value = 35
       startSmoothProgress(88, 45_000)
       const response: any = reimport
-        ? await reimportFullText(id)
-        : await importFullText(id)
+        ? await reimportFullText(id, activeRequestController.signal)
+        : await importFullText(id, activeRequestController.signal)
       progress.value = 90
       stopSmoothProgress()
 
@@ -409,11 +492,13 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
         : 'Nhập bản đọc từ nguồn có cấu trúc thành công.'
       return response
     } catch (err: any) {
+      if (taskWasCancelled()) return null
       status.value = 'failed'
       smartReaderResult.value = 'failed'
       stepText.value = err.response?.data?.message || err.message || 'Không thể nhập bản đọc từ nguồn có cấu trúc.'
       return null
     } finally {
+      if (taskWasCancelled()) return
       const minimumVisibleMs = 600
       const remainingMs = minimumVisibleMs - (Date.now() - startedAt)
       if (remainingMs > 0) {
@@ -488,6 +573,35 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     }
   }
 
+  async function cancelCurrentTask() {
+    const id = contributionId.value
+    if (!id || status.value !== 'pending' || isCancelling.value) return
+    isCancelling.value = true
+    try {
+      // Mark cancellation locally before waiting for the durable rollback.
+      // Otherwise the aborted long-running request can race this endpoint and
+      // overwrite the UI with a generic 500/failure state.
+      activeRequestController?.abort()
+      // The submission pipeline can enter the same Docling fallback as the
+      // dedicated PDF pipeline. The endpoint is therefore called for every
+      // source task; a 409 simply means no server-side PDF process is active.
+      if (currentTargetType.value === 'approved_source') {
+        await cancelUploadedPdfImportForApprovedSource(id).catch(() => undefined)
+      } else {
+        await cancelUploadedPdfImportForContribution(id).catch(() => undefined)
+      }
+      status.value = 'cancelled'
+      stepText.value = 'Đã hủy tác vụ.'
+      stageDetail.value = 'Phần kết quả chưa hoàn tất không được lưu.'
+      isDialogVisible.value = false
+      isPinnedVisible.value = true
+      finishTimers()
+      scheduleTerminalDismiss()
+    } finally {
+      isCancelling.value = false
+    }
+  }
+
   function stopTracking() {
     stopTimers()
     if (terminalTimer) clearTimeout(terminalTimer)
@@ -501,8 +615,15 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     persistedExpiresAt = null
     localStorage.removeItem(SOURCE_TASK_KEY)
     pipelineKind.value = 'none'
+    expectedTotalSeconds.value = null
+    timingDeltaSeconds.value = null
+    ocrExpected.value = false
+    pdfStage.value = null
     smartReaderResult.value = 'limited'
     pdfResult.value = 'none'
+    currentTargetType.value = 'contribution'
+    activeRequestController = null
+    isCancelling.value = false
   }
 
   watch(
@@ -521,11 +642,16 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     stageDetail,
     elapsedSeconds,
     estimatedRemainingSeconds,
+    expectedTotalSeconds,
+    timingDeltaSeconds,
+    ocrExpected,
+    pdfStage,
     pipelineKind,
     smartReaderResult,
     pdfResult,
     selectedSource,
     detectedIdentifiers,
+    isCancelling,
     startPipeline,
     startPdfOnlyPipeline,
     startStructuredReader,
@@ -534,5 +660,6 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     stopTracking,
     dismissPinned,
     restoreTracking,
+    cancelCurrentTask,
   }
 })

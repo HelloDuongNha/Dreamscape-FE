@@ -101,7 +101,10 @@
                 <span class="oracle-source-card__body">
                   <strong>{{ citation.title }}</strong>
                   <small>{{ sourceTypeLabel(citation.sourceType) }}</small>
-                  <span>{{ citation.excerpt }}</span>
+                  <span v-if="citation.sourceType === 'academic_source' && (citation.ruleLinks?.length || 0) > 1">
+                    {{ t('oracle.sourceMultipleRules', { count: citation.ruleLinks?.length || 0 }) }}
+                  </span>
+                  <span v-else>{{ citation.excerpt }}</span>
                 </span>
                 <span aria-hidden="true">↗</span>
               </button>
@@ -201,7 +204,7 @@ const composer = ref<InstanceType<typeof OracleComposer> | null>(null)
 const suggestionsTrack = ref<HTMLElement | null>(null)
 const clock = ref(Date.now())
 const editingMessage = ref<OracleShellMessage | null>(null)
-let clockTimer: ReturnType<typeof window.setInterval> | null = null
+let clockTimer: number | null = null
 
 function syncClock(active: boolean) {
   if (active && clockTimer === null) {

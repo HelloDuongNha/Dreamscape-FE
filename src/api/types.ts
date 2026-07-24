@@ -247,7 +247,7 @@ export interface ApiDream {
   likes_count:    number
   comments_count: number
   created_at:     string             // ISO-8601 — used as pagination cursor
-  ai_status:      'pending' | 'sensing' | 'completed' | 'failed'
+  ai_status:      'pending' | 'sensing' | 'completed' | 'failed' | 'cancelled'
   ai_result:      AiDreamAnalysisResult | null
   aiAnalysis?:    AiDreamAnalysisResult | null
   analysisMetadata?: {
@@ -259,9 +259,24 @@ export interface ApiDream {
     startedAt?: string
     generatedAt?: string
     durationMs?: number
+    estimatedDurationSeconds?: number
+    timingDeltaSeconds?: number
+    cancelledAt?: string
+    lastReplacementOutcome?: 'cancelled' | 'failed'
+    lastReplacementTrigger?: 'retry' | 'dream_addition' | 'addition_retry'
+    replacementEndedAt?: string
+    replacementDurationMs?: number
+    hasUnanalyzedAdditions?: boolean
   } | null
   edit_history:   { content: string; editedAt: string }[]
-  additions:      { sequence: number; content: string; addedAt: string }[]
+  additions:      {
+    sequence: number
+    content: string
+    addedAt: string
+    analysisState?: 'pending' | 'analyzed' | 'unanalyzed'
+    analysisRunId?: string
+    analyzedAt?: string
+  }[]
 }
 
 export interface AuthResponse {

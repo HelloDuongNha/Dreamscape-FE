@@ -39,6 +39,12 @@
       @update:wait-for-complete="setWaitForComplete"
     />
 
+    <OracleCitationModal
+      v-model="showCitationModal"
+      :message-id="selectedCitationMessageId"
+      :citation="selectedCitation"
+      @open-source="openAcademicSource"
+    />
     <AppConfirm
       v-model="showDeleteConfirm"
       :title="t('oracle.deleteConversation')"
@@ -61,17 +67,20 @@ import OracleThreadSidebar from './components/OracleThreadSidebar.vue'
 import OracleChatShell from './components/OracleChatShell.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 import OracleModelConnections from './components/OracleModelConnections.vue'
+import OracleCitationModal from './components/OracleCitationModal.vue'
 import { useOracleChatStore } from '@/store/useOracleChatStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { usePostStore } from '@/store/usePostStore'
 import { useRoute, useRouter } from 'vue-router'
 import {
   getOracleThread,
+  getOracleCitationDetails,
   branchOracleTurn,
   cancelOracleRun,
   postOracleTurn,
   streamOracleRun,
   type OracleTurnDto,
+  type OracleCitationDto,
 } from '@/api/oracleApi'
 import type { OracleMode, OracleShellMessage } from './oracleShell.types'
 
@@ -97,6 +106,9 @@ const allThreadTurns = ref<OracleTurnDto[]>([])
 const selectedBranchLeafId = ref<string | null>(null)
 const showDeleteConfirm = ref(false)
 const showModelConnections = ref(false)
+const showCitationModal = ref(false)
+const selectedCitation = ref<OracleCitationDto | null>(null)
+const selectedCitationMessageId = ref('')
 const pendingDeleteThreadId = ref<string | null>(null)
 const isSending = ref(false)
 const waitForComplete = ref(localStorage.getItem('oracle_wait_for_complete') === 'true')
@@ -644,10 +656,25 @@ async function handleOpenCitation(message: OracleShellMessage, index: number) {
   const citation = message.citations?.find((item) => item.index === index)
   if (!citation) return
   if (citation.sourceType === 'academic_source') {
-    await router.push(`/library/sources/${citation.sourceId}`)
+    selectedCitationMessageId.value = message.id
+    selectedCitation.value = citation
+    showCitationModal.value = true
+    try {
+      const details = await getOracleCitationDetails(message.id, index)
+      selectedCitation.value = details
+      const stored = message.citations?.findIndex((item) => item.index === index) ?? -1
+      if (stored >= 0 && message.citations) message.citations[stored] = details
+    } catch {
+      settingsStore.showToast(t('oracle.sourceDetailsLoadFailed'), 'error')
+    }
     return
   }
   await postStore.openPost(citation.sourceId)
+}
+
+async function openAcademicSource(sourceId: string) {
+  showCitationModal.value = false
+  await router.push(`/library/sources/${sourceId}`)
 }
 
 async function handleCancel() {

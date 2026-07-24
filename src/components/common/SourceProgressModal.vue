@@ -1,257 +1,121 @@
 <template>
-  <Teleport to="body">
-    <Transition name="modal-fade">
-      <div
-        v-if="sourceProgressStore.isDialogVisible && sourceProgressStore.contributionId"
-        class="modal-overlay"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="modalTitle"
-        @click.self="sourceProgressStore.minimizeDialog()"
-        @keydown.esc="sourceProgressStore.minimizeDialog()"
-      >
-        <div class="modal-container" tabindex="-1">
-          <!-- Modal header -->
-          <div class="modal-header">
-            <div class="modal-title-area">
-              <span class="modal-title-text">{{ modalTitle }}</span>
-            </div>
-
-            <div class="modal-header__right">
-              <button
-                class="modal-close-btn"
-                aria-label="Minimize dialog"
-                @click="sourceProgressStore.minimizeDialog()"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <!-- Body -->
-          <div class="modal-body-content">
-            <div class="modal-source-info">
-              <h3 class="source-title-heading">{{ sourceProgressStore.sourceTitle }}</h3>
-              <p class="source-subtitle">{{ modalSubtitle }}</p>
-            </div>
-
-            <ol v-if="sourceProgressStore.pipelineKind === 'pdf'" class="docling-stage-list" :aria-label="t('common.sourceProgress.doclingStagesLabel')">
-              <li v-for="stage in doclingStages" :key="stage.label" :class="[`is-${stage.state}`]">
-                <span aria-hidden="true">{{ stage.state === 'done' ? '✓' : stage.state === 'active' ? '●' : '○' }}</span>
-                <div><strong>{{ stage.label }}</strong><small>{{ stage.detail }}</small></div>
-              </li>
-            </ol>
-
-            <!-- Pending Loading Content -->
-            <PipelineProgressPanel
-              :progress="sourceProgressStore.progress"
-              :step-text="sourceProgressStore.stepText"
-              :detail-text="sourceProgressStore.stageDetail"
-              :elapsed-seconds="sourceProgressStore.elapsedSeconds"
-              :estimated-remaining-seconds="sourceProgressStore.estimatedRemainingSeconds"
-            />
-          </div>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
+  <LongRunningTaskModal
+    :model-value="sourceProgressStore.isDialogVisible && Boolean(sourceProgressStore.contributionId)"
+    :title="modalTitle"
+    :subject="sourceProgressStore.sourceTitle"
+    :subtitle="modalSubtitle"
+    :aria-label="modalTitle"
+    :minimize-label="t('common.longTask.minimize')"
+    :steps-aria-label="stepsAriaLabel"
+    :stages="stages"
+    :current-stage-index="currentStageIndex"
+    :progress="sourceProgressStore.progress"
+    :step-text="presentedStepText"
+    :detail-text="presentedDetailText"
+    :elapsed-seconds="sourceProgressStore.elapsedSeconds"
+    :estimated-remaining-seconds="sourceProgressStore.estimatedRemainingSeconds"
+    :timing-delta-seconds="sourceProgressStore.timingDeltaSeconds"
+    :completed="sourceProgressStore.status !== 'pending'"
+    :cancelable="sourceProgressStore.status === 'pending'"
+    :cancel-loading="sourceProgressStore.isCancelling"
+    :cancel-label="t('common.longTask.cancel')"
+    :cancel-confirm-title="t('common.longTask.cancelConfirm')"
+    :cancel-confirm-message="t('common.longTask.cancelMessage')"
+    :cancel-confirm-label="t('common.longTask.confirmCancel')"
+    :keep-running-label="t('common.longTask.keepRunning')"
+    @minimize="sourceProgressStore.minimizeDialog()"
+    @cancel="sourceProgressStore.cancelCurrentTask()"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
-import PipelineProgressPanel from './PipelineProgressPanel.vue'
+import LongRunningTaskModal, { type LongRunningTaskStage } from './LongRunningTaskModal.vue'
 
 const sourceProgressStore = useSourceProgressStore()
-const { t } = useI18n()
+const { t } = useI18n({ useScope: 'global' })
 
 const modalTitle = computed(() => {
-  if (sourceProgressStore.pipelineKind === 'structured') return 'Nhập lại bản đọc'
-  if (sourceProgressStore.pipelineKind === 'pdf') return 'Tạo bản đọc từ PDF'
-  return 'Đóng góp tài liệu'
+  if (sourceProgressStore.pipelineKind === 'structured') return t('common.sourceProgress.structuredTitle')
+  if (sourceProgressStore.pipelineKind === 'pdf') return t('common.sourceProgress.pdfTitle')
+  return t('common.sourceProgress.importTitle')
 })
-
 const modalSubtitle = computed(() => {
-  if (sourceProgressStore.pipelineKind === 'structured') {
-    return 'Hệ thống đang lấy lại nội dung có cấu trúc từ DOI, JATS/XML hoặc HTML.'
-  }
-  if (sourceProgressStore.pipelineKind === 'pdf') {
-    return 'Hệ thống đang phân tích PDF bằng Docling và dựng Bản đọc thông minh.'
-  }
-  return 'Hệ thống đang tiền xử lý nguồn, tải PDF và xây dựng Bản đọc thông minh tự động...'
+  if (sourceProgressStore.pipelineKind === 'structured') return t('common.sourceProgress.structuredSubtitle')
+  if (sourceProgressStore.pipelineKind === 'pdf') return t('common.sourceProgress.pdfSubtitle')
+  return t('common.sourceProgress.importSubtitle')
+})
+const stepsAriaLabel = computed(() => sourceProgressStore.pipelineKind === 'pdf'
+  ? t('common.sourceProgress.doclingStagesLabel')
+  : t('common.sourceProgress.importStagesLabel'))
+const stageCount = computed(() => sourceProgressStore.pipelineKind === 'pdf'
+  ? (sourceProgressStore.ocrExpected ? 6 : 5)
+  : sourceProgressStore.pipelineKind === 'structured'
+    ? 3
+    : 4)
+
+const pdfStageDefinitions = computed(() => [
+  { key: 'received', label: t('common.sourceProgress.receivePdf'), detail: t('common.sourceProgress.receivePdfDetail') },
+  { key: 'inspecting_text', label: t('common.sourceProgress.inspectOcr'), detail: t('common.sourceProgress.inspectOcrDetail') },
+  ...(sourceProgressStore.ocrExpected
+    ? [{ key: 'ocr_processing', label: t('common.sourceProgress.recognizeOcr'), detail: t('common.sourceProgress.recognizeOcrDetail') }]
+    : []),
+  { key: 'parsing_layout', label: t('common.sourceProgress.parseDocling'), detail: t('common.sourceProgress.parseDoclingDetail') },
+  { key: 'cleaning_ocr', label: t('common.sourceProgress.cleanOcr'), detail: t('common.sourceProgress.cleanOcrDetail') },
+  { key: 'compiling_reader', label: t('common.sourceProgress.buildReader'), detail: t('common.sourceProgress.buildReaderDetail') },
+])
+
+const activePdfStage = computed(() => {
+  if (sourceProgressStore.pipelineKind !== 'pdf') return null
+  return pdfStageDefinitions.value.find(stage => stage.key === sourceProgressStore.pdfStage) || null
 })
 
-const doclingStages = computed(() => {
-  const progress = sourceProgressStore.progress
-  const stages = [
-    { threshold: 20, label: t('common.sourceProgress.receivePdf'), detail: t('common.sourceProgress.receivePdfDetail') },
-    { threshold: 40, label: t('common.sourceProgress.inspectOcr'), detail: t('common.sourceProgress.inspectOcrDetail') },
-    { threshold: 68, label: t('common.sourceProgress.parseDocling'), detail: t('common.sourceProgress.parseDoclingDetail') },
-    { threshold: 85, label: t('common.sourceProgress.cleanOcr'), detail: t('common.sourceProgress.cleanOcrDetail') },
-    { threshold: 100, label: t('common.sourceProgress.buildReader'), detail: t('common.sourceProgress.buildReaderDetail') },
-  ]
-  return stages.map((stage, index) => ({
-    ...stage,
-    state: progress >= stage.threshold ? 'done' : progress >= (stages[index - 1]?.threshold || 0) ? 'active' : 'pending',
+const presentedStepText = computed(() => activePdfStage.value?.label || sourceProgressStore.stepText)
+const presentedDetailText = computed(() => activePdfStage.value?.detail || sourceProgressStore.stageDetail)
+
+const currentStageIndex = computed(() => {
+  if (sourceProgressStore.status === 'success') return stageCount.value
+  if (sourceProgressStore.pipelineKind === 'pdf') {
+    const keys = pdfStageDefinitions.value.map(stage => stage.key)
+    if (sourceProgressStore.pdfStage === 'completed') return keys.length
+    const index = keys.indexOf(sourceProgressStore.pdfStage || '')
+    return Math.max(0, index)
+  }
+  if (sourceProgressStore.pipelineKind === 'structured') {
+    return sourceProgressStore.progress >= 90 ? 2 : sourceProgressStore.progress >= 35 ? 1 : 0
+  }
+  return sourceProgressStore.progress >= 75 ? 3 : sourceProgressStore.progress >= 45 ? 2 : sourceProgressStore.progress >= 20 ? 1 : 0
+})
+
+const stages = computed<LongRunningTaskStage[]>(() => {
+  const definitions = sourceProgressStore.pipelineKind === 'pdf'
+    ? pdfStageDefinitions.value
+    : sourceProgressStore.pipelineKind === 'structured'
+      ? [
+          { key: 'prepare', label: 'Kiểm tra định danh và quyền truy cập', detail: 'Xác định DOI, URL và phạm vi nội dung được phép nhập.' },
+          { key: 'retrieve', label: 'Lấy nội dung có cấu trúc', detail: 'Ưu tiên JATS/XML và HTML để giữ heading, bảng, hình và thứ tự đọc.' },
+          { key: 'compile', label: 'Kiểm tra và dựng Bản đọc', detail: 'Chỉ nội dung hợp lệ được ghi vào Bản đọc thông minh.' },
+        ]
+      : [
+          { key: 'prepare', label: 'Tiếp nhận nguồn', detail: 'Kiểm tra dữ liệu đầu vào và quyền truy cập.' },
+          { key: 'reader', label: 'Nhập Bản đọc thông minh', detail: 'Ưu tiên nguồn có cấu trúc trước khi dùng PDF.' },
+          { key: 'original', label: 'Lưu tài liệu gốc', detail: 'Chỉ lưu PDF từ nguồn hợp pháp hoặc tệp đã được tải lên.' },
+          { key: 'finish', label: 'Hoàn thiện dữ liệu', detail: 'Đồng bộ định danh, trạng thái đọc và thông tin xem trước.' },
+        ]
+  return definitions.map((definition, index) => ({
+    ...definition,
+    activeDetail: index === currentStageIndex.value
+      ? (sourceProgressStore.pipelineKind === 'pdf' ? definition.detail : sourceProgressStore.stageDetail)
+      : definition.detail,
+    state: sourceProgressStore.status === 'cancelled' && index === currentStageIndex.value
+      ? 'failed'
+      : index < currentStageIndex.value || sourceProgressStore.status === 'success'
+        ? 'done'
+        : index === currentStageIndex.value
+          ? 'active'
+          : 'pending',
   }))
 })
 </script>
-
-<style scoped>
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.82);
-  z-index: var(--z-modal, 300);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
-}
-
-.modal-container {
-  background: #181818;
-  border: 1px solid #262626;
-  border-radius: var(--radius-xl);
-  width: 540px;
-  max-width: calc(100vw - 32px);
-  display: flex;
-  flex-direction: column;
-  outline: none;
-  overflow: hidden;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid #262626;
-  flex-shrink: 0;
-}
-
-.modal-title-text {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-}
-
-.modal-close-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.modal-close-btn:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-
-.modal-body-content {
-  padding: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.modal-source-info {
-  border-bottom: 1px solid #262626;
-  padding-bottom: var(--space-4);
-}
-
-.source-title-heading {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  margin: 0 0 var(--space-1) 0;
-  line-height: 1.4;
-}
-
-.source-subtitle {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-.docling-stage-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.docling-stage-list li { display: grid; grid-template-columns: 18px 1fr; gap: 9px; padding: 8px 10px; border: 1px solid #292929; border-radius: var(--radius-md); color: var(--color-text-muted); }
-.docling-stage-list li > span { padding-top: 1px; font-size: 11px; text-align: center; }
-.docling-stage-list strong { display: block; color: inherit; font-size: var(--font-size-xs); }
-.docling-stage-list small { display: block; margin-top: 2px; color: var(--color-text-muted); font-size: 10px; line-height: 1.4; }
-.docling-stage-list .is-active { border-color: rgba(59,130,246,.42); color: #93c5fd; background: rgba(59,130,246,.06); }
-.docling-stage-list .is-done { color: #6ee7b7; }
-
-.pending-analysis-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) 0;
-}
-
-.loading-spinner-wrapper {
-  display: flex;
-  justify-content: center;
-  margin-bottom: var(--space-2);
-}
-
-.spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid #262626;
-  border-top: 3px solid #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.progress-details {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
-.progress-text {
-  font-weight: var(--font-weight-medium);
-}
-
-.progress-percent {
-  font-family: var(--font-family-mono, monospace);
-  color: #3b82f6;
-}
-
-.progress-bar-bg {
-  width: 100%;
-  height: 6px;
-  background: #262626;
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: #3b82f6;
-  border-radius: var(--radius-full);
-  transition: width 0.3s ease;
-}
-
-.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.18s ease; }
-.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
-</style>

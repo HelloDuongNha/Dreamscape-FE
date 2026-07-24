@@ -46,20 +46,18 @@ export const usePostStore = defineStore('post', () => {
     fetchedDream.value    = null
     isLoadingComments.value = true
     try {
-      const commentsPromise = apiClient.get<CommentListResponse>(`/dreams/${id}/comments`)
       const dreamStore = useDreamStore()
       const existingDream = dreamStore.dreams.find(d => d._id === id)
-
+      const [commentsRes, dreamRes] = await Promise.all([
+        apiClient.get<CommentListResponse>(`/dreams/${id}/comments`),
+        apiClient.get<{ success: boolean; data: ApiDream }>(`/dreams/${id}`),
+      ])
+      focusedComments.value = commentsRes.data.data
       if (existingDream) {
+        const populatedUser = existingDream.userId
+        Object.assign(existingDream, dreamRes.data.data, { userId: populatedUser })
         fetchedDream.value = existingDream
-        const { data } = await commentsPromise
-        focusedComments.value = data.data
       } else {
-        const [commentsRes, dreamRes] = await Promise.all([
-          commentsPromise,
-          apiClient.get<{ success: boolean; data: ApiDream }>(`/dreams/${id}`)
-        ])
-        focusedComments.value = commentsRes.data.data
         fetchedDream.value = dreamRes.data.data
       }
     } catch (err) {

@@ -19,7 +19,7 @@ export default {
   unreadCount: '{count} chưa đọc',
   // Moderation (moderator-only nav items)
   moderationSources: 'Duyệt nguồn',
-  ruleReview: 'Duyệt quy luật',
+  ruleReview: 'Duyệt lập luận',
   // Header page titles — keyed by Vue Router route name
   pageHome: 'Trang chủ',
   pageOracle: 'Oracle',
@@ -31,7 +31,7 @@ export default {
   pageLibrarySourceDetail: 'Chi tiết tài liệu',
   pageModerationSources: 'Duyệt nguồn',
   pageModerationSourcePreview: 'Xem trước tài liệu',
-  pageModerationRuleCandidates: 'Duyệt quy luật',
+  pageModerationRuleCandidates: 'Duyệt lập luận',
   pageFallback: 'DreamScape',
   titleLogin: 'Đăng nhập — DreamScape',
   titleRegister: 'Đăng ký — DreamScape',
@@ -46,6 +46,6 @@ export default {
   titleLibrarySourceDetail: 'Chi tiết tài liệu — DreamScape',
   titleModerationSources: 'Duyệt nguồn — DreamScape',
   titleModerationSourcePreview: 'Xem trước tài liệu — DreamScape',
-  titleModerationRuleCandidates: 'Duyệt quy luật — DreamScape',
+  titleModerationRuleCandidates: 'Duyệt lập luận — DreamScape',
   titleFallback: 'DreamScape',
 } as const

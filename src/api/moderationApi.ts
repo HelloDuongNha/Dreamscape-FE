@@ -4,6 +4,34 @@ import type { TranslateReaderRequest, TranslateReaderResponse } from '../feature
 export interface ReviewSourcePayload {
   reviewStatus: 'approved' | 'rejected'
   reviewNote?: string
+  title?: string
+}
+
+export interface PdfImportProgressResponse {
+  progress: {
+    stage: 'received' | 'inspecting_text' | 'ocr_processing' | 'parsing_layout' | 'cleaning_ocr' | 'compiling_reader' | 'completed' | 'failed' | 'cancelled'
+    startedAt: string
+    updatedAt: string
+    expectedDurationSeconds: number
+    pageCount: number
+    fileSizeBytes: number
+    ocrExpected: boolean
+    completedAt?: string
+    durationMs?: number
+    timingDeltaSeconds?: number
+    failureCode?: string
+    failureMessage?: string
+  } | null
+  estimateSeconds: number
+  history: Array<{
+    durationMs: number
+    estimatedDurationSeconds: number
+    pageCount: number
+    fileSizeBytes: number
+    ocrUsed: boolean
+    succeeded?: boolean
+    completedAt: string
+  }>
 }
 
 export interface GetModerationSourcesParams {
@@ -47,6 +75,15 @@ export interface SourceContribution {
     sectionCount: number
     chunkCount: number
     builtAt: string
+  }>
+  pdfImportHistory?: Array<{
+    durationMs: number
+    estimatedDurationSeconds: number
+    pageCount: number
+    fileSizeBytes: number
+    ocrUsed: boolean
+    succeeded?: boolean
+    completedAt: string
   }>
   readableInApp?: boolean
   fullTextStatus?: 'none' | 'importing' | 'imported' | 'failed' | 'available'
@@ -201,17 +238,30 @@ export const reviewSource = async (
   return data
 }
 
+export const updateSourceContributionTitle = async (
+  id: string,
+  title: string,
+): Promise<{ success: boolean; message?: string; data?: { title: string } }> => {
+  const { data } = await apiClient.patch<{
+    success: boolean
+    message?: string
+    data?: { title: string }
+  }>(`/moderation/sources/${id}/title`, { title })
+  return data
+}
+
 /**
  * Triggers manual open-access fulltext import for one AcademicSource.
  */
 export const importFullText = async (
-  id: string
+  id: string,
+  signal?: AbortSignal,
 ): Promise<{ success: boolean; message?: string; data?: any }> => {
   const { data } = await apiClient.post<{
     success: boolean
     message?: string
     data?: any
-  }>(`/moderation/sources/${id}/import-fulltext`)
+  }>(`/moderation/sources/${id}/import-fulltext`, undefined, { signal })
   return data
 }
 
@@ -219,7 +269,8 @@ export const importFullText = async (
  * Triggers destructive re-import of fulltext for one AcademicSource.
  */
 export const reimportFullText = async (
-  id: string
+  id: string,
+  signal?: AbortSignal,
 ): Promise<{ success: boolean; reimported: boolean; cleared: any; importResult: any; warnings: string[] }> => {
   const { data } = await apiClient.post<{
     success: boolean
@@ -227,7 +278,7 @@ export const reimportFullText = async (
     cleared: any
     importResult: any
     warnings: string[]
-  }>(`/moderation/sources/${id}/reimport-fulltext`)
+  }>(`/moderation/sources/${id}/reimport-fulltext`, undefined, { signal })
   return data
 }
 
@@ -263,8 +314,8 @@ export const getModerationSourcePdfInline = async (id: string): Promise<Blob> =>
 /**
  * Triggers online PDF caching for moderation sources.
  */
-export const cacheModerationSourceOriginalPdf = async (id: string, options?: { force?: boolean }): Promise<any> => {
-  const { data } = await apiClient.post<any>(`/moderation/sources/${id}/cache-original-pdf`, options)
+export const cacheModerationSourceOriginalPdf = async (id: string, options?: { force?: boolean }, signal?: AbortSignal): Promise<any> => {
+  const { data } = await apiClient.post<any>(`/moderation/sources/${id}/cache-original-pdf`, options, { signal })
   return data
 }
 
@@ -298,9 +349,20 @@ export const deleteModerationSourceOriginalPdf = async (id: string): Promise<any
 /**
  * Triggers PDF ingestion extraction/compilation processing for moderation contributions.
  */
-export const processUploadedPdfForContribution = async (id: string, forceReplace = false, structuredFirst = false): Promise<any> => {
-  const { data } = await apiClient.post<any>(`/moderation/sources/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst })
+export const processUploadedPdfForContribution = async (id: string, forceReplace = false, structuredFirst = false, signal?: AbortSignal): Promise<any> => {
+  const { data } = await apiClient.post<any>(`/moderation/sources/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst }, { signal })
   return data
+}
+
+export const cancelUploadedPdfImportForContribution = async (id: string): Promise<void> => {
+  await apiClient.post(`/moderation/sources/${id}/pdf-import-cancel`)
+}
+
+export const getUploadedPdfImportProgressForContribution = async (id: string): Promise<PdfImportProgressResponse> => {
+  const { data } = await apiClient.get<{ success: boolean; data: PdfImportProgressResponse }>(
+    `/moderation/sources/${id}/pdf-import-progress`
+  )
+  return data.data
 }
 
 /**

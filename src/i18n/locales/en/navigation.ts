@@ -20,7 +20,7 @@ export default {
   unreadCount: '{count} unread',
   // Moderation (moderator-only nav items)
   moderationSources: 'Source review',
-  ruleReview: 'Rule review',
+  ruleReview: 'Argument review',
   // Header page titles — keyed by Vue Router route name
   pageHome: 'Home',
   pageOracle: 'Oracle',
@@ -32,7 +32,7 @@ export default {
   pageLibrarySourceDetail: 'Source detail',
   pageModerationSources: 'Source review',
   pageModerationSourcePreview: 'Source preview',
-  pageModerationRuleCandidates: 'Rule review',
+  pageModerationRuleCandidates: 'Argument review',
   pageFallback: 'DreamScape',
   titleLogin: 'Sign in — DreamScape',
   titleRegister: 'Create Account — DreamScape',
@@ -47,6 +47,6 @@ export default {
   titleLibrarySourceDetail: 'Source Detail — DreamScape',
   titleModerationSources: 'Source Review — DreamScape',
   titleModerationSourcePreview: 'Source Preview — DreamScape',
-  titleModerationRuleCandidates: 'Rule Review — DreamScape',
+  titleModerationRuleCandidates: 'Argument Review — DreamScape',
   titleFallback: 'DreamScape',
 } as const

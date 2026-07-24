@@ -53,8 +53,34 @@ export interface OracleCitationDto {
   sourceType: 'academic_source' | 'own_dream' | 'public_dream'
   sourceId: string
   title: string
+  year?: number
   excerpt: string
   detail?: string
+  ruleLinks?: OracleCitationRuleLinkDto[]
+}
+
+export interface OracleCitationRuleLinkDto {
+  ruleId: string
+  ruleCode: string
+  statement: string
+  localizedStatement?: { vi: string; en: string }
+  quote: string
+  evidenceScore: number
+  supportingSourceCount: number
+  verificationKey?: string
+  verificationQuestion?: string
+  localizedVerificationQuestion?: { vi: string; en: string }
+  currentUserAnswer?: 'yes' | 'no' | 'unsure' | null
+}
+
+export interface OracleRuleScoreUpdateDto {
+  ruleId: string
+  score: number
+  previousScore: number
+  scoreDelta: number
+  validationAdjustment: number
+  relation: 'direct' | 'shared_quote'
+  voteDelta: -2 | -1 | 0 | 1 | 2
 }
 
 export interface OracleRunDto {
@@ -77,6 +103,43 @@ export interface OracleRunStatusDto {
   stage?: 'thinking' | 'preparing' | 'completed' | null
   stageStartedAt?: string | null
   errorCode?: string | null
+}
+
+export async function submitOracleCitationFeedback(input: {
+  turnId: string
+  citationIndex: number
+  ruleId: string
+  answer: 'yes' | 'no' | 'unsure' | null
+}): Promise<{
+  ruleId: string
+  answer: 'yes' | 'no' | 'unsure' | null
+  score: number
+  scoreDelta: number
+  voteDelta: -2 | 0 | 2
+  scoreUpdates: OracleRuleScoreUpdateDto[]
+}> {
+  const { data } = await apiClient.post<OracleResponse<{
+    ruleId: string
+    answer: 'yes' | 'no' | 'unsure' | null
+    score: number
+    scoreDelta: number
+    voteDelta: -2 | 0 | 2
+    scoreUpdates: OracleRuleScoreUpdateDto[]
+  }>>(`/oracle/turns/${input.turnId}/citations/${input.citationIndex}/feedback`, {
+    ruleId: input.ruleId,
+    answer: input.answer,
+  })
+  return data.data
+}
+
+export async function getOracleCitationDetails(
+  turnId: string,
+  citationIndex: number
+): Promise<OracleCitationDto> {
+  const { data } = await apiClient.get<OracleResponse<OracleCitationDto>>(
+    `/oracle/turns/${turnId}/citations/${citationIndex}`
+  )
+  return data.data
 }
 
 export interface OracleStreamEvent {

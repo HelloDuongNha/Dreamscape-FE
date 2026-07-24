@@ -36,8 +36,22 @@ export interface OracleShellMessage {
     sourceType: 'academic_source' | 'own_dream' | 'public_dream';
     sourceId: string;
     title: string;
+    year?: number;
     excerpt: string;
     detail?: string;
+    ruleLinks?: Array<{
+      ruleId: string;
+      ruleCode: string;
+      statement: string;
+      localizedStatement?: { vi: string; en: string };
+      quote: string;
+      evidenceScore: number;
+      supportingSourceCount: number;
+      verificationKey?: string;
+      verificationQuestion?: string;
+      localizedVerificationQuestion?: { vi: string; en: string };
+      currentUserAnswer?: 'yes' | 'no' | 'unsure' | null;
+    }>;
   }>;
   suggestedPrompts?: string[];
   contextUsage?: {
