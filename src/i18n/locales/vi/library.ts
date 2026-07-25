@@ -110,7 +110,8 @@ export default {
   system: {
     documentProperties: 'Thuộc tính tài liệu', reject: 'Từ chối', approve: 'Duyệt', testingTools: 'Công cụ kiểm thử',
     readerBuilds: 'Lần dựng bản đọc', noReaderHistory: 'Chưa có lịch sử dựng để so sánh. Lần chạy tiếp theo sẽ được ghi lại.',
-    ruleRuns: 'Lần phân tích luật', loadingResults: 'Đang tải kết quả…', pending: 'chờ duyệt', approved: 'đã duyệt', rejected: 'từ chối',
+    ruleRuns: 'Lần phân tích lập luận', loadingResults: 'Đang tải kết quả…', pending: 'chờ duyệt', approved: 'đã duyệt', rejected: 'từ chối',
+    evidenceNeedsMatched: 'nhu cầu dẫn chứng đã khớp', evidenceNeedsResolved: 'nhu cầu dẫn chứng đã giải quyết',
     result: 'Kết quả', duration: 'Thời gian', analyzedChunks: 'Chunk được phân tích', evidenceChunks: 'Chunk thực sự làm dẫn chứng',
     createdMerged: 'Ứng viên tạo mới / gộp', rejectedSuggestions: 'Đề xuất bị loại', batchProgress: 'Tiến độ batch', rawVerified: 'Kết luận thô / đạt kiểm chứng',
     createdMergedRejected: 'Tạo mới / gộp / loại', targetEvidenceChunks: 'Chunk mục tiêu / làm dẫn chứng', stopReason: 'Lý do dừng', rejectionReasons: 'Vì sao lập luận đề xuất bị loại',

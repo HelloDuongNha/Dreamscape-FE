@@ -923,6 +923,20 @@
                     <span class="rule-count rule-count--pending"><strong>{{ ruleV3Summary.counts.pending }}</strong> {{ t('library.system.pending') }}</span>
                     <span class="rule-count rule-count--approved"><strong>{{ ruleV3Summary.counts.verified }}</strong> {{ t('library.system.approved') }}</span>
                     <span class="rule-count rule-count--rejected"><strong>{{ ruleV3Summary.counts.rejected }}</strong> {{ t('library.system.rejected') }}</span>
+                    <span
+                      v-if="ruleV3Summary.evidenceGapMatches.candidateFound > 0"
+                      class="rule-count rule-count--evidence"
+                    >
+                      <strong>{{ ruleV3Summary.evidenceGapMatches.candidateFound }}</strong>
+                      {{ t('library.system.evidenceNeedsMatched') }}
+                    </span>
+                    <span
+                      v-if="ruleV3Summary.evidenceGapMatches.resolved > 0"
+                      class="rule-count rule-count--resolved"
+                    >
+                      <strong>{{ ruleV3Summary.evidenceGapMatches.resolved }}</strong>
+                      {{ t('library.system.evidenceNeedsResolved') }}
+                    </span>
                   </div>
                   <div v-if="ruleV3Summary.runHistory.length" class="rule-run-history">
                     <details v-for="(run, index) in ruleV3Summary.runHistory" :key="run.runId" class="rule-run-history__item">
@@ -4092,7 +4106,7 @@ details[open] > summary .history-accordion__chevron { transform: rotate(0deg); }
 .rule-analysis-summary { display: grid; gap: 9px; padding: 10px; border: 1px solid #312e81; border-radius: 9px; background: rgba(30, 27, 75, .28); }
 .rule-analysis-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
 .rule-count { display: flex; flex-direction: column; gap: 2px; padding: 7px 5px; border-radius: 7px; background: rgba(15, 23, 42, .64); color: #94a3b8; text-align: center; font-size: 9px; }
-.rule-count strong { font-size: 14px; }.rule-count--pending strong { color: #fbbf24; }.rule-count--approved strong { color: #34d399; }.rule-count--rejected strong { color: #f87171; }
+.rule-count strong { font-size: 14px; }.rule-count--pending strong { color: #fbbf24; }.rule-count--approved strong { color: #34d399; }.rule-count--rejected strong { color: #f87171; }.rule-count--evidence strong { color: #60a5fa; }.rule-count--resolved strong { color: #2dd4bf; }
 .run-status--success { color: #34d399 !important; }.run-status--failed { color: #f87171 !important; }.run-status--pending { color: #fbbf24 !important; }
 .rule-summary-link { padding: 7px 8px; border: 1px solid #4338ca; border-radius: 7px; background: rgba(67, 56, 202, .14); color: #c7d2fe; cursor: pointer; font-size: 10px; font-weight: 650; }.rule-summary-link:hover { background: rgba(67, 56, 202, .24); }
 .rule-run-history { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; padding-right: 3px; overscroll-behavior: contain; }

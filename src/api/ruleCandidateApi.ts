@@ -343,6 +343,10 @@ export interface RuleV3SourceAnalysisSummary {
     rejected: number
     retired: number
   }
+  evidenceGapMatches: {
+    candidateFound: number
+    resolved: number
+  }
   totalRuleCount: number
   runHistory: RuleV3SourceRunSummary[]
   latestRun: RuleV3SourceRunSummary | null
