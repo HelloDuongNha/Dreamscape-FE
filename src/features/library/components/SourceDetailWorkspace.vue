@@ -938,6 +938,33 @@
                       {{ t('library.system.evidenceNeedsResolved') }}
                     </span>
                   </div>
+                  <details v-if="ruleV3Summary.evidenceGapDetails.length" class="evidence-match-details">
+                    <summary>
+                      <span class="history-accordion__chevron" aria-hidden="true">⌄</span>
+                      <span>
+                        <strong>{{ t('library.system.evidenceMatchDetails') }}</strong>
+                        <small>{{ t('library.system.evidenceMatchDetailsHint') }}</small>
+                      </span>
+                    </summary>
+                    <div class="evidence-match-list">
+                      <article v-for="gap in ruleV3Summary.evidenceGapDetails" :key="gap.gapId" class="evidence-match-item">
+                        <div>
+                          <span :class="['status-chip', gap.status === 'resolved' ? 'status-verified' : 'status-pending']">
+                            {{ gap.status === 'resolved' ? t('library.system.evidenceResolved') : t('library.system.evidenceCandidateOnly') }}
+                          </span>
+                          <small v-if="gap.occurrenceCount > 1">{{ t('library.system.evidenceOccurrenceCount', { count: gap.occurrenceCount }) }}</small>
+                        </div>
+                        <strong>{{ gap.localizedClaim ? (locale === 'vi' ? gap.localizedClaim.vi : gap.localizedClaim.en) : gap.claim }}</strong>
+                        <ul>
+                          <li v-for="rule in gap.rules" :key="rule.ruleId">
+                            <span translate="no">{{ rule.ruleCode }}</span>
+                            <span>{{ rule.statement }}</span>
+                            <small>{{ rule.evidenceScore }}/100 · {{ rule.resolutionRole === 'resolved' ? t('library.system.directlyResolved') : t('library.system.candidateMatch') }}</small>
+                          </li>
+                        </ul>
+                      </article>
+                    </div>
+                  </details>
                   <div v-if="ruleV3Summary.runHistory.length" class="rule-run-history">
                     <details v-for="(run, index) in ruleV3Summary.runHistory" :key="run.runId" class="rule-run-history__item">
                       <summary>
@@ -1281,6 +1308,7 @@ import { useAuthStore } from '@/store/useAuthStore'
 import { getSourcePreview, reviewSource, updateSourceContributionTitle, getModerationSourcePdfInline, cacheModerationSourceOriginalPdf, uploadModerationSourcePdf, deleteModerationSourceOriginalPdf } from '@/api/moderationApi'
 import { useSmartReaderTranslation } from '../composables/useSmartReaderTranslation'
 import { repairOcrHtml, repairOcrText } from '../services/ocrTextRepair.service'
+import { estimateRuleSecondsPerBatch } from '../services/ruleExtractionTiming.service'
 import {
   getRuleV3SourceAnalysisSummary,
   type RuleV3SourceAnalysisSummary,
@@ -3586,15 +3614,12 @@ async function confirmRuleV3Extraction() {
   await loadRuleV3Summary()
   if (!ruleV3Summary.value && previousSummary) ruleV3Summary.value = previousSummary
   const latestRun = ruleV3Summary.value?.latestRun
-  const latestSuccessfulRun = ruleV3Summary.value?.runHistory.find(run => run.status === 'success' && run.durationMs)
-  const historicalTotalSeconds = latestSuccessfulRun?.durationMs
-    ? latestSuccessfulRun.durationMs / 1000
-    : null
+  const historicalSecondsPerBatch = estimateRuleSecondsPerBatch(ruleV3Summary.value?.runHistory || [])
   await extractionStore.startExtraction(
     source.value._id,
     source.value.title || t('library.readerLocal.academicDocument'),
     Boolean(latestRun),
-    historicalTotalSeconds
+    historicalSecondsPerBatch
   )
 }
 const readerProvenance = computed(() => String(
@@ -4107,6 +4132,17 @@ details[open] > summary .history-accordion__chevron { transform: rotate(0deg); }
 .rule-analysis-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
 .rule-count { display: flex; flex-direction: column; gap: 2px; padding: 7px 5px; border-radius: 7px; background: rgba(15, 23, 42, .64); color: #94a3b8; text-align: center; font-size: 9px; }
 .rule-count strong { font-size: 14px; }.rule-count--pending strong { color: #fbbf24; }.rule-count--approved strong { color: #34d399; }.rule-count--rejected strong { color: #f87171; }.rule-count--evidence strong { color: #60a5fa; }.rule-count--resolved strong { color: #2dd4bf; }
+.evidence-match-details { border: 1px solid rgba(96, 165, 250, .25); border-radius: 8px; background: rgba(15, 23, 42, .38); }
+.evidence-match-details > summary { display: flex; align-items: center; gap: 7px; padding: 8px; cursor: pointer; color: #dbeafe; list-style: none; }
+.evidence-match-details > summary span:last-child { display: grid; gap: 2px; }
+.evidence-match-details > summary small { color: #94a3b8; font-size: 9px; font-weight: 450; }
+.evidence-match-list { display: grid; gap: 6px; max-height: 300px; overflow-y: auto; padding: 0 7px 7px; }
+.evidence-match-item { display: grid; gap: 6px; padding: 8px; border-radius: 7px; background: rgba(2, 6, 23, .52); }
+.evidence-match-item > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #94a3b8; font-size: 9px; }
+.evidence-match-item > strong { color: #e2e8f0; font-size: 10px; line-height: 1.45; }
+.evidence-match-item ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.evidence-match-item li { display: grid; grid-template-columns: auto 1fr; gap: 3px 7px; padding-top: 5px; border-top: 1px solid rgba(148, 163, 184, .13); color: #cbd5e1; font-size: 9px; }
+.evidence-match-item li small { grid-column: 2; color: #93c5fd; }
 .run-status--success { color: #34d399 !important; }.run-status--failed { color: #f87171 !important; }.run-status--pending { color: #fbbf24 !important; }
 .rule-summary-link { padding: 7px 8px; border: 1px solid #4338ca; border-radius: 7px; background: rgba(67, 56, 202, .14); color: #c7d2fe; cursor: pointer; font-size: 10px; font-weight: 650; }.rule-summary-link:hover { background: rgba(67, 56, 202, .24); }
 .rule-run-history { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; padding-right: 3px; overscroll-behavior: contain; }

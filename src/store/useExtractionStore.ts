@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { cancelRuleV3Extraction, getRuleV3ExtractionProgress, startRuleV3Extraction } from '@/api/ruleCandidateApi'
+import { estimateRuleDurationSeconds } from '@/features/library/services/ruleExtractionTiming.service'
 import { useAcademicJobQueueStore } from './useAcademicJobQueueStore'
 
 const EXTRACTION_TASK_KEY = 'dreamscape:pinned-task:rule-extraction:v1'
@@ -40,7 +41,7 @@ export const useExtractionStore = defineStore('extraction', () => {
   let etaAnchorAt = 0
   let etaAnchorSeconds: number | null = null
   let etaExpectedTotalSeconds: number | null = null
-  let plannedDurationSeconds: number | null = null
+  let plannedSecondsPerBatch = 12
 
   function startClock(startedAt = Date.now()) {
     if (clockInterval) clearInterval(clockInterval)
@@ -110,7 +111,7 @@ export const useExtractionStore = defineStore('extraction', () => {
     etaExpectedTotalSeconds = seconds === null ? null : elapsedSeconds.value + seconds
   }
 
-  async function runExtraction(id: string, title: string, promotedFromQueue = false, replaceExisting = false, baselineTotalSeconds: number | null = null) {
+  async function runExtraction(id: string, title: string, promotedFromQueue = false, replaceExisting = false, secondsPerBatch = 12) {
     stopTracking()
 
     sourceId.value = id
@@ -132,7 +133,7 @@ export const useExtractionStore = defineStore('extraction', () => {
     estimatedRemainingSeconds.value = null
     etaAnchorSeconds = null
     etaExpectedTotalSeconds = null
-    plannedDurationSeconds = baselineTotalSeconds && baselineTotalSeconds > 0 ? baselineTotalSeconds : null
+    plannedSecondsPerBatch = Number.isFinite(secondsPerBatch) && secondsPerBatch > 0 ? secondsPerBatch : 12
     processedLabel.value = ''
     currentStage.value = 'initializing'
     totalBatches.value = 0
@@ -161,12 +162,12 @@ export const useExtractionStore = defineStore('extraction', () => {
     }
   }
 
-  function startExtraction(id: string, title: string, replaceExisting = false, baselineTotalSeconds: number | null = null) {
+  function startExtraction(id: string, title: string, replaceExisting = false, secondsPerBatch = 12) {
     return useAcademicJobQueueStore().enqueue({
       sourceId: id,
       title,
       kind: 'rules',
-      run: ({ promotedFromQueue }) => runExtraction(id, title, promotedFromQueue, replaceExisting, baselineTotalSeconds),
+      run: ({ promotedFromQueue }) => runExtraction(id, title, promotedFromQueue, replaceExisting, secondsPerBatch),
     })
   }
 
@@ -201,9 +202,10 @@ export const useExtractionStore = defineStore('extraction', () => {
         // conservative per-batch estimate. Progress observations never make
         // the countdown jump around.
         if (etaAnchorSeconds === null && total > 0) {
-          setEtaAnchor(plannedDurationSeconds !== null
-            ? Math.max(1, plannedDurationSeconds - elapsedSeconds.value)
-            : total * 32 + 8)
+          setEtaAnchor(Math.max(
+            1,
+            estimateRuleDurationSeconds(total, plannedSecondsPerBatch) - elapsedSeconds.value,
+          ))
         }
       } else if (run.currentStage === 'saving_candidates') {
         progress.value = 95
@@ -212,9 +214,7 @@ export const useExtractionStore = defineStore('extraction', () => {
           ? 'Bộ kết quả cũ chỉ được thay khi toàn bộ lập luận đã kiểm chứng lưu thành công.'
           : 'Lập luận không đáp ứng hợp đồng lưu trữ sẽ bị loại và ghi rõ lý do.'
         if (etaAnchorSeconds === null) {
-          setEtaAnchor(plannedDurationSeconds !== null
-            ? Math.max(1, plannedDurationSeconds - elapsedSeconds.value)
-            : 8)
+          setEtaAnchor(Math.max(1, 8 - elapsedSeconds.value))
         }
       }
 

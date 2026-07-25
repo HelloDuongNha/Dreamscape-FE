@@ -202,6 +202,37 @@
 
             </section>
 
+            <section v-if="evidenceGapMatches.length" class="content-card evidence-gap-card">
+              <div class="section-heading">
+                <div>
+                  <h3>{{ t('rules.evidenceGapMatches') }}</h3>
+                  <p class="section-description">{{ t('rules.evidenceGapMatchesDescription') }}</p>
+                </div>
+                <span class="evidence-gap-count">{{ evidenceGapMatches.length }}</span>
+              </div>
+              <div class="evidence-gap-list">
+                <article v-for="match in evidenceGapMatches" :key="match.gapId" class="evidence-gap-item">
+                  <div class="evidence-gap-item__heading">
+                    <span :class="['evidence-gap-state', {
+                      'evidence-gap-state--resolved': match.resolvedByRule,
+                      'evidence-gap-state--ready': !match.resolvedByRule && match.blockers.length === 1 && match.blockers[0] === 'approval',
+                    }]">
+                      {{ evidenceGapStateLabel(match) }}
+                    </span>
+                    <span>{{ t('rules.evidenceGapOccurrences', { count: match.occurrenceCount }) }}</span>
+                  </div>
+                  <strong>{{ localizedEvidenceGapClaim(match) }}</strong>
+                  <div class="evidence-gap-match-meter">
+                    <span :style="{ width: `${Math.round(match.similarity * 100)}%` }"></span>
+                  </div>
+                  <p>{{ evidenceGapExplanation(match) }}</p>
+                  <ul v-if="!match.resolvedByRule && match.blockers.length" class="evidence-gap-blockers">
+                    <li v-for="blocker in match.blockers" :key="blocker">{{ evidenceGapBlockerLabel(blocker) }}</li>
+                  </ul>
+                </article>
+              </div>
+            </section>
+
             <section v-if="ruleRelationships.length" class="content-card relationship-card">
               <div class="section-heading">
                 <div>
@@ -438,7 +469,9 @@ const selectedCandidate = ref<RuleCandidate | null>(null)
 const evidenceChunks = ref<EvidenceChunkPreview[]>([])
 const evidenceExcerpts = ref<EvidenceExcerpt[]>([])
 type RuleRelationshipRow = NonNullable<CandidateDetailResponse['ruleRelationships']>[number]
+type EvidenceGapMatchRow = NonNullable<CandidateDetailResponse['evidenceGapMatches']>[number]
 const ruleRelationships = ref<RuleRelationshipRow[]>([])
+const evidenceGapMatches = ref<EvidenceGapMatchRow[]>([])
 const visibleContexts = ref<Record<string, boolean>>({})
 const isLoadingList = ref(false)
 const isLoadingDetail = ref(false)
@@ -805,6 +838,7 @@ async function fetchCandidates() {
       evidenceChunks.value = []
       evidenceExcerpts.value = []
       ruleRelationships.value = []
+      evidenceGapMatches.value = []
     }
   } catch {
     settingsStore.showToast(t('rules.toasts.listFailed'), 'error')
@@ -822,10 +856,12 @@ async function selectCandidate(id: string) {
     evidenceChunks.value = response.data.evidenceChunks || []
     evidenceExcerpts.value = (response.data.evidenceExcerpts || []).filter(item => item.excerpt?.trim())
     ruleRelationships.value = response.data.ruleRelationships || []
+    evidenceGapMatches.value = response.data.evidenceGapMatches || []
     visibleContexts.value = {}
   } catch {
     selectedCandidate.value = null
     ruleRelationships.value = []
+    evidenceGapMatches.value = []
     settingsStore.showToast(t('rules.toasts.detailFailed'), 'error')
   } finally {
     isLoadingDetail.value = false
@@ -963,6 +999,32 @@ function scoreLevelClass(score?: number) {
   return value >= 80 ? 'level-good' : value >= 60 ? 'level-moderate' : 'level-caution'
 }
 
+function localizedEvidenceGapClaim(match: EvidenceGapMatchRow) {
+  return locale.value === 'vi' ? match.claim.vi : match.claim.en
+}
+
+function evidenceGapStateLabel(match: EvidenceGapMatchRow) {
+  if (match.resolvedByRule) return t('rules.evidenceGapResolved')
+  if (match.blockers.length === 1 && match.blockers[0] === 'approval') return t('rules.evidenceGapReady')
+  return t('rules.evidenceGapCandidate')
+}
+
+function evidenceGapExplanation(match: EvidenceGapMatchRow) {
+  if (match.resolvedByRule) return t('rules.evidenceGapResolvedDescription')
+  if (match.blockers.length === 1 && match.blockers[0] === 'approval') return t('rules.evidenceGapReadyDescription')
+  return t('rules.evidenceGapCandidateDescription')
+}
+
+function evidenceGapBlockerLabel(blocker: EvidenceGapMatchRow['blockers'][number]) {
+  const labels = {
+    approval: t('rules.evidenceGapBlockers.approval'),
+    score: t('rules.evidenceGapBlockers.score'),
+    independent_sources: t('rules.evidenceGapBlockers.independent_sources'),
+    similarity: t('rules.evidenceGapBlockers.similarity'),
+  }
+  return labels[blocker]
+}
+
 function scoreColor(score?: number) {
   const value = Math.max(0, Math.min(100, Number(score) || 0))
   const hue = Math.round(value * 1.2)
@@ -1021,6 +1083,7 @@ function scoreColor(score?: number) {
 .assessment-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }.assessment-card h3 { font-size: 1.45rem; }.level-badge { padding: 5px 9px; border-radius: 999px; font-size: .7rem; font-weight: 750; }.level-good { color: #34d399; background: rgba(16,185,129,.12); }.level-moderate { color: #60a5fa; background: rgba(59,130,246,.12); }.level-caution { color: #fbbf24; background: rgba(245,158,11,.12); }
 .assessment-title { font-size: .95rem !important; }.score-number { display: block; margin-top: 5px; font-size: 1.65rem; line-height: 1; }.score-track { width: 100%; height: 9px; margin: 14px 0; border: 1px solid rgba(148,163,184,.16); border-radius: 999px; overflow: hidden; background: #111827; }.score-track span { display: block; min-width: 2px; height: 100%; border-radius: inherit; transition: width .25s ease; }.score-conclusion { margin: 0 0 7px; color: var(--color-text-primary); font-size: .8rem; line-height: 1.5; }.score-note { color: var(--color-text-muted); font-size: .76rem; line-height: 1.5; }
 .criteria-list { display: flex; flex-direction: column; margin: 16px 0 0; border-top: 1px solid var(--color-border); }.criterion-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }.criterion-row dt { display: flex; align-items: center; gap: 7px; color: var(--color-text-secondary); }.criterion-row dd { margin: 0; color: var(--color-text-primary); font-weight: 700; }.criterion-help { position: relative; }.criterion-help button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid var(--color-border); border-radius: 50%; background: transparent; color: var(--color-text-muted); cursor: pointer; font-size: .68rem; font-weight: 700; }.criterion-help > div { position: absolute; z-index: 20; top: 25px; left: 0; width: min(350px, 72vw); padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); box-shadow: 0 12px 30px rgba(0,0,0,.24); color: var(--color-text-secondary); font-size: .75rem; line-height: 1.45; }.criterion-help > div strong { color: var(--color-text-primary); }.criterion-help > div p { margin: 5px 0 0; }.criterion-help > div ul { margin: 7px 0 12px; padding-left: 20px; list-style: disc outside; }.criterion-help > div li { margin: 5px 0; padding-left: 2px; }.quality-blocked { display: flex; flex-direction: column; gap: 3px; margin-top: 15px; padding: 11px 13px; border: 1px solid rgba(239,68,68,.32); border-radius: var(--radius-md); color: #fca5a5; font-size: .78rem; }.quality-blocked span { color: var(--color-text-secondary); }
+.evidence-gap-card { border-color: rgba(59,130,246,.28); background: color-mix(in srgb, var(--color-bg-base) 96%, #2563eb); }.evidence-gap-count { display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 8px; border-radius: 999px; background: rgba(59,130,246,.14); color: #93c5fd; font-size: .75rem; font-weight: 750; }.evidence-gap-list { display: grid; gap: 10px; margin-top: 16px; }.evidence-gap-item { padding: 13px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.evidence-gap-item__heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; color: var(--color-text-muted); font-size: .68rem; }.evidence-gap-item > strong { display: block; color: var(--color-text-primary); font-size: .84rem; line-height: 1.5; }.evidence-gap-state { padding: 3px 7px; border-radius: 999px; background: rgba(245,158,11,.1); color: #fbbf24; font-weight: 750; }.evidence-gap-state--ready { background: rgba(59,130,246,.12); color: #93c5fd; }.evidence-gap-state--resolved { background: rgba(16,185,129,.12); color: #6ee7b7; }.evidence-gap-match-meter { height: 4px; margin: 11px 0 9px; overflow: hidden; border-radius: 999px; background: rgba(148,163,184,.12); }.evidence-gap-match-meter span { display: block; height: 100%; border-radius: inherit; background: #60a5fa; }.evidence-gap-item > p { margin: 0; color: var(--color-text-secondary); font-size: .74rem; line-height: 1.5; }.evidence-gap-blockers { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }.evidence-gap-blockers li { padding: 4px 7px; border-radius: var(--radius-sm); background: rgba(148,163,184,.08); color: var(--color-text-muted); font-size: .68rem; }
 .citation-list { display: flex; flex-direction: column; gap: 12px; margin-top: 17px; }.citation-item { padding: 15px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.citation-meta { display: flex; justify-content: space-between; gap: 10px; color: var(--color-text-muted); font-size: .7rem; }.citation-item blockquote { margin: 12px 0; padding-left: 14px; border-left: 3px solid var(--accent); color: var(--color-text-primary); font-size: .9rem; line-height: 1.65; }.context-button { padding: 0; border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: .76rem; }.context-text { margin: 12px 0 0; padding: 12px; border-radius: var(--radius-md); background: var(--color-bg-base); color: var(--color-text-secondary); font-size: .78rem; line-height: 1.55; white-space: pre-wrap; }
 .relationship-card { display: grid; gap: 9px; }.related-rule { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); color: inherit; text-align: left; cursor: pointer; }.related-rule:hover { border-color: rgba(129,140,248,.42); }.related-rule strong { min-width: 0; color: var(--color-text-primary); font-size: .8rem; line-height: 1.4; }.related-rule small { color: var(--color-text-muted); white-space: nowrap; }.relation-kind { padding: 3px 7px; border-radius: 999px; color: #a5b4fc; background: rgba(99,102,241,.1); font-size: .65rem; font-weight: 700; }.relation-kind--contradictory { color: #fca5a5; background: rgba(239,68,68,.1); }.relation-kind--reverse_direction { color: #fcd34d; background: rgba(245,158,11,.1); }
 .relationship-group { display: grid; gap: 8px; padding: 11px; border: 1px solid var(--color-border); border-radius: var(--radius-md); }.relationship-group--mergeable { border-color: rgba(52,211,153,.25); background: rgba(16,185,129,.035); }.relationship-group__title { color: var(--color-text-primary); font-size: .78rem; }.relationship-group > p { margin: -3px 0 2px; color: var(--color-text-muted); font-size: .7rem; line-height: 1.45; }.related-rule__content { display: grid; min-width: 0; gap: 3px; }.related-rule__content small { overflow: hidden; text-overflow: ellipsis; white-space: normal; line-height: 1.35; }

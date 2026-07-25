@@ -168,6 +168,17 @@ export interface CandidateDetailResponse {
   candidate: RuleCandidate
   evidenceChunks: EvidenceChunkPreview[]
   evidenceExcerpts?: EvidenceExcerpt[]
+  evidenceGapMatches?: Array<{
+    gapId: string
+    claim: { key: string; vi: string; en: string }
+    status: 'unresolved' | 'candidate_found' | 'resolved'
+    occurrenceCount: number
+    similarity: number
+    linkedAsCandidate: boolean
+    resolvedByRule: boolean
+    resolutionReady: boolean
+    blockers: Array<'approval' | 'score' | 'independent_sources' | 'similarity'>
+  }>
   ruleRelationships?: Array<{
     ruleId: string
     ruleCode: string
@@ -347,6 +358,21 @@ export interface RuleV3SourceAnalysisSummary {
     candidateFound: number
     resolved: number
   }
+  evidenceGapDetails: Array<{
+    gapId: string
+    claim: string
+    localizedClaim?: { key: string; vi: string; en: string }
+    status: 'unresolved' | 'candidate_found' | 'resolved'
+    occurrenceCount: number
+    rules: Array<{
+      ruleId: string
+      ruleCode: string
+      statement: string
+      status: 'pending' | 'verified' | 'rejected' | 'retired'
+      evidenceScore: number
+      resolutionRole: 'candidate' | 'resolved'
+    }>
+  }>
   totalRuleCount: number
   runHistory: RuleV3SourceRunSummary[]
   latestRun: RuleV3SourceRunSummary | null
