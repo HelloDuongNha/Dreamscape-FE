@@ -29,6 +29,7 @@ interface PersistedDreamTask {
   dreamId: string
   presentation: DreamTaskPresentation
   expiresAt: number | null
+  createdAt: number
 }
 
 function analysisStatus(dream: ApiDream): DreamAnalysisStatus {
@@ -109,6 +110,7 @@ export const useOracleStore = defineStore('oracle', () => {
     dream: ApiDream,
     presentation: DreamTaskPresentation,
     expiresAt: number | null = null,
+    createdAt = Date.now(),
   ): DreamAnalysisTask {
     const existing = findTask(dream._id)
     const status = analysisStatus(dream)
@@ -119,7 +121,7 @@ export const useOracleStore = defineStore('oracle', () => {
       existing.expiresAt = expiresAt
       existing.startedAtMs = startedAtMs(dream)
       existing.progress = status === 'pending'
-        ? Math.max(existing.progress, initialProgress(dream))
+        ? initialProgress(dream)
         : initialProgress(dream)
       existing.statusMessage = dream.analysisMetadata?.statusMessage
         || existing.statusMessage
@@ -136,7 +138,7 @@ export const useOracleStore = defineStore('oracle', () => {
       startedAtMs: startedAtMs(dream),
       presentation,
       expiresAt,
-      createdAt: Date.now(),
+      createdAt,
     }
     tasks.value.push(task)
     return task
@@ -147,6 +149,7 @@ export const useOracleStore = defineStore('oracle', () => {
       dreamId: task.dreamId,
       presentation: task.presentation,
       expiresAt: task.expiresAt,
+      createdAt: task.createdAt,
     }))
     if (persistedTasks.length === 0) {
       localStorage.removeItem(ORACLE_DREAM_TASK_KEY)
@@ -253,7 +256,7 @@ export const useOracleStore = defineStore('oracle', () => {
         const metadata = dream.analysisMetadata
         if (metadata?.startedAt) task.startedAtMs = startedAtMs(dream)
         if (typeof metadata?.progress === 'number') {
-          task.progress = Math.max(task.progress, Math.min(99, metadata.progress))
+          task.progress = Math.min(99, Math.max(0, metadata.progress))
         }
         if (metadata?.statusMessage) task.statusMessage = metadata.statusMessage
         replaceDreamInFeed(dream)
@@ -318,36 +321,47 @@ export const useOracleStore = defineStore('oracle', () => {
               dreamId: saved.dreamId,
               presentation: 'pinned',
               expiresAt: saved.expiresAt || null,
+              createdAt: Date.now(),
             }]
           : []
 
-      await Promise.all(savedTasks.map(async persisted => {
+      const restoredTasks = await Promise.all(savedTasks.map(async persisted => {
         if (persisted.expiresAt && persisted.expiresAt <= Date.now()) return
         try {
           const { data } = await apiClient.get<{ success: boolean; data: ApiDream }>(
             `/dreams/${persisted.dreamId}`,
           )
-          if (!data.success) return
-
-          const status = analysisStatus(data.data)
-          const presentation = status === 'pending'
-            ? persisted.presentation === 'hidden' ? 'hidden' : 'pinned'
-            : 'pinned'
-          const expiresAt = status === 'pending'
-            ? null
-            : persisted.expiresAt || Date.now() + TERMINAL_DISPLAY_MS
-          const task = createOrUpdateTask(data.data, presentation, expiresAt)
-          replaceDreamInFeed(data.data)
-
-          if (status === 'pending') {
-            startPendingTask(task)
-          } else if (expiresAt) {
-            scheduleTerminalDismiss(task.dreamId, expiresAt - Date.now())
-          }
+          return data.success ? { persisted, dream: data.data } : undefined
         } catch {
           // One inaccessible/removed dream must not prevent restoring other jobs.
+          return undefined
         }
       }))
+
+      for (const restored of restoredTasks) {
+        if (!restored) continue
+        const { persisted, dream } = restored
+        const status = analysisStatus(dream)
+        const presentation = status === 'pending'
+          ? persisted.presentation === 'hidden' ? 'hidden' : 'pinned'
+          : 'pinned'
+        const expiresAt = status === 'pending'
+          ? null
+          : persisted.expiresAt || Date.now() + TERMINAL_DISPLAY_MS
+        const task = createOrUpdateTask(
+          dream,
+          presentation,
+          expiresAt,
+          Number.isFinite(persisted.createdAt) ? persisted.createdAt : Date.now(),
+        )
+        replaceDreamInFeed(dream)
+
+        if (status === 'pending') {
+          startPendingTask(task)
+        } else if (expiresAt) {
+          scheduleTerminalDismiss(task.dreamId, expiresAt - Date.now())
+        }
+      }
       activeDreamId.value = null
       isDialogVisible.value = false
       persistTasks()
