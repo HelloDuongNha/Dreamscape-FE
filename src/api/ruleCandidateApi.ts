@@ -99,6 +99,14 @@ export interface RuleCandidate {
   legitimacyLevel?: 'weak' | 'moderate' | 'strong' | 'mixed'
   legitimacyReason?: string
   evidenceCredibilityScore?: number
+  validationStats?: {
+    supports: number
+    weakens: number
+    unsure: number
+    directResponses: number
+    sharedQuoteResponses: number
+    netAdjustment: number
+  }
   oracleUsefulnessScore?: number
   claimTypeV3?: string
   effectPolarityV3?: string

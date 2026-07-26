@@ -135,6 +135,11 @@ export interface AiRealLifeHypothesis {
     chunkIds?: string[]
   }[]
   userFeedback?:         'yes' | 'no' | 'unsure' | null
+  ruleScore?:             number
+  ruleScoreDelta?:        number
+  ruleVoteDelta?:         number
+  validationSourceId?:    string
+  validationExactQuote?:  string
 }
 
 export interface AiDreamAnalysisResult {
@@ -156,9 +161,10 @@ export interface AiDreamAnalysisResult {
       dreamId: string
       title: string
       similarity: number
-      matchedOn: string[]
     }>
   }
+  creative_continuation_history?: Array<NonNullable<AiDreamAnalysisResult['creative_continuation']>>
+  creative_continuation_index?: number
   case_conclusion?: {
     status: 'preliminary' | 'clarified'
     headline: string
@@ -227,7 +233,6 @@ export interface AiDreamAnalysisResult {
     authorDisplayName: string
     sameAuthor: boolean
     similarity: number
-    matchedOn: string[]
   }[]
   feedback_revision?: {
     hypothesis: string

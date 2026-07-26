@@ -101,15 +101,19 @@ import {
   type OracleCitationRuleLinkDto,
 } from '@/api/oracleApi'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import apiClient from '@/api/client'
 
 const props = defineProps<{
   modelValue: boolean
   messageId: string
   citation: OracleCitationDto | null
+  feedbackOrigin?: 'oracle' | 'dream'
+  dreamId?: string
 }>()
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
   (event: 'open-source', sourceId: string): void
+  (event: 'feedback-updated', payload: any): void
 }>()
 const { t, locale } = useI18n()
 const settingsStore = useSettingsStore()
@@ -150,14 +154,22 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
   if (!props.citation || savingRuleId.value) return
   savingRuleId.value = rule.ruleId
   try {
-    const result = await submitOracleCitationFeedback({
-      turnId: props.messageId,
-      citationIndex: props.citation.index,
-      ruleId: rule.ruleId,
-      answer,
-    })
+    const result = props.feedbackOrigin === 'dream' && props.dreamId
+      ? (await apiClient.post(`/dreams/${props.dreamId}/hypothesis-feedback`, {
+        hypothesisIndex: rule.dreamHypothesisIndex,
+        verificationKey: rule.dreamVerificationKey,
+        answer,
+      })).data.data
+      : await submitOracleCitationFeedback({
+        turnId: props.messageId,
+        citationIndex: props.citation.index,
+        ruleId: rule.ruleId,
+        answer,
+      })
     rule.currentUserAnswer = answer
-    for (const update of result.scoreUpdates) {
+    emit('feedback-updated', result)
+    const scoreUpdates = result.scoreUpdates || result.ruleScoreUpdates || []
+    for (const update of scoreUpdates) {
       const visibleRule = props.citation.ruleLinks?.find((item) => item.ruleId === update.ruleId)
       if (!visibleRule) continue
       visibleRule.evidenceScore = update.score
@@ -173,6 +185,9 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
       }
     }
     const delta = result.scoreDelta
+      ?? scoreUpdates
+        .filter((item: any) => item.relation === 'direct')
+        .reduce((sum: number, item: any) => sum + (Number(item.scoreDelta) || 0), 0)
     const message = delta > 0
       ? t('oracle.sourceScoreIncreased', { points: delta })
       : delta < 0

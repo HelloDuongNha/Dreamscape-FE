@@ -71,6 +71,8 @@ export interface OracleCitationRuleLinkDto {
   verificationQuestion?: string
   localizedVerificationQuestion?: { vi: string; en: string }
   currentUserAnswer?: 'yes' | 'no' | 'unsure' | null
+  dreamHypothesisIndex?: number
+  dreamVerificationKey?: string
 }
 
 export interface OracleRuleScoreUpdateDto {

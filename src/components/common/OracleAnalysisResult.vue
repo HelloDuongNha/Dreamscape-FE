@@ -40,8 +40,8 @@
           <div v-if="item.sources?.length" class="oracle-item__sources oracle-item__sources--inline">
             <span v-for="(src, srcIdx) in item.sources" :key="srcIdx" class="source-citation-wrap">
               <span v-if="srcIdx === 0">Căn cứ: </span><span v-else class="source-separator">; </span>
-              <button type="button" class="source-citation-link" @click="navigateToSource(src.sourceId)">
-                {{ formatInlineCitation(src) }}
+              <button type="button" class="source-citation-link" @click="openCitationBySource(src.sourceId)">
+                {{ sourceMarker(src.sourceId) }} {{ formatInlineCitation(src) }}
               </button>
             </span>
           </div>
@@ -54,29 +54,14 @@
           <p v-if="feedbackSelections[questionKey(item, idx)] === 'yes' && item.ifYesMeaning" class="oracle-verification-card__result">{{ item.ifYesMeaning }}</p>
           <p v-else-if="feedbackSelections[questionKey(item, idx)] === 'no' && item.ifNoMeaning" class="oracle-verification-card__result">{{ item.ifNoMeaning }}</p>
           <p v-else-if="feedbackSelections[questionKey(item, idx)] === 'unsure'" class="oracle-verification-card__result">Chưa dùng hướng này làm kết luận; câu hỏi kế tiếp sẽ kiểm tra một khía cạnh khác nếu còn dữ kiện phù hợp.</p>
+          <span
+            v-if="item.ruleScore !== undefined && scoreDelta(item)"
+            class="oracle-rule-score-change"
+            :class="{ 'oracle-rule-score-change--down': scoreDelta(item) < 0 }"
+          >
+            {{ scoreDelta(item) > 0 ? '+' : '' }}{{ scoreDelta(item) }} · {{ item.ruleScore }}/100
+          </span>
         </article>
-        <div v-if="analysis.feedback_analysis" class="oracle-feedback-revision">
-          <span>Phân tích đã thay đổi theo câu trả lời của bạn</span>
-          <p>{{ analysis.feedback_analysis.interpretation }}</p>
-          <details class="oracle-feedback-revision__details">
-            <summary>Xem {{ analysis.feedback_analysis.confirmedFacts.length + analysis.feedback_analysis.rejectedDirections.length + (analysis.feedback_analysis.unresolvedQuestions?.length || 0) }} thay đổi chi tiết</summary>
-            <ul v-if="analysis.feedback_analysis.confirmedFacts.length" class="oracle-feedback-revision__list">
-              <li v-for="fact in analysis.feedback_analysis.confirmedFacts" :key="fact"><strong>Đã xác nhận:</strong> {{ fact }}</li>
-            </ul>
-            <ul v-if="analysis.feedback_analysis.rejectedDirections.length" class="oracle-feedback-revision__list">
-              <li v-for="direction in analysis.feedback_analysis.rejectedDirections" :key="direction"><strong>Đã loại khỏi trọng tâm:</strong> {{ direction }}</li>
-            </ul>
-            <ul v-if="analysis.feedback_analysis.unresolvedQuestions?.length" class="oracle-feedback-revision__list">
-              <li v-for="question in analysis.feedback_analysis.unresolvedQuestions" :key="question"><strong>Đang để mở:</strong> {{ question }}</li>
-            </ul>
-          </details>
-          <p v-if="analysis.feedback_changed_paths?.length" class="oracle-feedback-revision__hint">Chỉ những đoạn có nền tím nhạt bên dưới đã thực sự được viết lại theo câu trả lời này.</p>
-          <p v-else class="oracle-feedback-revision__hint">Câu trả lời đã được lưu nhưng chưa làm thay đổi đoạn phân tích nào.</p>
-        </div>
-        <div v-else-if="analysis.feedback_conclusion" class="oracle-feedback-revision">
-          <span>Điều câu trả lời vừa thay đổi</span>
-          <p>{{ analysis.feedback_conclusion }}</p>
-        </div>
       </section>
 
       <!-- Header -->
@@ -106,6 +91,15 @@
           <template v-for="(segment, segmentIdx) in feedbackSegments(analysis.core_analysis, 'core_analysis')" :key="`core-${segmentIdx}`">
             <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
           </template>
+          <button
+            v-for="source in answeredCitationSources"
+            :key="source.sourceId"
+            type="button"
+            class="source-citation-link oracle-inline-marker"
+            @click="openCitationBySource(source.sourceId)"
+          >
+            {{ sourceMarker(source.sourceId) }}
+          </button>
         </p>
       </section>
 
@@ -121,7 +115,7 @@
                 <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
               </template>
             </p>
-            <p class="oracle-thread__basis">Căn cứ diễn giải: trình tự chi tiết trong lời kể<span v-if="analysis.feedback_analysis"> và câu trả lời bạn vừa cung cấp</span>.</p>
+            <p class="oracle-thread__basis">Căn cứ diễn giải: trình tự chi tiết trong lời kể và các nguồn đã liên kết.</p>
             <div class="oracle-item__evidence">
               <span class="evidence-label">Chi tiết được nối lại:</span>
               <span v-for="(ev, evIdx) in thread.dreamEvidence" :key="evIdx" class="evidence-tag">“{{ ev }}”</span>
@@ -179,52 +173,24 @@
         </ul>
       </section>
 
-      <!-- Scientific Context Notes -->
-      <section v-if="analysis.scientific_context_notes && analysis.scientific_context_notes.length > 0" class="oracle-section">
-        <div class="oracle-section-heading">
-          <h3 class="oracle-section__title">Điều có thể đang diễn ra bên dưới giấc mơ</h3>
+      <section v-if="referenceSources.length" class="oracle-section oracle-sources">
+        <h3 class="oracle-section__title">Nguồn tham khảo</h3>
+        <div class="oracle-sources__list">
+          <button
+            v-for="(source, index) in referenceSources"
+            :key="source.key"
+            type="button"
+            class="oracle-source-card"
+            @click="openCitation(source)"
+          >
+            <span class="oracle-source-card__index">[{{ index + 1 }}]</span>
+            <span class="oracle-source-card__content">
+              <strong>{{ source.title || 'Tài liệu học thuật' }}</strong>
+              <small>{{ source.year || '' }}<template v-if="source.doi"> · {{ source.doi }}</template></small>
+            </span>
+            <span class="oracle-source-card__open" aria-hidden="true">↗</span>
+          </button>
         </div>
-        <ul class="oracle-list oracle-list--science">
-          <li v-for="(note, idx) in analysis.scientific_context_notes" :key="note.ruleId || idx" class="oracle-science-card">
-            <div class="oracle-science-card__header">
-              <span class="oracle-science-card__index">{{ String(idx + 1).padStart(2, '0') }}</span>
-              <h4>{{ note.insightTitle || 'Một cơ chế đáng cân nhắc' }}</h4>
-              <span v-if="note.applicationTier === 'exploratory'" class="oracle-science-card__tier">Giả thuyết khám phá · bằng chứng còn yếu</span>
-            </div>
-            <p class="oracle-science-card__explanation">
-              <template v-for="(segment, segmentIdx) in feedbackSegments(note.note, `scientific_context_notes.${idx}.note`)" :key="`science-${idx}-${segmentIdx}`">
-                <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
-              </template>
-            </p>
-
-            <div v-if="note.caseApplicability?.answeredCount" class="oracle-science-card__applicability">
-              <div>
-                <span>Mức phù hợp trong trường hợp này</span>
-                <strong>{{ caseApplicabilityLabel(note.caseApplicability.status) }}</strong>
-              </div>
-              <p>{{ note.caseApplicability.confirmedCount }}/{{ note.caseApplicability.totalCount }} chiều dữ kiện được xác nhận · {{ note.caseApplicability.weakenedCount }} bị làm yếu · {{ note.caseApplicability.unresolvedCount }} còn chưa rõ</p>
-              <small v-if="note.academicEvidenceScore !== undefined">Điểm bằng chứng học thuật vẫn là {{ note.academicEvidenceScore }}/100. Phản hồi cá nhân giúp kiểm tra việc áp dụng vào giấc mơ này, không tạo thêm bằng chứng nghiên cứu độc lập.</small>
-            </div>
-
-            <div v-if="note.matchedDreamDetails?.length || note.dreamEvidence?.length" class="oracle-science-card__matches">
-              <span>Những đoạn trong giấc mơ liên quan trực tiếp</span>
-              <blockquote v-for="detail in (note.matchedDreamDetails || note.dreamEvidence)" :key="detail">“{{ detail }}”</blockquote>
-            </div>
-
-            <details v-if="note.evidenceQuotes?.length" class="oracle-science-card__evidence">
-              <summary>Kiểm tra căn cứ trong tài liệu</summary>
-              <div v-for="evidence in note.evidenceQuotes" :key="`${evidence.chunkId}:${evidence.quote}`">
-                <span>{{ formatEvidenceSource(note, evidence.sourceId) }}</span>
-                <blockquote>“{{ evidence.quote }}”</blockquote>
-              </div>
-            </details>
-
-            <div v-if="note.boundary" class="oracle-science-card__boundary">
-              <span>Điều chưa thể kết luận</span>
-              <p>{{ note.boundary }}</p>
-            </div>
-          </li>
-        </ul>
       </section>
 
       <!-- Cultural Symbolic Notes -->
@@ -263,30 +229,6 @@
           </li>
         </ol>
       </section>
-
-      <details v-if="analysis.creative_continuation" class="oracle-continuation">
-        <summary>
-          <span>Nếu giấc mơ có phần tiếp theo</span>
-          <small>Sáng tác tham khảo · không phải dự báo</small>
-        </summary>
-        <div class="oracle-continuation__body">
-          <h3>{{ analysis.creative_continuation.title }}</h3>
-          <p class="oracle-continuation__story" translate="no">{{ analysis.creative_continuation.continuation }}</p>
-          <p class="oracle-continuation__connection"><strong>Mạch được nối tiếp:</strong> {{ analysis.creative_continuation.connectionToCurrentDream }}</p>
-          <div v-if="analysis.creative_continuation.inspirations?.length" class="oracle-continuation__inspirations">
-            <strong>Tham khảo mô-típ từ các giấc mơ tương đồng</strong>
-            <button
-              v-for="item in analysis.creative_continuation.inspirations"
-              :key="item.dreamId"
-              type="button"
-              @click="openSimilarDream(item.dreamId)"
-            >
-              {{ item.title }} · {{ item.similarity }}%
-            </button>
-          </div>
-          <small>{{ analysis.creative_continuation.disclaimer }}</small>
-        </div>
-      </details>
 
       <details v-if="analysis.grounding_summary" class="oracle-grounding-audit">
         <summary>Kết quả này được tạo từ đâu?</summary>
@@ -332,9 +274,6 @@
             </div>
             <h4>{{ item.title }}</h4>
             <p>{{ item.excerpt }}</p>
-            <div class="oracle-similar__reasons">
-              <span v-for="reason in item.matchedOn" :key="reason">{{ reason }}</span>
-            </div>
             <span class="oracle-similar__open">Xem bài viết <span aria-hidden="true">→</span></span>
           </button>
         </div>
@@ -350,7 +289,63 @@
           </button>
         </div>
       </footer>
+
+      <section v-if="analysis.creative_continuation" class="oracle-continuation">
+        <header class="oracle-continuation__header">
+          <span>Nếu giấc mơ có phần tiếp theo</span>
+          <small>Sáng tác tham khảo · không phải dự báo</small>
+        </header>
+        <div class="oracle-continuation__body">
+          <div v-if="continuationLoading" class="oracle-continuation__progress" aria-label="Tiến độ viết lại phần tiếp theo">
+            <span :style="{ width: `${continuationProgress}%` }"></span>
+          </div>
+          <h3>{{ displayedContinuation.title }}</h3>
+          <p class="oracle-continuation__story" translate="no">{{ displayedContinuation.continuation }}</p>
+          <p class="oracle-continuation__connection"><strong>Mạch được nối tiếp:</strong> {{ displayedContinuation.connectionToCurrentDream }}</p>
+          <div v-if="displayedContinuation.inspirations?.length" class="oracle-continuation__inspirations">
+            <strong>Tham khảo mô-típ từ các giấc mơ tương đồng</strong>
+            <button
+              v-for="item in displayedContinuation.inspirations"
+              :key="item.dreamId"
+              type="button"
+              @click="openSimilarDream(item.dreamId)"
+            >
+              {{ item.title }} · {{ item.similarity }}%
+            </button>
+          </div>
+          <small>{{ displayedContinuation.disclaimer }}</small>
+          <div v-if="canManageContinuation" class="oracle-continuation__controls">
+            <nav aria-label="Lịch sử phần tiếp theo">
+              <button type="button" :disabled="continuationIndex === 0" @click="continuationIndex--">‹</button>
+              <span>{{ continuationIndex + 1 }} / {{ continuationVersions.length }}</span>
+              <button type="button" :disabled="continuationIndex === continuationVersions.length - 1" @click="continuationIndex++">›</button>
+            </nav>
+            <button
+              type="button"
+              class="oracle-continuation__reload"
+              :title="continuationLoading ? 'Đang viết lại' : 'Tạo một phần tiếp theo khác'"
+              :aria-label="continuationLoading ? 'Đang viết lại phần tiếp theo' : 'Tạo một phần tiếp theo khác'"
+              :disabled="continuationLoading"
+              @click="regenerateContinuation"
+            >
+              <span
+                aria-hidden="true"
+                :class="{ 'oracle-continuation__spinner': continuationLoading }"
+              >↻</span>
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
+    <OracleCitationModal
+      v-model="citationModalOpen"
+      message-id=""
+      feedback-origin="dream"
+      :dream-id="dreamId"
+      :citation="selectedCitation"
+      @open-source="navigateToSource"
+      @feedback-updated="applyCitationFeedback"
+    />
   </div>
 </template>
 
@@ -363,6 +358,8 @@ import { usePostStore } from '@/store/usePostStore'
 import { useDreamStore } from '@/store/useDreamStore'
 import apiClient from '@/api/client'
 import AppFeedbackChoiceGroup, { type FeedbackChoice } from '@/components/common/AppFeedbackChoiceGroup.vue'
+import OracleCitationModal from '@/features/oracle/components/OracleCitationModal.vue'
+import type { OracleCitationDto, OracleCitationRuleLinkDto } from '@/api/oracleApi'
 
 const props = withDefaults(defineProps<{
   analysis: AiDreamAnalysisResult | null | undefined
@@ -370,10 +367,12 @@ const props = withDefaults(defineProps<{
   showHypothesisActions?: boolean
   mode?: 'compact' | 'collapsed' | 'full'
   dreamId?: string
+  canManageContinuation?: boolean
 }>(), {
   compact: false,
   showHypothesisActions: false,
   mode: 'full',
+  canManageContinuation: false,
 })
 
 const emit = defineEmits<{
@@ -432,11 +431,6 @@ function formatInlineCitation(src: any): string {
   return formatCitationText(src).replace(/^"|"$/g, '')
 }
 
-function formatEvidenceSource(note: any, sourceId: string): string {
-  const source = note?.sources?.find((item: any) => item.sourceId === sourceId)
-  return source ? formatCitationText(source) : 'Trích dẫn trong tài liệu nguồn'
-}
-
 function navigateToSource(sourceId: string) {
   if (!sourceId) return
   try {
@@ -463,16 +457,6 @@ function formatQuestionType(item: any): string {
   return 'Kiểm tra hoàn cảnh hiện tại'
 }
 
-function caseApplicabilityLabel(status: string): string {
-  return ({
-    strong_match: 'Phù hợp mạnh trong ca này',
-    partial_match: 'Phù hợp một phần',
-    mixed: 'Kết quả còn pha trộn',
-    weakened: 'Không phù hợp làm hướng chính',
-    unresolved: 'Chưa đủ dữ liệu',
-  } as Record<string, string>)[status] || 'Chưa đủ dữ liệu'
-}
-
 // Expanded state
 const isExpanded = ref(activeMode.value === 'full')
 const feedbackSelections = ref<Record<string, string>>({})
@@ -497,30 +481,141 @@ function questionKey(item: any, idx: number): string {
 
 function feedbackSegments(value: unknown, path: string): Array<{ text: string; changed: boolean }> {
   const text = String(value || '')
-  const changedFragments = props.analysis?.feedback_changed_fragments?.[path]?.filter(Boolean) || []
-  if (!text || changedFragments.length === 0) return [{ text, changed: false }]
+  const fragments = (props.analysis?.feedback_changed_fragments?.[path] || [])
+    .map(fragment => String(fragment || '').trim())
+    .filter(Boolean)
+  if (!text || fragments.length === 0) return [{ text, changed: false }]
 
   const segments: Array<{ text: string; changed: boolean }> = []
   let cursor = 0
   while (cursor < text.length) {
-    let nextFragment = ''
-    let nextIndex = -1
-    for (const fragment of changedFragments) {
-      const index = text.indexOf(fragment, cursor)
-      if (index !== -1 && (nextIndex === -1 || index < nextIndex)) {
-        nextFragment = fragment
-        nextIndex = index
-      }
-    }
-    if (nextIndex === -1) {
+    const matches = fragments
+      .map(fragment => ({ fragment, index: text.indexOf(fragment, cursor) }))
+      .filter(match => match.index >= cursor)
+      .sort((left, right) => left.index - right.index || right.fragment.length - left.fragment.length)
+    const next = matches[0]
+    if (!next) {
       segments.push({ text: text.slice(cursor), changed: false })
       break
     }
-    if (nextIndex > cursor) segments.push({ text: text.slice(cursor, nextIndex), changed: false })
-    segments.push({ text: nextFragment, changed: true })
-    cursor = nextIndex + nextFragment.length
+    if (next.index > cursor) segments.push({ text: text.slice(cursor, next.index), changed: false })
+    segments.push({ text: next.fragment, changed: true })
+    cursor = next.index + next.fragment.length
   }
-  return segments.length > 0 ? segments : [{ text, changed: false }]
+  return segments.length ? segments : [{ text, changed: false }]
+}
+
+const referenceSources = computed(() => {
+  const sources = new Map<string, any>()
+  const hypotheses = props.analysis?.real_life_hypotheses || []
+  for (const note of props.analysis?.scientific_context_notes || []) {
+    for (const source of note.sources || []) {
+      const key = String(source.sourceId || source.doi || source.title || '').trim()
+      if (!key) continue
+      const quote = note.evidenceQuotes?.find((item: any) => item.sourceId === source.sourceId)?.quote || ''
+      const related = hypotheses
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => item.ruleId === note.ruleId || item.ruleIds?.includes(note.ruleId))
+      const ruleLinks: OracleCitationRuleLinkDto[] = [{
+        ruleId: note.ruleId,
+        ruleCode: note.ruleCode || '',
+        statement: note.ruleStatement || note.note,
+        quote,
+        evidenceScore: note.academicEvidenceScore || related[0]?.item.ruleScore || 0,
+        supportingSourceCount: note.sources?.length || 1,
+        verificationQuestion: related[0]?.item.followUpQuestion,
+        currentUserAnswer: related[0]?.item.userFeedback,
+        dreamHypothesisIndex: related[0]?.index,
+        dreamVerificationKey: related[0]?.item.verificationKey,
+      }]
+      const existing = sources.get(key)
+      sources.set(key, {
+        ...(existing || source),
+        ...source,
+        quote: existing?.quote || quote,
+        ruleLinks: [...(existing?.ruleLinks || []), ...ruleLinks]
+          .filter((rule, index, rows) => rows.findIndex(item => item.ruleId === rule.ruleId) === index),
+      })
+    }
+  }
+  for (const [hypothesisIndex, hypothesis] of hypotheses.entries()) {
+    for (const source of hypothesis.sources || []) {
+      const key = String(source.sourceId || source.doi || source.title || '').trim()
+      if (!key) continue
+      const linkedRuleIds = [...new Set([
+        hypothesis.ruleId,
+        ...(hypothesis.ruleIds || []),
+      ].map(value => String(value || '').trim()).filter(Boolean))]
+      const ruleLinks: OracleCitationRuleLinkDto[] = linkedRuleIds.map(ruleId => ({
+        ruleId,
+        ruleCode: hypothesis.ruleCode || '',
+        statement: hypothesis.ruleStatement || hypothesis.hypothesis,
+        quote: hypothesis.validationExactQuote || '',
+        evidenceScore: hypothesis.ruleScore || 0,
+        supportingSourceCount: hypothesis.sources?.length || 1,
+        verificationQuestion: hypothesis.followUpQuestion,
+        currentUserAnswer: hypothesis.userFeedback,
+        dreamHypothesisIndex: hypothesisIndex,
+        dreamVerificationKey: hypothesis.verificationKey,
+      }))
+      const existing = sources.get(key)
+      sources.set(key, {
+        ...(existing || source),
+        ...source,
+        quote: existing?.quote || hypothesis.validationExactQuote || '',
+        ruleLinks: [...(existing?.ruleLinks || []), ...ruleLinks]
+          .filter((rule, index, rows) => rows.findIndex(item => item.ruleId === rule.ruleId) === index),
+      })
+    }
+  }
+  return [...sources.values()].map((source, index) => ({
+    ...source,
+    index: index + 1,
+    key: String(source.sourceId || source.doi || source.title),
+  }))
+})
+
+const answeredCitationSources = computed(() => {
+  const ids = new Set((props.analysis?.real_life_hypotheses || [])
+    .filter(item => ['yes', 'no'].includes(String(item.userFeedback || '')))
+    .flatMap(item => item.sources || [])
+    .map(source => String(source.sourceId || ''))
+    .filter(Boolean))
+  return referenceSources.value.filter(source => ids.has(String(source.sourceId || '')))
+})
+
+const selectedCitation = ref<OracleCitationDto | null>(null)
+const citationModalOpen = ref(false)
+
+function sourceMarker(sourceId: string): string {
+  const index = referenceSources.value.findIndex(source => source.sourceId === sourceId)
+  return index >= 0 ? `[${index + 1}]` : ''
+}
+
+function scoreDelta(item: any): number {
+  return Number(item?.ruleVoteDelta ?? item?.ruleScoreDelta) || 0
+}
+
+function openCitation(source: any) {
+  selectedCitation.value = {
+    index: Number(source.index) || 1,
+    sourceType: 'academic_source',
+    sourceId: String(source.sourceId || ''),
+    title: String(source.title || 'Tài liệu học thuật'),
+    year: source.year,
+    excerpt: String(source.quote || ''),
+    ruleLinks: source.ruleLinks || [],
+  }
+  citationModalOpen.value = true
+}
+
+function openCitationBySource(sourceId: string) {
+  const source = referenceSources.value.find(item => item.sourceId === sourceId)
+  if (source) openCitation(source)
+}
+
+function applyCitationFeedback(payload: any) {
+  if (payload?.analysis && props.analysis) Object.assign(props.analysis, payload.analysis)
 }
 
 function hasMotifHistory(note: any): boolean {
@@ -559,6 +654,25 @@ watch(() => props.analysis, (newVal) => {
 const settingsStore = useSettingsStore()
 const postStore = usePostStore()
 const dreamStore = useDreamStore()
+const continuationLoading = ref(false)
+const continuationProgress = ref(0)
+const continuationIndex = ref(0)
+const continuationVersions = computed(() => {
+  const stored = props.analysis?.creative_continuation_history || []
+  if (stored.length) return stored
+  return props.analysis?.creative_continuation ? [props.analysis.creative_continuation] : []
+})
+const displayedContinuation = computed(() =>
+  continuationVersions.value[continuationIndex.value]
+  || props.analysis?.creative_continuation,
+)
+
+watch(continuationVersions, (versions) => {
+  const storedIndex = Number(props.analysis?.creative_continuation_index)
+  continuationIndex.value = Number.isInteger(storedIndex) && storedIndex >= 0 && storedIndex < versions.length
+    ? storedIndex
+    : Math.max(0, versions.length - 1)
+}, { immediate: true })
 
 async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null) {
   const targetDreamId = props.dreamId || postStore.focusedDream?._id
@@ -601,7 +715,7 @@ async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null)
         : []
       const directDelta = scoreUpdates
         .filter((item: any) => item?.relation === 'direct')
-        .reduce((total: number, item: any) => total + (Number(item?.scoreDelta) || 0), 0)
+        .reduce((total: number, item: any) => total + (Number(item?.voteDelta ?? item?.scoreDelta) || 0), 0)
       const scoreMessage = directDelta > 0
         ? `Đã cộng ${directDelta} điểm vào lập luận.`
         : directDelta < 0
@@ -631,6 +745,37 @@ async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null)
   } catch (err: any) {
     console.error('Failed to submit hypothesis feedback:', err)
     settingsStore.showToast(err.response?.data?.message || 'Không thể lưu phản hồi.', 'error')
+  }
+}
+
+async function regenerateContinuation() {
+  if (!props.dreamId || continuationLoading.value) return
+  continuationLoading.value = true
+  continuationProgress.value = 8
+  const timer = window.setInterval(() => {
+    continuationProgress.value = Math.min(92, continuationProgress.value + 7)
+  }, 900)
+  try {
+    const response = await apiClient.post(`/dreams/${props.dreamId}/continuation/regenerate`)
+    const continuation = response.data?.data?.creative_continuation
+    if (continuation && props.analysis) {
+      props.analysis.creative_continuation = continuation
+      const history = response.data?.data?.creative_continuation_history || [continuation]
+      props.analysis.creative_continuation_history = history
+      props.analysis.creative_continuation_index = response.data?.data?.creative_continuation_index
+      continuationIndex.value = props.analysis.creative_continuation_index
+        ?? history.length - 1
+    }
+    continuationProgress.value = 100
+    settingsStore.showToast('Đã viết lại phần tiếp theo.', 'success')
+  } catch (err: any) {
+    settingsStore.showToast(err.response?.data?.message || 'Không thể viết lại phần tiếp theo.', 'error')
+  } finally {
+    window.clearInterval(timer)
+    window.setTimeout(() => {
+      continuationLoading.value = false
+      continuationProgress.value = 0
+    }, 250)
   }
 }
 
@@ -1189,25 +1334,25 @@ function hasRealSource(source: string | undefined | null): boolean {
 }
 
 .oracle-continuation {
-  margin-top: 18px;
-  border: 1px solid rgba(168, 85, 247, .28);
+  margin-top: 24px;
+  border: 1px solid var(--color-border);
   border-radius: 14px;
-  background: linear-gradient(145deg, rgba(88, 28, 135, .12), rgba(15, 23, 42, .20));
+  background: color-mix(in srgb, var(--color-bg-elevated) 70%, var(--color-bg-surface));
   overflow: hidden;
 }
 
-.oracle-continuation > summary {
+.oracle-continuation__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px;
-  cursor: pointer;
+  border-bottom: 1px solid var(--color-border-subtle);
   color: var(--color-text-primary);
   font-weight: 700;
 }
 
-.oracle-continuation > summary small,
+.oracle-continuation__header small,
 .oracle-continuation__body > small {
   color: var(--color-text-muted);
   font-size: 10px;
@@ -1217,7 +1362,7 @@ function hasRealSource(source: string | undefined | null): boolean {
 .oracle-continuation__body {
   display: grid;
   gap: 12px;
-  padding: 0 16px 16px;
+  padding: 16px;
 }
 
 .oracle-continuation__body h3,
@@ -1704,8 +1849,156 @@ function hasRealSource(source: string | undefined | null): boolean {
   text-decoration: underline;
 }
 
+.oracle-inline-marker {
+  margin-left: 4px;
+  font-size: .9em;
+  white-space: nowrap;
+}
+
 .source-separator {
   color: var(--color-text-muted, #737373);
+}
+
+.oracle-rule-score-change {
+  align-self: flex-end;
+  color: #79d6a3;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.oracle-rule-score-change--down {
+  color: #ef8a8a;
+}
+
+.oracle-sources__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.oracle-source-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease;
+}
+
+.oracle-source-card:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-bg-elevated));
+}
+
+.oracle-source-card__index {
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.oracle-source-card__content {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.oracle-source-card__content strong {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oracle-source-card__content small,
+.oracle-source-card__open {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.oracle-continuation__reload {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 17px;
+}
+
+.oracle-continuation__reload:disabled {
+  cursor: wait;
+  opacity: .7;
+}
+
+.oracle-continuation__spinner {
+  animation: oracle-continuation-spin .7s linear infinite;
+}
+
+@keyframes oracle-continuation-spin {
+  to { transform: rotate(360deg); }
+}
+
+.oracle-continuation__progress {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-border-subtle);
+}
+
+.oracle-continuation__progress span {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+  transition: width .2s ease;
+}
+
+.oracle-continuation__controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.oracle-continuation__controls nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.oracle-continuation__controls nav button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 19px;
+}
+
+.oracle-continuation__controls nav button:disabled {
+  cursor: default;
+  opacity: .35;
 }
 
 .oracle-item__internal-framework {

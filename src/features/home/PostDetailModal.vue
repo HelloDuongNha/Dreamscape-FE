@@ -203,6 +203,7 @@
                 <OracleAnalysisResult
                   :analysis="analysis"
                   :dream-id="postStore.focusedDream._id"
+                  :can-manage-continuation="isOwner && isCurrentVersion"
                   :show-hypothesis-actions="true"
                   mode="collapsed"
                 />
