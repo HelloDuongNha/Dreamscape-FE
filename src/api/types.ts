@@ -364,6 +364,25 @@ export interface SocketStatusUpdate {
   status:           'sent' | 'delivered' | 'seen'
 }
 
+export interface MessagingConversationSearchResult {
+  user:           ApiUser
+  conversationId: string | null
+  last_message:   string
+  updated_at:     string | null
+  source:         'conversation' | 'following'
+}
+
+export interface MessagingMessageSearchResult {
+  message:        ApiMessage
+  conversationId: string
+  partner:        ApiUser
+}
+
+export interface MessagingSearchResponse {
+  conversations: MessagingConversationSearchResult[]
+  messages:      MessagingMessageSearchResult[]
+}
+
 export interface ApiNotification {
   _id:         string
   recipientId: string

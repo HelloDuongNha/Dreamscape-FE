@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import apiClient from '@/api/client'
+import { useChatStore } from '@/store/useChatStore'
 import type { ApiUser, AuthResponse } from '@/api/types'
 
 const TOKEN_KEY = 'ds_token'
@@ -28,8 +29,8 @@ export const useAuthStore = defineStore('auth', () => {
     user.value  = u
     localStorage.setItem(TOKEN_KEY, t)
     localStorage.setItem(USER_KEY,  JSON.stringify(u))
-    // Connect socket after credentials are persisted (token is now in localStorage)
-    _connectChat()
+    // Reset all account-scoped chat state before loading the new account.
+    useChatStore().startSession(u._id)
   }
 
   function _clear() {
@@ -37,20 +38,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value  = null
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
-    _disconnectChat()
-  }
-
-  /** Lazily import chatStore to avoid circular Pinia store dependencies */
-  function _connectChat() {
-    import('@/store/useChatStore').then(({ useChatStore }) => {
-      useChatStore().connectSocket()
-    })
-  }
-
-  function _disconnectChat() {
-    import('@/store/useChatStore').then(({ useChatStore }) => {
-      useChatStore().disconnectSocket()
-    })
+    useChatStore().resetSession()
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -94,7 +82,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   // If the app loads with an existing token in localStorage, reconnect the socket
   if (token.value) {
-    _connectChat()
+    useChatStore().connectSocket()
   }
 
   return { token, user, isLoggedIn, myId, myUser, register, login, logout, updateCurrentUser, clearSession }

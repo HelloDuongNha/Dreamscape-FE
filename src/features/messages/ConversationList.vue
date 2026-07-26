@@ -20,7 +20,6 @@
           autocomplete="off"
           spellcheck="false"
           class="conv-list__search-input"
-          @input="onSearch"
         />
         <button
           v-if="searchQuery"
@@ -35,43 +34,92 @@
       </div>
     </div>
 
-    <!-- Search: loading indicator -->
-    <div v-if="searchQuery && isSearching" class="conv-list__searching">
-      <span class="conv-list__searching-dot" />
-      <span class="conv-list__searching-dot" />
-      <span class="conv-list__searching-dot" />
-    </div>
+    <template v-if="searchQuery">
+      <div class="conv-list__search-tabs" role="tablist" aria-label="Message search">
+        <button
+          class="conv-list__search-tab"
+          :class="{ 'conv-list__search-tab--active': activeSearchTab === 'conversations' }"
+          role="tab"
+          :aria-selected="activeSearchTab === 'conversations'"
+          @click="activeSearchTab = 'conversations'"
+        >
+          Conversations
+          <span>{{ searchResults.conversations.length }}</span>
+        </button>
+        <button
+          class="conv-list__search-tab"
+          :class="{ 'conv-list__search-tab--active': activeSearchTab === 'messages' }"
+          role="tab"
+          :aria-selected="activeSearchTab === 'messages'"
+          @click="activeSearchTab = 'messages'"
+        >
+          Messages
+          <span>{{ searchResults.messages.length }}</span>
+        </button>
+      </div>
 
-    <!-- Search: user results -->
-    <ul
-      v-else-if="searchQuery && userResults.length"
-      class="conv-list__search-results"
-      role="listbox"
-      aria-label="User search results"
-    >
-      <li
-        v-for="user in userResults"
-        :key="user._id"
-        :id="`user-result-${user._id}`"
-        class="conv-list__user-result"
-        role="option"
-        :aria-selected="false"
-        @click="openUser(user._id)"
+      <div v-if="isSearching" class="conv-list__searching">
+        <span class="conv-list__searching-dot" />
+        <span class="conv-list__searching-dot" />
+        <span class="conv-list__searching-dot" />
+      </div>
+
+      <ul
+        v-else-if="activeSearchTab === 'conversations' && searchResults.conversations.length"
+        class="conv-list__search-results"
+        role="listbox"
+        aria-label="Conversation search results"
       >
-        <div class="conv-list__avatar" :style="{ background: getAvatarBg(user._id) }">
-          {{ getInitials(user.display_name) }}
-        </div>
-        <div class="conv-list__user-info">
-          <span class="conv-list__user-name">{{ user.display_name }}</span>
-          <span class="conv-list__user-handle">{{ user.username }}</span>
-        </div>
-      </li>
-    </ul>
+        <li
+          v-for="item in searchResults.conversations"
+          :key="item.user._id"
+          class="conv-list__user-result"
+          role="option"
+          :aria-selected="false"
+          @click="openConversationResult(item)"
+        >
+          <div class="conv-list__avatar" :style="{ background: getAvatarBg(item.user._id) }">
+            {{ getInitials(item.user.display_name) }}
+          </div>
+          <div class="conv-list__user-info">
+            <span class="conv-list__user-name">{{ item.user.display_name }}</span>
+            <span class="conv-list__user-handle">{{ item.user.username }}</span>
+            <span class="conv-list__search-snippet">
+              {{ item.last_message || 'Following · Start a conversation' }}
+            </span>
+          </div>
+        </li>
+      </ul>
 
-    <!-- Search: no results -->
-    <p v-else-if="searchQuery && !isSearching && !userResults.length" class="conv-list__no-results">
-      No users found for "{{ searchQuery }}"
-    </p>
+      <ul
+        v-else-if="activeSearchTab === 'messages' && searchResults.messages.length"
+        class="conv-list__search-results"
+        role="listbox"
+        aria-label="Message search results"
+      >
+        <li
+          v-for="item in searchResults.messages"
+          :key="item.message._id"
+          class="conv-list__message-result"
+          role="option"
+          :aria-selected="false"
+          @click="openMessageResult(item.conversationId)"
+        >
+          <div class="conv-list__message-result-top">
+            <span>{{ item.partner.display_name }}</span>
+            <time>{{ timeAgo(item.message.timestamp) }}</time>
+          </div>
+          <p>
+            <strong>{{ messageSenderLabel(item) }}:</strong>
+            {{ item.message.content }}
+          </p>
+        </li>
+      </ul>
+
+      <p v-else-if="!isSearching" class="conv-list__no-results">
+        No {{ activeSearchTab }} found for "{{ searchQuery }}"
+      </p>
+    </template>
 
     <!-- Conversation list (shown when not searching) -->
     <ul v-if="!searchQuery" class="conv-list__items" role="list">
@@ -123,11 +171,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo }                  from '@/utils/timeAgo'
 import { useChatStore }             from '@/store/useChatStore'
-import type { ApiUser }             from '@/api/types'
+import type {
+  MessagingConversationSearchResult,
+  MessagingMessageSearchResult,
+  MessagingSearchResponse,
+} from '@/api/types'
 import type { ConversationWithPartner } from '@/store/useChatStore'
 
 const props = defineProps<{
@@ -144,36 +196,69 @@ const chatStore   = useChatStore()
 const searchId    = `conv-search-${Math.random().toString(36).slice(2, 6)}`
 const searchQuery = ref('')
 const isSearching = ref(false)
-const userResults = ref<ApiUser[]>([])
+const activeSearchTab = ref<'conversations' | 'messages'>('conversations')
+const searchResults = ref<MessagingSearchResponse>({ conversations: [], messages: [] })
 
 // Debounce timer
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let searchRequestId = 0
 
 async function onSearch() {
   if (debounceTimer) clearTimeout(debounceTimer)
-  if (!searchQuery.value.trim()) {
-    userResults.value = []
+  const query = searchQuery.value.trim()
+  const requestId = ++searchRequestId
+  if (!query) {
+    searchResults.value = { conversations: [], messages: [] }
+    isSearching.value = false
     return
   }
   isSearching.value = true
   debounceTimer = setTimeout(async () => {
     try {
-      userResults.value = await chatStore.searchUsers(searchQuery.value)
+      const results = await chatStore.searchMessaging(query)
+      if (requestId === searchRequestId && query === searchQuery.value.trim()) {
+        searchResults.value = results
+      }
     } finally {
-      isSearching.value = false
+      if (requestId === searchRequestId) {
+        isSearching.value = false
+      }
     }
-  }, 350)
+  }, 250)
 }
+
+watch(searchQuery, () => {
+  void onSearch()
+})
 
 function clearSearch() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  searchRequestId += 1
   searchQuery.value = ''
-  userResults.value = []
+  searchResults.value = { conversations: [], messages: [] }
   isSearching.value = false
+  activeSearchTab.value = 'conversations'
 }
 
-async function openUser(userId: string) {
+function openConversationResult(item: MessagingConversationSearchResult) {
   clearSearch()
-  emit('openUser', userId)
+  if (item.conversationId) {
+    emit('select', item.conversationId)
+  } else {
+    emit('openUser', item.user._id)
+  }
+}
+
+function openMessageResult(conversationId: string) {
+  clearSearch()
+  emit('select', conversationId)
+}
+
+function messageSenderLabel(item: MessagingMessageSearchResult): string {
+  const senderId = typeof item.message.senderId === 'object'
+    ? item.message.senderId._id
+    : item.message.senderId
+  return senderId === chatStore.currentUserId ? 'You' : item.partner.display_name
 }
 </script>
 
@@ -243,6 +328,38 @@ async function openUser(userId: string) {
 }
 .conv-list__search-clear:hover { background: #333; }
 
+.conv-list__search-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+  padding: 0 var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+.conv-list__search-tab {
+  min-width: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: 7px var(--space-2);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+.conv-list__search-tab:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+.conv-list__search-tab--active {
+  color: var(--color-text-primary);
+  background: var(--color-bg-active);
+}
+.conv-list__search-tab span {
+  margin-left: 3px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Searching dots animation */
 .conv-list__searching {
   display: flex;
@@ -280,7 +397,7 @@ async function openUser(userId: string) {
   transition: background var(--transition-fast);
 }
 .conv-list__user-result:hover { background: var(--color-bg-hover); }
-.conv-list__user-info { display: flex; flex-direction: column; gap: 1px; }
+.conv-list__user-info { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 1px; }
 .conv-list__user-name {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
@@ -289,6 +406,46 @@ async function openUser(userId: string) {
 .conv-list__user-handle {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+}
+.conv-list__search-snippet {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conv-list__message-result {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+  cursor: pointer;
+}
+.conv-list__message-result:hover { background: var(--color-bg-hover); }
+.conv-list__message-result-top {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+.conv-list__message-result-top time {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-normal);
+}
+.conv-list__message-result p {
+  display: -webkit-box;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.conv-list__message-result strong {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
 }
 
 .conv-list__no-results {

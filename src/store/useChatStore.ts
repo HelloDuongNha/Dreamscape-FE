@@ -7,6 +7,7 @@ import type {
   ApiConversation,
   ApiMessage,
   ApiUser,
+  MessagingSearchResponse,
   SocketMessage,
   SocketStatusUpdate,
 } from '@/api/types'
@@ -31,12 +32,19 @@ export const useChatStore = defineStore('chat', () => {
   const activeConversationId = ref<string | null>(null)
   const isLoadingConvs       = ref(false)
   const isLoadingMsgs        = ref(false)
+  const sessionUserId        = ref<string>(
+    (() => {
+      try { return JSON.parse(localStorage.getItem('ds_user') ?? '{}')._id ?? '' }
+      catch { return '' }
+    })()
+  )
 
   // Per-conversation mute state (conversationId → boolean)
   const mutedConversations = ref<Record<string, boolean>>({})
 
   // Socket — lazily initialized when user logs in
   let socket: Socket | null = null
+  let sessionEpoch = 0
 
   // ── Getters ────────────────────────────────────────────────────────────────
 
@@ -85,8 +93,7 @@ export const useChatStore = defineStore('chat', () => {
   // ── Private helpers ────────────────────────────────────────────────────────
 
   function _myId(): string {
-    try { return JSON.parse(localStorage.getItem('ds_user') ?? '{}')._id ?? '' }
-    catch { return '' }
+    return sessionUserId.value
   }
 
   /** Find a conversation by id in the reactive store */
@@ -101,10 +108,19 @@ export const useChatStore = defineStore('chat', () => {
    * Idempotent — calling multiple times is safe.
    */
   function connectSocket(): void {
-    if (socket?.connected) return
-
     const token = localStorage.getItem(TOKEN_KEY)
     if (!token) return
+
+    if (socket) {
+      const socketToken = (socket.auth as { token?: string } | undefined)?.token
+      if (socketToken === token) {
+        if (!socket.connected) socket.connect()
+        return
+      }
+      socket.removeAllListeners()
+      socket.disconnect()
+      socket = null
+    }
 
     socket = io(SOCKET_URL, {
       auth:        { token },
@@ -256,8 +272,31 @@ export const useChatStore = defineStore('chat', () => {
 
   /** Disconnect socket (called on logout) */
   function disconnectSocket(): void {
+    socket?.removeAllListeners()
     socket?.disconnect()
     socket = null
+  }
+
+  function resetSession(): void {
+    sessionEpoch += 1
+    disconnectSocket()
+    conversations.value = []
+    messages.value = []
+    activeConversationId.value = null
+    mutedConversations.value = {}
+    isLoadingConvs.value = false
+    isLoadingMsgs.value = false
+    sessionUserId.value = ''
+    void import('@/store/useMessageToastStore').then(({ useMessageToastStore }) => {
+      useMessageToastStore().clearAll()
+    })
+  }
+
+  function startSession(userId: string): void {
+    resetSession()
+    sessionUserId.value = userId
+    connectSocket()
+    void loadConversations()
   }
 
   // ── HTTP Actions ───────────────────────────────────────────────────────────
@@ -265,12 +304,19 @@ export const useChatStore = defineStore('chat', () => {
   /** Fetch all conversations for the logged-in user (includes unread_count from server) */
   async function loadConversations(): Promise<void> {
     if (isLoadingConvs.value) return
+    const requestEpoch = sessionEpoch
+    const requestUserId = sessionUserId.value
+    if (!requestUserId) return
     isLoadingConvs.value = true
     try {
       const { data } = await apiClient.get<{ success: boolean; data: ApiConversation[] }>('/conversations')
-      conversations.value = data.data
+      if (requestEpoch === sessionEpoch && requestUserId === sessionUserId.value) {
+        conversations.value = data.data
+      }
     } finally {
-      isLoadingConvs.value = false
+      if (requestEpoch === sessionEpoch) {
+        isLoadingConvs.value = false
+      }
     }
   }
 
@@ -279,6 +325,7 @@ export const useChatStore = defineStore('chat', () => {
    * Task 2: immediately set unread_count = 0 in the store and emit mark_as_seen.
    */
   async function openConversation(convId: string): Promise<void> {
+    const requestEpoch = sessionEpoch
     activeConversationId.value = convId
 
     // Task 2: reset this conversation's unread_count immediately in the store
@@ -301,9 +348,14 @@ export const useChatStore = defineStore('chat', () => {
       const { data } = await apiClient.get<{ success: boolean; data: ApiMessage[] }>(
         `/conversations/messages/${convId}`
       )
-      messages.value.push(...data.data)
+      if (requestEpoch === sessionEpoch && activeConversationId.value === convId) {
+        const knownIds = new Set(messages.value.map(message => message._id))
+        messages.value.push(...data.data.filter(message => !knownIds.has(message._id)))
+      }
     } finally {
-      isLoadingMsgs.value = false
+      if (requestEpoch === sessionEpoch) {
+        isLoadingMsgs.value = false
+      }
     }
   }
 
@@ -315,6 +367,23 @@ export const useChatStore = defineStore('chat', () => {
       { username: query.trim() }
     )
     return data.data ?? []
+  }
+
+  async function searchMessaging(query: string): Promise<MessagingSearchResponse> {
+    const normalizedQuery = query.trim()
+    if (!normalizedQuery) return { conversations: [], messages: [] }
+    const requestEpoch = sessionEpoch
+    const { data } = await apiClient.post<{
+      success: boolean
+      data: MessagingSearchResponse
+    }>('/conversations/search', {
+      searchMode: 'messaging',
+      query: normalizedQuery,
+    })
+    if (requestEpoch !== sessionEpoch) {
+      return { conversations: [], messages: [] }
+    }
+    return data.data
   }
 
   /** Find-or-create a conversation with a given userId, then open it */
@@ -417,10 +486,13 @@ export const useChatStore = defineStore('chat', () => {
     // Actions
     connectSocket,
     disconnectSocket,
+    resetSession,
+    startSession,
     loadConversations,
     openConversation,
     openConversationWithUser,
     searchUsers,
+    searchMessaging,
     sendMessage,
     deleteConversation,
     toggleMute,

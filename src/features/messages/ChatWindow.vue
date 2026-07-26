@@ -166,7 +166,9 @@
         placeholder="Message..."
         autocomplete="off"
         maxlength="2000"
-        @keydown.enter.prevent="handleSend"
+        @compositionstart="isComposing = true"
+        @compositionend="isComposing = false"
+        @keydown.enter="handleComposerEnter"
       />
       <button
         :id="`send-btn-${chatStore.activeConversationId}`"
@@ -197,6 +199,7 @@ const messageListRef = ref<HTMLElement | null>(null)
 const inputId       = `chat-input-${Math.random().toString(36).slice(2, 6)}`
 const menuOpen      = ref(false)
 const isDeleting    = ref(false)
+const isComposing   = ref(false)
 
 // ── Partner visuals ─────────────────────────────────────────────────────────
 const partnerInitials = computed(() =>
@@ -237,6 +240,12 @@ function handleSend() {
   chatStore.sendMessage(content)
   newMessage.value = ''
   scrollToBottom()
+}
+
+function handleComposerEnter(event: KeyboardEvent) {
+  if (event.isComposing || isComposing.value || event.keyCode === 229) return
+  event.preventDefault()
+  handleSend()
 }
 
 // ── Scroll ──────────────────────────────────────────────────────────────────
