@@ -400,6 +400,7 @@ function testConsumedStaticKeys() {
     'src/features/home/HomeView.vue',
     'src/features/home/DreamCard.vue',
     'src/features/home/PostDetailModal.vue',
+    'src/components/common/DreamMoodTag.vue',
     'src/store/useDreamStore.ts',
     'src/features/moderation/RuleCandidatesView.vue',
   ]
@@ -437,6 +438,7 @@ function testConsumedStaticKeys() {
     { pattern: /localSuccess/, reason: 'OTP verification success message key property' },
     { pattern: /PAGE_TITLE_KEYS/, reason: 'Page title keys dictionary lookup for fallback titles' },
     { pattern: /emotionLabelKeys\[emotionToneKey\.value\]/, reason: 'Emotion tone is a stable semantic enum mapped to a catalog key' },
+    { pattern: /home\.moodScale\.(?:label|help)\.\$\{(?:level|item)\.value\}/, reason: 'Dream mood scale uses a validated five-level enum' },
     { pattern: /`rules\.criteria\.\$\{value\}`/, reason: 'Rule score criterion uses a closed backend enum mirrored in both catalogs' },
     { pattern: /`rules\.relationKinds\.\$\{value\}`/, reason: 'Rule relationship uses a closed backend enum mirrored in both catalogs' },
     { pattern: /`rules\.questionTypes\.\$\{value\}`/, reason: 'Rule question dimension uses a closed backend enum mirrored in both catalogs' },
@@ -500,6 +502,7 @@ function testHomeContentBoundaries() {
     'src/features/home/HomeView.vue',
     'src/features/home/DreamCard.vue',
     'src/features/home/PostDetailModal.vue',
+    'src/components/common/DreamMoodTag.vue',
   ]
   const source = Object.fromEntries(homeFiles.map(relPath => [
     relPath,
@@ -519,11 +522,12 @@ function testHomeContentBoundaries() {
     ['src/features/home/HomeView.vue', /<span translate="no">“\{\{ dreamStore\.searchQuery \}\}”<\/span>/, 'searchQuery'],
     ['src/features/home/DreamCard.vue', /class="dream-card__name"[\s\S]*?translate="no"[\s\S]*?\{\{ user\.display_name \}\}/, 'display_name'],
     ['src/features/home/DreamCard.vue', /class="dream-card__username"[\s\S]*?translate="no"[\s\S]*?\{\{ user\.username \}\}/, 'username'],
-    ['src/features/home/DreamCard.vue', /v-model="editContent"[\s\S]*?translate="no"/, 'editContent'],
     ['src/features/home/DreamCard.vue', /<span translate="no">\{\{ displayContent \}\}<\/span>/, 'dream content'],
-    ['src/features/home/DreamCard.vue', /class="dream-card__mood"[\s\S]*?translate="no"/, 'mood_tag'],
+    ['src/components/common/DreamMoodTag.vue', /<span[^>]*dream-mood__label[^>]*translate="no"/, 'mood label'],
     ['src/features/home/PostDetailModal.vue', /class="modal-author__info" translate="no"/, 'post author identity'],
-    ['src/features/home/PostDetailModal.vue', /class="modal-content-text" translate="no">\{\{ postStore\.focusedDream\.content \}\}/, 'full dream content'],
+    ['src/features/home/PostDetailModal.vue', /v-model="editContextContent"[\s\S]*?translate="no"/, 'editContextContent'],
+    ['src/features/home/PostDetailModal.vue', /v-model="addition\.content"[\s\S]*?translate="no"/, 'addition content editor'],
+    ['src/features/home/PostDetailModal.vue', /class="modal-content-text" translate="no">\{\{ displayedVersion\?\.content \}\}/, 'versioned dream content'],
     ['src/features/home/PostDetailModal.vue', /class="modal-comment__text" translate="no">\{\{ comment\.content \}\}/, 'comment content'],
     ['src/features/home/PostDetailModal.vue', /v-model="commentText"[\s\S]*?translate="no"/, 'comment input'],
   ]

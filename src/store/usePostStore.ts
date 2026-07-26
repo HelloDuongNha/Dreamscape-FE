@@ -10,6 +10,7 @@ export const usePostStore = defineStore('post', () => {
   const focusedId       = ref<string | null>(null)
   const isLoadingComments = ref(false)
   const fetchedDream    = ref<ApiDream | null>(null)
+  const editRequested   = ref(false)
 
   // ── Live comments for the focused post ──────────────────────────
   // Populated from GET /api/dreams/:id/comments when a post is opened.
@@ -40,8 +41,9 @@ export const usePostStore = defineStore('post', () => {
    * Open a post detail modal.
    * Immediately sets the focused ID and fetches comments and dream details.
    */
-  async function openPost(id: string): Promise<void> {
+  async function openPost(id: string, options?: { edit?: boolean }): Promise<void> {
     focusedId.value       = id
+    editRequested.value   = options?.edit === true
     focusedComments.value = []
     fetchedDream.value    = null
     isLoadingComments.value = true
@@ -71,6 +73,13 @@ export const usePostStore = defineStore('post', () => {
     focusedId.value       = null
     focusedComments.value = []
     fetchedDream.value    = null
+    editRequested.value   = false
+  }
+
+  function consumeEditRequest(): boolean {
+    const requested = editRequested.value
+    editRequested.value = false
+    return requested
   }
 
   /**
@@ -95,8 +104,10 @@ export const usePostStore = defineStore('post', () => {
     focusedUser,
     focusedComments,
     isLoadingComments,
+    editRequested,
     openPost,
     closePost,
+    consumeEditRequest,
     addComment,
   }
 })

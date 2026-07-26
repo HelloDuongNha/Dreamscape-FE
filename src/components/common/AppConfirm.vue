@@ -30,6 +30,16 @@
           <!-- Actions -->
           <div class="app-confirm__actions">
             <button
+              v-if="secondaryLabel"
+              type="button"
+              :id="`${uid}-secondary`"
+              class="app-confirm__btn app-confirm__btn--secondary"
+              :disabled="loading"
+              @click="emit('secondary')"
+            >
+              {{ secondaryLabel }}
+            </button>
+            <button
               type="button"
               :id="`${uid}-cancel`"
               class="app-confirm__btn app-confirm__btn--cancel"
@@ -64,11 +74,13 @@ const props = withDefaults(defineProps<{
   message:      string
   confirmLabel?: string
   cancelLabel?:  string
+  secondaryLabel?: string
   danger?:       boolean         // if true, confirm button is red
   loading?:      boolean         // while async confirm action runs
 }>(), {
   confirmLabel: 'Confirm',
   cancelLabel:  'Cancel',
+  secondaryLabel: '',
   danger:       false,
   loading:      false,
 })
@@ -77,6 +89,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   confirm: []
   cancel:  []
+  secondary: []
 }>()
 
 const uid      = `app-confirm-${Math.random().toString(36).slice(2, 7)}`
@@ -188,6 +201,13 @@ function handleCancel() {
   color: var(--color-text-secondary);
   border-color: #333333;
 }
+.app-confirm__btn--secondary {
+  margin-right: auto;
+  background: transparent;
+  color: var(--color-text-primary);
+  border-color: #3a3a3a;
+}
+.app-confirm__btn--secondary:hover:not(:disabled) { background: #242424; }
 .app-confirm__btn--cancel:hover:not(:disabled) {
   background: #2a2a2a;
   color: var(--color-text-primary);

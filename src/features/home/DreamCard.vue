@@ -35,9 +35,12 @@
         <span v-if="dream.additions?.length" class="dream-card__edited-badge">
           {{ t('home.additionsCount', { count: dream.additions.length }) }}
         </span>
-        <span class="dream-card__mood" :class="`dream-card__mood--${moodClass}`" translate="no">
-          {{ dream.mood_tag }}
-        </span>
+        <DreamMoodTag
+          v-if="moodLabel"
+          :label="moodLabel"
+          :valence="analysis?.emotional_valence"
+          :tone-key="analysis?.emotional_tone_key"
+        />
       </div>
 
       <!-- ── 3-dot owner menu ── -->
@@ -66,55 +69,28 @@
       </AppDropdown>
     </header>
 
-    <!-- ── Body: content OR inline editor ── -->
+    <!-- ── Body ── -->
     <div class="dream-card__body">
-      <!-- Inline edit mode -->
-      <template v-if="editMode">
-        <textarea
-          :id="`edit-textarea-${dream._id}`"
-          v-model="editContent"
-          class="dream-card__edit-textarea"
-          maxlength="2000"
-          rows="4"
-          :aria-label="t('home.editDreamAria')"
-          translate="no"
-        />
-        <div class="dream-card__edit-actions">
-          <span class="dream-card__edit-count">{{ editContent.length }} / 2000</span>
-          <button
-            :id="`edit-cancel-${dream._id}`"
-            class="dream-card__edit-btn dream-card__edit-btn--cancel"
-            :disabled="isSaving"
-            @click="cancelEdit"
-          >{{ t('home.cancel') }}</button>
-          <button
-            :id="`edit-save-${dream._id}`"
-            class="dream-card__edit-btn dream-card__edit-btn--save"
-            :disabled="isSaving || !editContent.trim()"
-            @click="saveEdit"
-          >{{ isSaving ? t('home.saving') : t('home.save') }}</button>
-        </div>
-      </template>
-
-      <!-- Normal read mode -->
-      <template v-else>
-        <p class="dream-card__content" @click="openModal">
-          <span translate="no">{{ displayContent }}</span>
-          <button
-            v-if="isTruncated"
-            class="dream-card__see-more"
-            :aria-label="t('home.readFullDreamAria', { name: user.display_name })"
-            @click.stop="openModal"
-          >…{{ t('home.seeMore') }}</button>
-        </p>
-      </template>
+      <p class="dream-card__content" @click="openModal">
+        <span translate="no">{{ displayContent }}</span>
+        <button
+          v-if="isTruncated"
+          class="dream-card__see-more"
+          :aria-label="t('home.readFullDreamAria', { name: user.display_name })"
+          @click.stop="openModal"
+        >…{{ t('home.seeMore') }}</button>
+      </p>
     </div>
 
 
     <!-- ── Oracle status ── -->
-    <div v-if="!editMode && dream.ai_status" class="dream-card__oracle-wrap">
+    <div v-if="dream.ai_status" class="dream-card__oracle-wrap">
+      <div v-if="dream.ai_analysis_enabled === false" class="dream-card__ai-disabled">
+        <span aria-hidden="true">◈</span>
+        <span>{{ t('home.aiAnalysisDisabled') }}</span>
+      </div>
       <OracleAnalysisResult
-        v-if="dream.ai_status === 'completed' && analysis"
+        v-else-if="dream.ai_status === 'completed' && analysis"
         :analysis="analysis"
         compact
         @view-details="openModal"
@@ -138,7 +114,7 @@
     </div>
 
     <!-- ── Footer: interactions ── -->
-    <footer v-if="!editMode" class="dream-card__footer">
+    <footer class="dream-card__footer">
       <!-- Like button: filled #EF4444 heart when liked, outline when not -->
       <button
         :id="`like-btn-${dream._id}`"
@@ -184,6 +160,18 @@
       @confirm="confirmDelete"
       @cancel="showDeleteConfirm = false"
     />
+    <AppConfirm
+      v-model="showDisableAiConfirm"
+      :title="t('home.disableAiTitle')"
+      :message="t('home.disableAiMessage')"
+      :secondary-label="t('home.keepAiResult')"
+      :confirm-label="t('home.deleteAiResult')"
+      :danger="true"
+      :loading="isUpdatingAi"
+      @secondary="disableAiAnalysis('keep')"
+      @confirm="disableAiAnalysis('delete')"
+      @cancel="showDisableAiConfirm = false"
+    />
   </article>
 </template>
 
@@ -202,6 +190,7 @@ import apiClient             from '@/api/client'
 import AppDropdown           from '@/components/common/AppDropdown.vue'
 import AppConfirm            from '@/components/common/AppConfirm.vue'
 import OracleAnalysisResult  from '@/components/common/OracleAnalysisResult.vue'
+import DreamMoodTag          from '@/components/common/DreamMoodTag.vue'
 import type { DropdownOption } from '@/components/common/AppDropdown.vue'
 import type { ApiDream }     from '@/api/types'
 import type { User }         from '@/data/mockUsers'
@@ -293,20 +282,21 @@ const displayContent = computed(() =>
 )
 
 function openModal() {
-  if (editMode.value) return
   postStore.openPost(props.dream._id)
 }
 
-const moodClass = computed(() => props.dream.mood_tag.toLowerCase().replace(/\s+/g, '-'))
-
 const analysis = computed(() => props.dream.ai_result ?? props.dream.aiAnalysis ?? null)
+const moodLabel = computed(() =>
+  String(analysis.value?.emotional_tone || props.dream.mood_tag || '').trim()
+)
 
 // ── 3-dot menu ───────────────────────────────────────────────────────────────
 
-const menuOptions = computed((): DropdownOption[] => [
-  {
+const menuOptions = computed((): DropdownOption[] => {
+  const options: DropdownOption[] = [{
     label: t('home.editPost'),
     value: 'edit',
+    disabled: props.dream.ai_status === 'pending',
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
   },
   {
@@ -315,20 +305,40 @@ const menuOptions = computed((): DropdownOption[] => [
     icon:  props.dream.privacy === 'private'
       ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
       : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
-  },
-  { divider: true } as any,
+  }]
+
+  options.push({
+    label: props.dream.ai_analysis_enabled === false
+      ? t('home.enableAiAnalysis')
+      : t('home.disableAiAnalysis'),
+    value: 'ai-toggle',
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3"/><path d="M18.4 5.6l-2.1 2.1"/><path d="M21 12h-3"/><path d="M5 12H2"/><path d="M7.7 7.7 5.6 5.6"/><circle cx="12" cy="12" r="4"/><path d="M8 21h8"/></svg>`,
+  })
+
+  if (props.dream.ai_analysis_enabled !== false) {
+    options.push({
+      label: t('home.reanalyze'),
+      value: 'reanalyze',
+      disabled: props.dream.ai_status === 'pending',
+      icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg>`,
+    })
+  }
+
+  options.push(
+    { divider: true } as any,
   {
     label:  t('home.delete'),
     value:  'delete',
     danger: true,
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
-  },
-])
+  })
+  return options
+})
 
 async function handleMenuSelect(item: DropdownOption) {
   switch (item.value) {
     case 'edit':
-      startEdit()
+      await postStore.openPost(props.dream._id, { edit: true })
       break
     case 'privacy':
       await dreamStore.changePrivacy(
@@ -336,34 +346,15 @@ async function handleMenuSelect(item: DropdownOption) {
         props.dream.privacy === 'private' ? 'public' : 'private'
       )
       break
+    case 'ai-toggle':
+      await toggleAiAnalysis()
+      break
+    case 'reanalyze':
+      await retryAnalysis(props.dream._id)
+      break
     case 'delete':
       showDeleteConfirm.value = true
       break
-  }
-}
-
-// ── Inline edit ───────────────────────────────────────────────────────────────
-
-const editMode    = ref(false)
-const editContent = ref('')
-const isSaving    = ref(false)
-
-function startEdit() {
-  editContent.value = props.dream.content
-  editMode.value    = true
-}
-function cancelEdit() {
-  editMode.value    = false
-  editContent.value = ''
-}
-async function saveEdit() {
-  if (!editContent.value.trim() || isSaving.value) return
-  isSaving.value = true
-  try {
-    await dreamStore.editDream(props.dream._id, editContent.value)
-    editMode.value = false
-  } finally {
-    isSaving.value = false
   }
 }
 
@@ -371,6 +362,38 @@ async function saveEdit() {
 
 const showDeleteConfirm = ref(false)
 const isDeleting        = ref(false)
+const showDisableAiConfirm = ref(false)
+const isUpdatingAi = ref(false)
+
+async function toggleAiAnalysis() {
+  if (isUpdatingAi.value) return
+  if (props.dream.ai_analysis_enabled === false) {
+    isUpdatingAi.value = true
+    try {
+      await dreamStore.setAiAnalysis(props.dream._id, true)
+    } finally {
+      isUpdatingAi.value = false
+    }
+    return
+  }
+
+  if (analysis.value) {
+    showDisableAiConfirm.value = true
+    return
+  }
+  await disableAiAnalysis('delete')
+}
+
+async function disableAiAnalysis(resultPolicy: 'keep' | 'delete') {
+  if (isUpdatingAi.value) return
+  isUpdatingAi.value = true
+  try {
+    await dreamStore.setAiAnalysis(props.dream._id, false, resultPolicy)
+    showDisableAiConfirm.value = false
+  } finally {
+    isUpdatingAi.value = false
+  }
+}
 
 async function confirmDelete() {
   if (isDeleting.value) return
@@ -472,24 +495,6 @@ async function confirmDelete() {
   font-style: italic;
 }
 
-/* Mood tag */
-.dream-card__mood {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  border: 1px solid transparent;
-  white-space: nowrap;
-  background: var(--color-bg-elevated);
-  color: var(--color-text-secondary);
-}
-.dream-card__mood--lucid         { background: #112136; color: #5b9cf6; border-color: #1e3a5f; }
-.dream-card__mood--nightmare     { background: #2d1010; color: #ed4956; border-color: #3d1515; }
-.dream-card__mood--calm          { background: #0e2a1c; color: #4ade80; border-color: #1a3d2e; }
-.dream-card__mood--prophetic     { background: #1e1230; color: #a78bfa; border-color: #2d1f4a; }
-.dream-card__mood--euphoric      { background: #2a1e08; color: #f59e0b; border-color: #3d2d10; }
-.dream-card__mood--uncategorized { background: var(--color-bg-elevated); color: var(--color-text-muted); border-color: var(--color-border); }
-
 /* 3-dot button */
 .dream-card__menu-btn {
   width: 30px;
@@ -538,66 +543,20 @@ async function confirmDelete() {
 }
 .dream-card__see-more:hover { color: var(--color-text-secondary); }
 
-/* ── Inline edit ── */
-.dream-card__edit-textarea {
-  width: 100%;
-  min-height: 100px;
-  background: var(--color-bg-elevated);
-  border: 1px solid #3a3a3a;
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  font-size: var(--font-size-base);
-  font-family: var(--font-family-base);
-  color: var(--color-text-primary);
-  line-height: var(--line-height-relaxed);
-  resize: vertical;
-  transition: border-color var(--transition-fast);
-  box-sizing: border-box;
-}
-.dream-card__edit-textarea:focus { border-color: #555; outline: none; }
-
-.dream-card__edit-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  justify-content: flex-end;
-}
-.dream-card__edit-count {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  margin-right: auto;
-}
-
-.dream-card__edit-btn {
-  height: 30px;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  font-family: var(--font-family-base);
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: background var(--transition-fast);
-}
-.dream-card__edit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-.dream-card__edit-btn--cancel {
-  background: #222;
-  color: var(--color-text-secondary);
-  border-color: #333;
-}
-.dream-card__edit-btn--cancel:hover:not(:disabled) { background: #2a2a2a; }
-
-.dream-card__edit-btn--save {
-  background: #ffffff;
-  color: #101010;
-}
-.dream-card__edit-btn--save:hover:not(:disabled) { background: #e0e0e0; }
-
 /* ── Oracle status ── */
 .dream-card__oracle-wrap {
   margin: 0 var(--space-5) var(--space-3);
+}
+.dream-card__ai-disabled {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 .dream-card__status-pending {
   display: flex;

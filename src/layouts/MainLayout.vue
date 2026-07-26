@@ -228,6 +228,7 @@ import { useNotificationStore } from '@/store/useNotificationStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useOracleStore } from '@/store/useOracleStore'
 import { useLocaleStore } from '@/store/useLocaleStore'
+import { usePostStore } from '@/store/usePostStore'
 import type { ApiDream, ApiNotification } from '@/api/types'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo } from '@/utils/timeAgo'
@@ -241,6 +242,7 @@ const dreamStore = useDreamStore()
 const notificationStore = useNotificationStore()
 const authStore = useAuthStore()
 const oracleStore = useOracleStore()
+const postStore = usePostStore()
 const localeStore = useLocaleStore()
 
 const avatarBg = computed(() => {
@@ -293,7 +295,9 @@ async function handleNotificationClick(notif: ApiNotification) {
   } else {
     const targetPostId = notif.postId && typeof notif.postId === 'object' ? notif.postId._id : notif.postId
     if (targetPostId) {
-      router.push({ path: '/', query: { openPostId: String(targetPostId) } })
+      // Open the modal directly so the user's current feed position stays unchanged.
+      if (route.path !== '/') await router.push('/')
+      await postStore.openPost(String(targetPostId))
     }
   }
   await notificationStore.markAllRead()

@@ -140,6 +140,7 @@ export interface AiRealLifeHypothesis {
 export interface AiDreamAnalysisResult {
   title:                     string
   emotional_tone:            string
+  emotional_valence?:        -2 | -1 | 0 | 1 | 2
   emotional_tone_key?:       'urgent_conflicted' | 'anxious' | 'fearful' | 'sad' | 'calm' | 'mixed' | 'neutral'
   summary:                   string
   core_analysis:             string
@@ -243,11 +244,12 @@ export interface ApiDream {
   mood_tag:       string
   is_public:      boolean
   privacy:        'public' | 'private'
+  ai_analysis_enabled: boolean
   likes:          string[]           // array of userId strings who liked this post
   likes_count:    number
   comments_count: number
   created_at:     string             // ISO-8601 — used as pagination cursor
-  ai_status:      'pending' | 'sensing' | 'completed' | 'failed' | 'cancelled'
+  ai_status:      'pending' | 'sensing' | 'completed' | 'failed' | 'cancelled' | 'disabled'
   ai_result:      AiDreamAnalysisResult | null
   aiAnalysis?:    AiDreamAnalysisResult | null
   analysisMetadata?: {
@@ -266,7 +268,7 @@ export interface ApiDream {
     timingDeltaSeconds?: number
     cancelledAt?: string
     lastReplacementOutcome?: 'cancelled' | 'failed'
-    lastReplacementTrigger?: 'retry' | 'dream_addition' | 'addition_retry'
+    lastReplacementTrigger?: 'retry' | 'dream_addition' | 'addition_retry' | 'content_edit' | 'addition_edit'
     replacementEndedAt?: string
     replacementDurationMs?: number
     hasUnanalyzedAdditions?: boolean
@@ -279,6 +281,18 @@ export interface ApiDream {
     analysisState?: 'pending' | 'analyzed' | 'unanalyzed'
     analysisRunId?: string
     analyzedAt?: string
+  }[]
+  versions?: {
+    version: number
+    content: string
+    additions: ApiDream['additions']
+    ai_status: ApiDream['ai_status']
+    ai_result: AiDreamAnalysisResult | null
+    mood_tag: string
+    analysisMetadata?: ApiDream['analysisMetadata']
+    editedAt: string
+    isCurrent: boolean
+    isLegacyPartial: boolean
   }[]
 }
 

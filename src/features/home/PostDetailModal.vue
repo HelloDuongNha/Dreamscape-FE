@@ -30,9 +30,42 @@
             </RouterLink>
 
             <div class="modal-header__right">
-              <span v-if="modalMoodLabel" class="modal-mood" :class="`modal-mood--${moodClass}`">
-                {{ modalMoodLabel }}
+              <span
+                v-if="postStore.focusedDream.privacy === 'private' || postStore.focusedDream.is_public === false"
+                class="modal-private-badge"
+                :title="t('home.privateBadgeTitle')"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                {{ t('home.private') }}
               </span>
+              <DreamMoodTag
+                v-if="modalMoodLabel"
+                :label="modalMoodLabel"
+                :valence="analysis?.emotional_valence"
+                :tone-key="analysis?.emotional_tone_key"
+              />
+              <AppDropdown
+                v-if="isOwner"
+                :options="modalMenuOptions"
+                align="right"
+                :label="t('home.postOptions')"
+                @select="handleModalMenuSelect"
+              >
+                <template #trigger="{ toggle }">
+                  <button
+                    type="button"
+                    class="modal-menu-btn"
+                    :aria-label="t('home.postOptions')"
+                    @click.stop="toggle"
+                  >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/>
+                    </svg>
+                  </button>
+                </template>
+              </AppDropdown>
               <button
                 id="modal-close-btn"
                 class="modal-close-btn"
@@ -51,58 +84,122 @@
 
             <!-- Full dream content (un-truncated) -->
             <div class="modal-content-block">
-              <p class="modal-content-text" translate="no">{{ postStore.focusedDream.content }}</p>
-              <div
-                v-for="(addition, idx) in postStore.focusedDream.additions || []"
-                :key="`${addition.sequence}:${addition.addedAt}`"
-                class="modal-dream-addition"
-                :class="{ 'modal-dream-addition--unanalyzed': addition.analysisState === 'unanalyzed' }"
-                translate="no"
-              >
-                <strong>{{ (postStore.focusedDream.additions?.length || 0) === 1 ? t('home.additionLabel') : t('home.numberedAdditionLabel', { number: idx + 1 }) }}</strong>
-                <p>{{ addition.content }}</p>
-                <div v-if="addition.analysisState === 'unanalyzed'" class="modal-dream-addition__warning">
-                  <span>{{ t('home.additionNotAnalyzed') }}</span>
-                  <AppButton
-                    v-if="isOwner"
-                    type="button"
-                    variant="danger-outline"
-                    size="sm"
-                    :loading="isRetryingAnalysis"
-                    @click.stop="retryAnalysis(postStore.focusedDream._id)"
-                  >
-                    {{ t('home.retryAdditionAnalysis') }}
-                  </AppButton>
-                </div>
-              </div>
-              <div v-if="isOwner" class="modal-addition-controls">
-                <AppButton v-if="!showAdditionForm" variant="ghost" size="sm" @click="showAdditionForm = true">
-                  {{ t('home.addDreamDetails') }}
-                </AppButton>
-                <template v-else>
+              <template v-if="isContextEditing">
+                <label class="modal-edit-label" for="modal-dream-context">{{ t('home.dreamContext') }}</label>
+                <textarea
+                  id="modal-dream-context"
+                  v-model="editContextContent"
+                  class="modal-context-editor"
+                  maxlength="2000"
+                  rows="6"
+                  :aria-label="t('home.editDreamAria')"
+                  translate="no"
+                />
+
+                <div
+                  v-for="(addition, idx) in editContextAdditions"
+                  :key="addition.clientId"
+                  class="modal-dream-addition modal-dream-addition--editing"
+                >
+                  <div class="modal-dream-addition__header">
+                    <strong>{{ editContextAdditions.length === 1 ? t('home.additionLabel') : t('home.numberedAdditionLabel', { number: idx + 1 }) }}</strong>
+                  </div>
                   <textarea
-                    v-model="additionText"
+                    v-model="addition.content"
                     class="modal-addition-textarea"
                     maxlength="2000"
-                    rows="4"
+                    rows="3"
                     :placeholder="t('home.addDreamDetailsPlaceholder')"
-                    :aria-label="t('home.addDreamDetails')"
                     translate="no"
                   />
-                  <div class="modal-addition-actions">
-                    <span>{{ additionText.length }} / 2000</span>
-                    <AppButton variant="ghost" size="sm" :disabled="isAddingDetail" @click="cancelAddition">{{ t('home.cancel') }}</AppButton>
-                    <AppButton variant="primary" size="sm" :loading="isAddingDetail" :disabled="!additionText.trim()" @click="submitAddition">{{ t('home.addAndReanalyze') }}</AppButton>
+                  <div class="modal-addition-delete-action">
+                    <AppButton
+                      type="button"
+                      variant="danger-outline"
+                      size="sm"
+                      @click="requestDraftAdditionDelete(idx)"
+                    >
+                      {{ t('home.deleteAddition') }}
+                    </AppButton>
                   </div>
-                  <small>{{ t('home.addDreamDetailsNote') }}</small>
-                </template>
-              </div>
+                </div>
+
+                <AppButton
+                  v-if="editContextAdditions.length < 10"
+                  variant="ghost"
+                  size="sm"
+                  @click="addDraftAddition"
+                >
+                  {{ t('home.addDreamDetails') }}
+                </AppButton>
+
+                <div class="modal-context-edit-actions">
+                  <span>{{ editContextContent.length }} / 2000</span>
+                  <AppButton variant="ghost" size="sm" :disabled="isSavingContext" @click="cancelContextEdit">{{ t('home.cancel') }}</AppButton>
+                  <AppButton
+                    variant="primary"
+                    size="sm"
+                    :loading="isSavingContext"
+                    :disabled="!canSaveContext"
+                    @click="saveContextEdit"
+                  >
+                    {{ t('home.saveAndReanalyze') }}
+                  </AppButton>
+                </div>
+              </template>
+
+              <template v-else>
+                <p v-if="displayedVersion?.isLegacyPartial" class="modal-version-legacy-note">
+                  {{ t('home.legacyVersionPartial') }}
+                </p>
+                <p class="modal-content-text" translate="no">{{ displayedVersion?.content }}</p>
+                <div
+                  v-for="(addition, idx) in displayedVersion?.additions || []"
+                  :key="`${addition.sequence}:${addition.addedAt}`"
+                  class="modal-dream-addition"
+                  :class="{ 'modal-dream-addition--unanalyzed': addition.analysisState === 'unanalyzed' }"
+                  translate="no"
+                >
+                  <strong>{{ (displayedVersion?.additions?.length || 0) === 1 ? t('home.additionLabel') : t('home.numberedAdditionLabel', { number: idx + 1 }) }}</strong>
+                  <p>{{ addition.content }}</p>
+                  <div v-if="addition.analysisState === 'unanalyzed'" class="modal-dream-addition__warning">
+                    <span>{{ t('home.additionNotAnalyzed') }}</span>
+                    <AppButton
+                      v-if="isOwner && isCurrentVersion"
+                      type="button"
+                      variant="danger-outline"
+                      size="sm"
+                      :loading="isRetryingAnalysis"
+                      @click.stop="retryAnalysis(postStore.focusedDream._id)"
+                    >
+                      {{ t('home.retryAdditionAnalysis') }}
+                    </AppButton>
+                  </div>
+                </div>
+
+                <nav
+                  v-if="dreamVersions.length > 1"
+                  class="modal-version-nav"
+                  :aria-label="t('home.versionHistory')"
+                >
+                  <button type="button" :aria-label="t('home.previousVersion')" :disabled="selectedVersionIndex === 0" @click="selectedVersionIndex--">‹</button>
+                  <span>{{ selectedVersionIndex + 1 }} / {{ dreamVersions.length }}</span>
+                  <button type="button" :aria-label="t('home.nextVersion')" :disabled="selectedVersionIndex === dreamVersions.length - 1" @click="selectedVersionIndex++">›</button>
+                </nav>
+              </template>
               <span class="modal-timestamp">{{ timestamp }}</span>
             </div>
 
             <!-- Oracle status / results -->
-            <div v-if="postStore.focusedDream && postStore.focusedDream.ai_status" class="modal-oracle-wrap">
-              <div v-if="postStore.focusedDream.ai_status === 'completed' && analysis" class="modal-oracle-expanded">
+            <div v-if="displayedVersion?.ai_status" class="modal-oracle-wrap">
+              <div
+                v-if="isCurrentVersion && postStore.focusedDream.ai_analysis_enabled === false"
+                class="modal-oracle-disabled"
+              >
+                <span aria-hidden="true">◈</span>
+                <span>{{ t('home.aiAnalysisDisabled') }}</span>
+              </div>
+              <div v-else-if="displayedVersion.ai_status === 'completed' && analysis" class="modal-oracle-expanded">
                 <OracleAnalysisResult
                   :analysis="analysis"
                   :dream-id="postStore.focusedDream._id"
@@ -110,15 +207,15 @@
                   mode="collapsed"
                 />
               </div>
-              <div v-else-if="postStore.focusedDream.ai_status === 'pending'" class="modal-oracle-pending">
+              <div v-else-if="displayedVersion.ai_status === 'pending'" class="modal-oracle-pending">
                 <div class="spinner-small" aria-hidden="true"></div>
                 <span>{{ t('home.oracleAnalyzing') }}</span>
               </div>
-              <div v-else-if="postStore.focusedDream.ai_status === 'failed' || postStore.focusedDream.ai_status === 'cancelled'" class="modal-oracle-failed">
+              <div v-else-if="displayedVersion.ai_status === 'failed' || displayedVersion.ai_status === 'cancelled'" class="modal-oracle-failed">
                 <span class="warning-icon" aria-hidden="true">⚠️</span>
-                <span class="error-msg-text">{{ postStore.focusedDream.ai_status === 'cancelled' ? t('home.oracleCancelled') : t('home.oracleFailed') }}</span>
+                <span class="error-msg-text">{{ displayedVersion.ai_status === 'cancelled' ? t('home.oracleCancelled') : t('home.oracleFailed') }}</span>
                 <button
-                  v-if="isOwner"
+                  v-if="isOwner && isCurrentVersion"
                   type="button"
                   class="retry-btn"
                   @click.stop="retryAnalysis(postStore.focusedDream._id)"
@@ -127,6 +224,38 @@
                 </button>
               </div>
             </div>
+
+            <AppConfirm
+              v-model="showDeleteAdditionConfirm"
+              :title="t('home.deleteAdditionTitle')"
+              :message="t('home.deleteAdditionDraftMessage')"
+              :confirm-label="t('home.deleteAddition')"
+              :danger="true"
+              @confirm="confirmDraftAdditionDelete"
+              @cancel="cancelDraftAdditionDelete"
+            />
+            <AppConfirm
+              v-model="showDeletePostConfirm"
+              :title="t('home.deleteDreamTitle')"
+              :message="t('home.deleteDreamMessage')"
+              :confirm-label="t('home.delete')"
+              :danger="true"
+              :loading="isDeletingPost"
+              @confirm="confirmDeletePost"
+              @cancel="showDeletePostConfirm = false"
+            />
+            <AppConfirm
+              v-model="showDisableAiConfirm"
+              :title="t('home.disableAiTitle')"
+              :message="t('home.disableAiMessage')"
+              :secondary-label="t('home.keepAiResult')"
+              :confirm-label="t('home.deleteAiResult')"
+              :danger="true"
+              :loading="isUpdatingAi"
+              @secondary="disableAiAnalysis('keep')"
+              @confirm="disableAiAnalysis('delete')"
+              @cancel="showDisableAiConfirm = false"
+            />
 
             <!-- ── Like interaction row ── -->
             <div class="modal-interactions">
@@ -271,7 +400,12 @@ import apiClient         from '@/api/client'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo }       from '@/utils/timeAgo'
 import OracleAnalysisResult  from '@/components/common/OracleAnalysisResult.vue'
+import DreamMoodTag from '@/components/common/DreamMoodTag.vue'
 import AppButton from '@/components/common/AppButton.vue'
+import AppConfirm from '@/components/common/AppConfirm.vue'
+import AppDropdown from '@/components/common/AppDropdown.vue'
+import type { ApiDream } from '@/api/types'
+import type { DropdownItem, DropdownOption } from '@/components/common/AppDropdown.vue'
 
 const postStore  = usePostStore()
 const dreamStore = useDreamStore()
@@ -285,26 +419,147 @@ const isSubmitting = ref(false)
 const isLiking     = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
 const bodyRef      = ref<HTMLElement | null>(null)
-const showAdditionForm = ref(false)
-const additionText = ref('')
-const isAddingDetail = ref(false)
 const isRetryingAnalysis = ref(false)
+const selectedVersionIndex = ref(0)
+const isContextEditing = ref(false)
+const editContextContent = ref('')
+const editContextAdditions = ref<Array<{
+  clientId: string
+  sequence?: number
+  content: string
+}>>([])
+const isSavingContext = ref(false)
+const pendingDeleteDraftIndex = ref<number | null>(null)
+const showDeleteAdditionConfirm = ref(false)
+const showDeletePostConfirm = ref(false)
+const isDeletingPost = ref(false)
+const showDisableAiConfirm = ref(false)
+const isUpdatingAi = ref(false)
 
-function cancelAddition() {
-  showAdditionForm.value = false
-  additionText.value = ''
+type DreamVersion = NonNullable<ApiDream['versions']>[number]
+
+const dreamVersions = computed<DreamVersion[]>(() => {
+  const dream = postStore.focusedDream
+  if (!dream) return []
+  if (Array.isArray(dream.versions) && dream.versions.length > 0) return dream.versions
+  return [{
+    version: 1,
+    content: dream.content,
+    additions: dream.additions || [],
+    ai_status: dream.ai_status,
+    ai_result: dream.ai_result ?? dream.aiAnalysis ?? null,
+    mood_tag: dream.mood_tag,
+    analysisMetadata: dream.analysisMetadata,
+    editedAt: dream.created_at,
+    isCurrent: true,
+    isLegacyPartial: false,
+  }]
+})
+
+const displayedVersion = computed(() =>
+  dreamVersions.value[selectedVersionIndex.value]
+    ?? dreamVersions.value[dreamVersions.value.length - 1]
+    ?? null
+)
+const isCurrentVersion = computed(() => displayedVersion.value?.isCurrent === true)
+
+const normalizedDraftAdditions = computed(() =>
+  editContextAdditions.value
+    .filter(item => item.content.trim().length > 0)
+    .map(item => ({ ...item, content: item.content.trim() }))
+)
+
+const isContextDirty = computed(() => {
+  const current = dreamVersions.value[dreamVersions.value.length - 1]
+  if (!current) return false
+  if (editContextContent.value.trim() !== current.content.trim()) return true
+  const currentAdditions = current.additions || []
+  if (normalizedDraftAdditions.value.length !== currentAdditions.length) return true
+  return normalizedDraftAdditions.value.some((item, index) =>
+    item.content.trim() !== currentAdditions[index]?.content.trim()
+  )
+})
+
+const canSaveContext = computed(() =>
+  editContextContent.value.trim().length > 0
+  && isContextDirty.value
+  && !isSavingContext.value
+)
+
+function startContextEdit() {
+  const current = dreamVersions.value[dreamVersions.value.length - 1]
+  if (!current || !isOwner.value) return
+  selectedVersionIndex.value = dreamVersions.value.length - 1
+  editContextContent.value = current.content
+  editContextAdditions.value = (current.additions || []).map((item, index) => ({
+    clientId: `existing-${item.sequence}-${index}`,
+    sequence: item.sequence,
+    content: item.content,
+  }))
+  isContextEditing.value = true
 }
 
-async function submitAddition() {
+function cancelContextEdit() {
+  isContextEditing.value = false
+  editContextContent.value = ''
+  editContextAdditions.value = []
+  cancelDraftAdditionDelete()
+}
+
+function addDraftAddition() {
+  editContextAdditions.value.push({
+    clientId: `new-${Date.now()}-${editContextAdditions.value.length}`,
+    content: '',
+  })
+}
+
+function requestDraftAdditionDelete(index: number) {
+  pendingDeleteDraftIndex.value = index
+  showDeleteAdditionConfirm.value = true
+}
+
+function cancelDraftAdditionDelete() {
+  pendingDeleteDraftIndex.value = null
+  showDeleteAdditionConfirm.value = false
+}
+
+function confirmDraftAdditionDelete() {
+  const index = pendingDeleteDraftIndex.value
+  if (index !== null) editContextAdditions.value.splice(index, 1)
+  cancelDraftAdditionDelete()
+}
+
+async function saveContextEdit() {
   const dream = postStore.focusedDream
-  if (!dream || !additionText.value.trim() || isAddingDetail.value) return
-  isAddingDetail.value = true
+  if (!dream || !canSaveContext.value) return
+  isSavingContext.value = true
   try {
-    const updated = await dreamStore.appendDreamAddition(dream._id, additionText.value.trim())
+    const updated = await dreamStore.editDream(
+      dream._id,
+      editContextContent.value.trim(),
+      normalizedDraftAdditions.value.map(item => ({
+        ...(item.sequence ? { sequence: item.sequence } : {}),
+        content: item.content,
+      })),
+    )
     Object.assign(dream, updated)
-    cancelAddition()
+    selectedVersionIndex.value = Math.max(0, dreamVersions.value.length - 1)
+    cancelContextEdit()
   } finally {
-    isAddingDetail.value = false
+    isSavingContext.value = false
+  }
+}
+
+async function confirmDeletePost() {
+  const dream = postStore.focusedDream
+  if (!dream || isDeletingPost.value) return
+  isDeletingPost.value = true
+  try {
+    await dreamStore.removeDream(dream._id)
+    showDeletePostConfirm.value = false
+    postStore.closePost()
+  } finally {
+    isDeletingPost.value = false
   }
 }
 
@@ -317,6 +572,110 @@ const isOwner = computed(() => {
     : postStore.focusedDream.userId
   return userId === authStore.myId
 })
+
+const modalMenuOptions = computed((): DropdownItem[] => {
+  const dream = postStore.focusedDream
+  const options: DropdownItem[] = [{
+    label: t('home.editPost'),
+    value: 'edit',
+    disabled: postStore.focusedDream?.ai_status === 'pending',
+  },
+  {
+    label: postStore.focusedDream?.privacy === 'private'
+      ? t('home.makePublic')
+      : t('home.makePrivate'),
+    value: 'privacy',
+  }]
+
+  options.push({
+    label: dream?.ai_analysis_enabled === false
+      ? t('home.enableAiAnalysis')
+      : t('home.disableAiAnalysis'),
+    value: 'ai-toggle',
+  })
+
+  if (dream?.ai_analysis_enabled !== false) {
+    options.push({
+      label: t('home.reanalyze'),
+      value: 'reanalyze',
+      disabled: dream?.ai_status === 'pending',
+    })
+  }
+
+  options.push(
+  { divider: true },
+  {
+    label: t('home.delete'),
+    value: 'delete',
+    danger: true,
+  })
+  return options
+})
+
+async function handleModalMenuSelect(item: DropdownOption) {
+  const dream = postStore.focusedDream
+  if (!dream) return
+  if (item.value === 'edit') {
+    startContextEdit()
+    return
+  }
+  if (item.value === 'privacy') {
+    const updated = await dreamStore.changePrivacy(
+      dream._id,
+      dream.privacy === 'private' ? 'public' : 'private',
+    )
+    Object.assign(dream, updated)
+    return
+  }
+  if (item.value === 'ai-toggle') {
+    await toggleAiAnalysis()
+    return
+  }
+  if (item.value === 'reanalyze') {
+    await retryAnalysis(dream._id)
+    return
+  }
+  if (item.value === 'delete') {
+    showDeletePostConfirm.value = true
+  }
+}
+
+async function toggleAiAnalysis() {
+  const dream = postStore.focusedDream
+  if (!dream || isUpdatingAi.value) return
+
+  if (dream.ai_analysis_enabled === false) {
+    isUpdatingAi.value = true
+    try {
+      const updated = await dreamStore.setAiAnalysis(dream._id, true)
+      Object.assign(dream, updated)
+      selectedVersionIndex.value = Math.max(0, dreamVersions.value.length - 1)
+    } finally {
+      isUpdatingAi.value = false
+    }
+    return
+  }
+
+  if (dream.ai_result ?? dream.aiAnalysis) {
+    showDisableAiConfirm.value = true
+    return
+  }
+  await disableAiAnalysis('delete')
+}
+
+async function disableAiAnalysis(resultPolicy: 'keep' | 'delete') {
+  const dream = postStore.focusedDream
+  if (!dream || isUpdatingAi.value) return
+  isUpdatingAi.value = true
+  try {
+    const updated = await dreamStore.setAiAnalysis(dream._id, false, resultPolicy)
+    Object.assign(dream, updated)
+    selectedVersionIndex.value = Math.max(0, dreamVersions.value.length - 1)
+    showDisableAiConfirm.value = false
+  } finally {
+    isUpdatingAi.value = false
+  }
+}
 
 async function retryAnalysis(dreamId: string) {
   if (isRetryingAnalysis.value) return
@@ -354,35 +713,11 @@ const timestamp = computed(() =>
   postStore.focusedDream ? timeAgo(postStore.focusedDream.created_at, localeStore.currentLocale) : ''
 )
 const analysis = computed(() => {
-  const d = postStore.focusedDream
-  if (!d) return null
-  return d.ai_result ?? d.aiAnalysis ?? null
+  return displayedVersion.value?.ai_result ?? null
 })
-type EmotionToneKey = 'urgent_conflicted' | 'anxious' | 'fearful' | 'sad' | 'calm' | 'mixed' | 'neutral'
-const emotionLabelKeys: Record<EmotionToneKey, string> = {
-  urgent_conflicted: 'home.mood.urgentConflicted',
-  anxious: 'home.mood.anxious',
-  fearful: 'home.mood.fearful',
-  sad: 'home.mood.sad',
-  calm: 'home.mood.calm',
-  mixed: 'home.mood.mixed',
-  neutral: 'home.mood.neutral',
-}
-
-const emotionToneKey = computed<EmotionToneKey>(() => {
-  const explicit = analysis.value?.emotional_tone_key
-  if (explicit && explicit in emotionLabelKeys) return explicit
-  const legacy = `${analysis.value?.emotional_tone || postStore.focusedDream?.mood_tag || ''}`.toLocaleLowerCase('vi')
-  if (/gấp|bối rối/.test(legacy)) return 'urgent_conflicted'
-  if (/lo âu|lo lắng|anx/.test(legacy)) return 'anxious'
-  if (/sợ|fear|hoảng/.test(legacy)) return 'fearful'
-  if (/buồn|tiếc|sad|regret/.test(legacy)) return 'sad'
-  if (/bình yên|calm|thư thái/.test(legacy)) return 'calm'
-  if (/đan xen|mixed/.test(legacy)) return 'mixed'
-  return 'neutral'
-})
-const modalMoodLabel = computed(() => t(emotionLabelKeys[emotionToneKey.value]))
-const moodClass = computed(() => emotionToneKey.value.replace(/_/g, '-'))
+const modalMoodLabel = computed(() =>
+  String(analysis.value?.emotional_tone || displayedVersion.value?.mood_tag || '').trim()
+)
 const isEdited = computed(() =>
   (postStore.focusedDream?.edit_history?.length ?? 0) > 0
 )
@@ -434,6 +769,8 @@ async function submitComment(): Promise<void> {
 
 watch(() => postStore.focusedId, (val) => {
   if (val) {
+    selectedVersionIndex.value = Math.max(0, dreamVersions.value.length - 1)
+    cancelContextEdit()
     nextTick(() => {
       containerRef.value?.focus()
       if (bodyRef.value) bodyRef.value.scrollTop = 0
@@ -442,8 +779,28 @@ watch(() => postStore.focusedId, (val) => {
   } else {
     document.body.style.overflow = ''
     commentText.value = ''
+    cancelContextEdit()
   }
 })
+
+watch(
+  () => postStore.editRequested && Boolean(postStore.focusedDream),
+  (shouldEdit) => {
+    if (!shouldEdit) return
+    postStore.consumeEditRequest()
+    nextTick(startContextEdit)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => dreamVersions.value.length,
+  (length, previousLength) => {
+    if (length > previousLength || selectedVersionIndex.value >= length) {
+      selectedVersionIndex.value = Math.max(0, length - 1)
+    }
+  },
+)
 </script>
 
 <style scoped>
@@ -514,29 +871,19 @@ watch(() => postStore.focusedId, (val) => {
   flex-shrink: 0;
 }
 
-/* Mood tag */
-.modal-mood {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  padding: 2px 8px;
+.modal-private-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px 8px;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
-  border: 1px solid transparent;
-  white-space: nowrap;
-  background: #262626;
+  background: var(--color-bg-elevated);
   color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
 }
-.modal-mood--lucid       { background: #112136; color: #5b9cf6; border-color: #1e3a5f; }
-.modal-mood--nightmare   { background: #2d1010; color: #ed4956; border-color: #3d1515; }
-.modal-mood--calm        { background: #0e2a1c; color: #4ade80; border-color: #1a3d2e; }
-.modal-mood--prophetic   { background: #1e1230; color: #a78bfa; border-color: #2d1f4a; }
-.modal-mood--euphoric    { background: #2a1e08; color: #f59e0b; border-color: #3d2d10; }
-.modal-mood--urgent-conflicted { background: #2a1e08; color: #f5c36a; border-color: #4a3514; }
-.modal-mood--anxious,
-.modal-mood--fearful { background: #2d1010; color: #f19a9f; border-color: #4b2024; }
-.modal-mood--sad { background: #24182f; color: #c9a7e8; border-color: #3b2850; }
-.modal-mood--mixed { background: #171e30; color: #aab9e8; border-color: #293654; }
-.modal-mood--neutral { background: #242424; color: #b8b8b8; border-color: #343434; }
-
 .modal-close-btn {
   width: 32px;
   height: 32px;
@@ -551,6 +898,18 @@ watch(() => postStore.focusedId, (val) => {
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 .modal-close-btn:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+.modal-menu-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.modal-menu-btn:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
 
 /* ── Unified scrollable body ── */
 .modal-body-scrollable {
@@ -569,6 +928,38 @@ watch(() => postStore.focusedId, (val) => {
   padding: var(--space-5);
   border-bottom: 1px solid #262626;
 }
+.modal-version-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  margin: var(--space-4) 0 var(--space-2);
+  color: var(--color-text-muted);
+}
+.modal-version-nav button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.modal-version-nav button:hover:not(:disabled) { background: var(--color-bg-hover); }
+.modal-version-nav button:disabled { opacity: .3; cursor: default; }
+.modal-version-nav span { min-width: 42px; text-align: center; font-size: var(--font-size-xs); }
+.modal-version-legacy-note {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, .08);
+  color: #d9ad62;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
 .modal-content-text {
   font-size: var(--font-size-base);
   color: var(--color-text-primary);
@@ -580,15 +971,30 @@ watch(() => postStore.focusedId, (val) => {
 .modal-dream-addition {
   margin: var(--space-4) 0;
   padding: var(--space-4);
-  border-left: 2px solid rgba(129, 140, 248, .6);
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-  background: rgba(99, 102, 241, .07);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
 }
 .modal-dream-addition strong {
   display: block;
   margin-bottom: var(--space-2);
-  color: #a5b4fc;
+  color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
+}
+.modal-dream-addition__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.modal-dream-addition--editing {
+  background: var(--color-bg-surface);
+  border-color: var(--color-border-input);
+}
+.modal-addition-delete-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
 }
 .modal-dream-addition p {
   margin: 0;
@@ -619,12 +1025,6 @@ watch(() => postStore.focusedId, (val) => {
   font-size: var(--font-size-xs);
   line-height: var(--line-height-relaxed);
 }
-.modal-addition-controls {
-  display: grid;
-  justify-items: start;
-  gap: var(--space-2);
-  margin: var(--space-3) 0;
-}
 .modal-addition-textarea {
   width: 100%;
   resize: vertical;
@@ -636,19 +1036,43 @@ watch(() => postStore.focusedId, (val) => {
   font: inherit;
   line-height: 1.6;
 }
-.modal-addition-actions {
+.modal-context-editor {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  font: inherit;
+  line-height: var(--line-height-relaxed);
+}
+.modal-context-editor:focus,
+.modal-addition-textarea:focus {
+  border-color: #666;
+  outline: none;
+}
+.modal-edit-label {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+.modal-context-edit-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
   width: 100%;
+  margin-top: var(--space-4);
 }
-.modal-addition-actions > span,
-.modal-addition-controls > small {
+.modal-context-edit-actions > span {
+  margin-right: auto;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }
-.modal-addition-actions > span { margin-right: auto; }
 .modal-timestamp {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
@@ -657,6 +1081,15 @@ watch(() => postStore.focusedId, (val) => {
 /* ── Oracle status ── */
 .modal-oracle-wrap {
   border-bottom: 1px solid #262626;
+}
+.modal-oracle-disabled {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px var(--space-5);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 .modal-oracle-expanded {
   padding: var(--space-5);

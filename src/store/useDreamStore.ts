@@ -67,11 +67,17 @@ export const useDreamStore = defineStore('dream', () => {
   }
 
   /** Create a dream and prepend it to the feed */
-  async function addDream(content: string, isPublic: boolean, moodTag = ''): Promise<{ dream: ApiDream }> {
+  async function addDream(
+    content: string,
+    isPublic: boolean,
+    moodTag = '',
+    aiAnalysisEnabled = true,
+  ): Promise<{ dream: ApiDream }> {
     const { data } = await apiClient.post<CreateDreamResponse>('/dreams', {
       content,
       is_public: isPublic,
       mood_tag:  moodTag,
+      ai_analysis_enabled: aiAnalysisEnabled,
     })
     const authStore = useAuthStore()
     const populatedDream: ApiDream = {
@@ -90,8 +96,10 @@ export const useDreamStore = defineStore('dream', () => {
     useSettingsStore().showToastKey('home.postedSuccess', undefined, 'success')
     
     // Kick off Oracle analysis tracking UI & polling
-    const { useOracleStore } = await import('@/store/useOracleStore')
-    useOracleStore().startTracking(populatedDream)
+    if (populatedDream.ai_analysis_enabled && populatedDream.ai_status === 'pending') {
+      const { useOracleStore } = await import('@/store/useOracleStore')
+      useOracleStore().startTracking(populatedDream)
+    }
     return { dream: populatedDream }
   }
 
@@ -114,22 +122,41 @@ export const useDreamStore = defineStore('dream', () => {
    * Sends PUT /api/dreams/:id with the new content.
    * On success, replaces the dream in-place so the UI updates immediately.
    */
-  async function editDream(dreamId: string, content: string): Promise<void> {
-    const { data } = await apiClient.put<UpdateDreamResponse>(`/dreams/${dreamId}`, { content })
-    const idx = dreams.value.findIndex(d => d._id === dreamId)
-    if (idx !== -1) dreams.value[idx] = data.data
+  async function editDream(
+    dreamId: string,
+    content: string,
+    additions?: Array<{ sequence?: number; content: string }>,
+  ): Promise<ApiDream> {
+    const { data } = await apiClient.put<UpdateDreamResponse>(
+      `/dreams/${dreamId}`,
+      { content, ...(additions ? { additions } : {}) },
+    )
+    return applyContextualDreamUpdate(dreamId, data.data)
   }
 
-  /** Append newly remembered details and start a fresh analysis without editing the original report. */
-  async function appendDreamAddition(dreamId: string, content: string): Promise<ApiDream> {
-    const { data } = await apiClient.post<UpdateDreamResponse>(`/dreams/${dreamId}/additions`, { content })
+  async function applyContextualDreamUpdate(dreamId: string, response: ApiDream): Promise<ApiDream> {
     const idx = dreams.value.findIndex(d => d._id === dreamId)
     const updatedDream = idx === -1
-      ? data.data
-      : { ...data.data, userId: dreams.value[idx].userId }
+      ? response
+      : { ...response, userId: dreams.value[idx].userId }
     if (idx !== -1) dreams.value[idx] = updatedDream
-    const { useOracleStore } = await import('@/store/useOracleStore')
-    useOracleStore().startTracking(updatedDream)
+    if (updatedDream.ai_analysis_enabled && updatedDream.ai_status === 'pending') {
+      const { useOracleStore } = await import('@/store/useOracleStore')
+      useOracleStore().startTracking(updatedDream)
+    }
+    return updatedDream
+  }
+
+  async function setAiAnalysis(
+    dreamId: string,
+    enabled: boolean,
+    resultPolicy?: 'keep' | 'delete',
+  ): Promise<ApiDream> {
+    const { data } = await apiClient.patch<UpdateDreamResponse>(
+      `/dreams/${dreamId}/ai-analysis`,
+      { enabled, ...(resultPolicy ? { resultPolicy } : {}) },
+    )
+    const updatedDream = await applyContextualDreamUpdate(dreamId, data.data)
     return updatedDream
   }
 
@@ -140,19 +167,31 @@ export const useDreamStore = defineStore('dream', () => {
   async function removeDream(dreamId: string): Promise<void> {
     await apiClient.delete(`/dreams/${dreamId}`)
     dreams.value = dreams.value.filter(d => d._id !== dreamId)
+    const { useSettingsStore } = await import('@/store/useSettingsStore')
+    useSettingsStore().showToastKey('home.deletedSuccess', undefined, 'success')
   }
 
   /**
    * Change the privacy setting of a dream.
    * Sends PATCH /api/dreams/:id/privacy, then updates the local dream.
    */
-  async function changePrivacy(dreamId: string, privacy: 'public' | 'private'): Promise<void> {
+  async function changePrivacy(dreamId: string, privacy: 'public' | 'private'): Promise<ApiDream> {
     const { data } = await apiClient.patch<UpdateDreamResponse>(
       `/dreams/${dreamId}/privacy`,
       { privacy }
     )
     const idx = dreams.value.findIndex(d => d._id === dreamId)
-    if (idx !== -1) dreams.value[idx] = data.data
+    const updatedDream = idx === -1
+      ? data.data
+      : { ...data.data, userId: dreams.value[idx].userId }
+    if (idx !== -1) dreams.value[idx] = updatedDream
+    const { useSettingsStore } = await import('@/store/useSettingsStore')
+    useSettingsStore().showToastKey(
+      privacy === 'public' ? 'home.madePublicSuccess' : 'home.madePrivateSuccess',
+      undefined,
+      'success',
+    )
+    return updatedDream
   }
 
   /**
@@ -188,7 +227,7 @@ export const useDreamStore = defineStore('dream', () => {
     addDream,
     toggleLike,
     editDream,
-    appendDreamAddition,
+    setAiAnalysis,
     removeDream,
     changePrivacy,
     incrementCommentCount,

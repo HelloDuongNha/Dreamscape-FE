@@ -28,26 +28,34 @@
         />
 
 
-        <!-- Composer footer: visibility toggle + post button -->
+        <!-- Composer footer: publishing options + submit -->
         <div class="composer__footer">
-          <button
-            id="visibility-toggle-btn"
-            class="composer__visibility"
-            :class="{ 'composer__visibility--private': !isPublic }"
-            :aria-pressed="isPublic"
-            :aria-label="isPublic ? t('home.visibilityPublicAria') : t('home.visibilityPrivateAria')"
-            @click="isPublic = !isPublic"
-          >
-            <!-- Globe (public) -->
-            <svg v-if="isPublic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-            </svg>
-            <!-- Lock (private) -->
-            <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            {{ isPublic ? t('home.public') : t('home.private') }}
-          </button>
+          <div class="composer__options">
+            <button
+              id="visibility-toggle-btn"
+              class="composer__visibility"
+              :class="{ 'composer__visibility--private': !isPublic }"
+              :aria-pressed="isPublic"
+              :aria-label="isPublic ? t('home.visibilityPublicAria') : t('home.visibilityPrivateAria')"
+              @click="isPublic = !isPublic"
+            >
+              <!-- Globe (public) -->
+              <svg v-if="isPublic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+              </svg>
+              <!-- Lock (private) -->
+              <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              {{ isPublic ? t('home.public') : t('home.private') }}
+            </button>
+
+            <AppSwitch
+              v-model="aiAnalysisEnabled"
+              :label="t('home.aiAnalysis')"
+              :aria-label="t('home.aiAnalysisSwitchAria')"
+            />
+          </div>
 
           <AppButton
             id="post-dream-btn"
@@ -128,6 +136,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppButton       from '@/components/common/AppButton.vue'
+import AppSwitch       from '@/components/common/AppSwitch.vue'
 import AppSkeleton     from '@/components/common/AppSkeleton.vue'
 import DreamCard       from './DreamCard.vue'
 import { useDreamStore } from '@/store/useDreamStore'
@@ -147,6 +156,7 @@ const { t }      = useI18n({ useScope: 'global' })
 // ── Composer ──────────────────────────────────────────────────────────────────
 const composerText = ref('')
 const isPublic     = ref(true)
+const aiAnalysisEnabled = ref(true)
 const isPosting    = ref(false)
 
 watch(
@@ -169,9 +179,10 @@ async function handlePost(): Promise<void> {
   if (!composerText.value.trim() || isPosting.value) return
   isPosting.value = true
   try {
-    await dreamStore.addDream(composerText.value, isPublic.value, '')
+    await dreamStore.addDream(composerText.value, isPublic.value, '', aiAnalysisEnabled.value)
     composerText.value = ''
     isPublic.value     = authStore.myUser?.defaultPrivacy !== 'private'
+    aiAnalysisEnabled.value = true
   } catch { /* silently ignore for now */ }
   finally { isPosting.value = false }
 }
@@ -326,6 +337,13 @@ watch(
   outline: none;
 }
 .composer__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.composer__options {
   display: flex;
   align-items: center;
   gap: var(--space-3);
