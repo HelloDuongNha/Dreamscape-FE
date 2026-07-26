@@ -40,8 +40,10 @@ function analysisStatus(dream: ApiDream): DreamAnalysisStatus {
 }
 
 function startedAtMs(dream: ApiDream): number {
-  const parsed = dream.analysisMetadata?.startedAt
-    ? new Date(dream.analysisMetadata.startedAt).getTime()
+  const processingStartedAt = dream.analysisMetadata?.processingStartedAt
+  const queuedStartedAt = dream.analysisMetadata?.startedAt
+  const parsed = (processingStartedAt || queuedStartedAt)
+    ? new Date(processingStartedAt || queuedStartedAt || '').getTime()
     : Number.NaN
   return Number.isFinite(parsed) ? parsed : Date.now()
 }

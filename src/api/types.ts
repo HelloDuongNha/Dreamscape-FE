@@ -262,6 +262,8 @@ export interface ApiDream {
     queuePosition?: number
     enqueuedAt?: string
     startedAt?: string
+    processingStartedAt?: string
+    processingDurationMs?: number
     generatedAt?: string
     durationMs?: number
     estimatedDurationSeconds?: number
