@@ -84,7 +84,16 @@ export default {
   },
   dreamProgress: {
     title: 'Phân tích giấc mơ', aria: 'Tiến trình phân tích giấc mơ', stepsAria: 'Các bước phân tích giấc mơ',
-    runningSubject: 'Oracle đang đọc toàn bộ mạch giấc mơ', completedSubject: 'Oracle đã hoàn tất phân tích', cancelledSubject: 'Phân tích đã được hủy',
-    viewPost: 'Xem bài viết', completed: 'Kết quả đã sẵn sàng.', cancelled: 'Kết quả chưa hoàn tất không được lưu. Bạn có thể thử lại từ đầu.',
+    runningSubject: 'Oracle đang đọc toàn bộ mạch giấc mơ', completedSubject: 'Oracle đã hoàn tất phân tích', cancelledSubject: 'Phân tích đã được hủy', failedSubject: 'Phân tích chưa hoàn tất',
+    viewPost: 'Xem bài viết', completed: 'Kết quả đã sẵn sàng.', cancelled: 'Kết quả chưa hoàn tất không được lưu. Bạn có thể thử lại từ đầu.', failed: 'Oracle không thể hoàn tất lần phân tích này. Bạn có thể thử lại.',
+    step: 'Bước {current}/{total}', completedSteps: 'Đã hoàn tất {total}/{total} bước',
+    stages: {
+      queued: { label: 'Chờ tới lượt phân tích', detail: 'Mỗi tài khoản chỉ có một giấc mơ được xử lý tại một thời điểm.' },
+      preparing: { label: 'Chuẩn bị lời kể và hồ sơ', detail: 'Tách nội dung giấc mơ, phản ứng khi tỉnh và bối cảnh đã cung cấp.' },
+      retrievingContext: { label: 'Tìm chi tiết và trường hợp tương đồng', detail: 'Đối chiếu từ điển, chi tiết trong lời kể và những giấc mơ trước.' },
+      retrievingRules: { label: 'Chọn tri thức có thể áp dụng', detail: 'Kiểm tra lập luận đã duyệt, nguồn tài liệu và phạm vi được phép suy luận.' },
+      generatingAnalysis: { label: 'Tổng hợp các mạch diễn giải', detail: 'Mô hình viết từ phần dữ liệu và bằng chứng đã chọn.' },
+      finalizing: { label: 'Kiểm chứng và hoàn thiện', detail: 'Loại suy luận không có căn cứ, gắn nguồn và chuẩn hóa câu hỏi.' },
+    },
   },
 } as const

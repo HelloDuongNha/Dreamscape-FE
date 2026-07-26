@@ -17,14 +17,14 @@
       />
 
       <PinnedTaskToast
-        v-if="oracleStore.isPinnedVisible && oracleStore.trackedDream"
-        key="dream-analysis-run"
+        v-for="task in oracleStore.pinnedTasks"
+        :key="`dream-analysis-${task.dreamId}`"
         kind="dream-analysis"
-        :title="`Oracle: ${oracleTitle}`"
-        :message="oracleMessage"
-        :progress="oracleStore.trackedDream.ai_status === 'pending' && !oracleStore.completedDream && !oracleStore.failedDream ? oracleStore.progress : 100"
-        :terminal="Boolean(oracleStore.completedDream || oracleStore.failedDream || oracleStore.cancelledDream)"
-        @open="handleOraclePinnedClick"
+        :title="`Oracle: ${oracleTaskTitle(task)}`"
+        :message="oracleTaskMessage(task)"
+        :progress="task.status === 'pending' ? task.progress : 100"
+        :terminal="task.status !== 'pending'"
+        @open="handleOraclePinnedClick(task)"
       />
 
       <PinnedTaskToast
@@ -97,6 +97,7 @@ import { useAcademicJobQueueStore } from '@/store/useAcademicJobQueueStore'
 import MessageToast             from './MessageToast.vue'
 import PinnedTaskToast from './PinnedTaskToast.vue'
 import { useOracleChatStore } from '@/store/useOracleChatStore'
+import type { DreamAnalysisTask } from '@/store/useOracleStore'
 
 const toastStore = useMessageToastStore()
 const chatStore  = useChatStore()
@@ -398,39 +399,41 @@ function handleSourcePinnedClick() {
   }
 }
 
-const oracleTitle = computed(() => {
-  if (oracleStore.completedDream) return 'Hoàn thành'
-  if (oracleStore.failedDream) return 'Thất bại'
-  if (oracleStore.cancelledDream) return 'Đã hủy'
+function oracleTaskTitle(task: DreamAnalysisTask) {
+  if (task.status === 'completed') return 'Hoàn thành'
+  if (task.status === 'failed') return 'Thất bại'
+  if (task.status === 'cancelled') return 'Đã hủy'
+  if (task.dream.analysisMetadata?.currentStage === 'queued') {
+    const position = Number(task.dream.analysisMetadata?.queuePosition)
+    return Number.isFinite(position) && position > 0
+      ? `Hàng chờ #${position}`
+      : 'Đang chờ'
+  }
   return 'Phân tích...'
-})
+}
 
-const oracleMessage = computed(() => {
-  if (oracleStore.completedDream) {
+function oracleTaskMessage(task: DreamAnalysisTask) {
+  if (task.status === 'completed') {
     return 'Oracle đã phân tích xong giấc mơ.'
   }
-  if (oracleStore.failedDream) {
+  if (task.status === 'failed') {
     return 'Oracle chưa thể phân tích giấc mơ này. Vui lòng thử lại sau.'
   }
-  if (oracleStore.cancelledDream) {
+  if (task.status === 'cancelled') {
     return 'Hủy tác vụ thành công.'
   }
-  const minutes = Math.floor(oracleStore.elapsedSeconds / 60)
-  const seconds = oracleStore.elapsedSeconds % 60
+  const minutes = Math.floor(task.elapsedSeconds / 60)
+  const seconds = task.elapsedSeconds % 60
   const elapsed = minutes > 0 ? `${minutes} phút ${seconds} giây` : `${seconds} giây`
-  return `${oracleStore.statusMessage} · ${oracleStore.progress}% · đã chạy ${elapsed}`
-})
+  return `${task.statusMessage} · ${task.progress}% · đã chạy ${elapsed}`
+}
 
-function handleOraclePinnedClick() {
-  if (oracleStore.completedDream) {
-    oracleStore.openDialog()
-  } else if (oracleStore.failedDream) {
-    oracleStore.stopTracking()
-  } else if (oracleStore.cancelledDream) {
-    oracleStore.openDialog()
-  } else {
-    oracleStore.openDialog()
+function handleOraclePinnedClick(task: DreamAnalysisTask) {
+  if (task.status === 'failed') {
+    oracleStore.stopTracking(task.dreamId)
+    return
   }
+  oracleStore.openTask(task.dreamId)
 }
 
 const extractionTitle = computed(() => {

@@ -251,11 +251,14 @@ export interface ApiDream {
   ai_result:      AiDreamAnalysisResult | null
   aiAnalysis?:    AiDreamAnalysisResult | null
   analysisMetadata?: {
-    currentStage?: 'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing' | 'completed'
+    currentStage?: 'queued' | 'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing' | 'completed' | 'failed' | 'cancelled'
+    failedAtStage?: 'queued' | 'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing'
     progress?: number
     statusMessage?: string
     currentMiniStep?: string
-    stageResults?: Partial<Record<'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing', string>>
+    stageResults?: Partial<Record<'queued' | 'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing', string>>
+    queuePosition?: number
+    enqueuedAt?: string
     startedAt?: string
     generatedAt?: string
     durationMs?: number

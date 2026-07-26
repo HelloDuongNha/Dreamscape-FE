@@ -84,7 +84,16 @@ export default {
   },
   dreamProgress: {
     title: 'Dream analysis', aria: 'Dream analysis progress', stepsAria: 'Dream analysis steps',
-    runningSubject: 'Oracle is reading the full dream narrative', completedSubject: 'Oracle has completed the analysis', cancelledSubject: 'Analysis cancelled',
-    viewPost: 'View post', completed: 'The result is ready.', cancelled: 'Incomplete results were not saved. You can try again from the beginning.',
+    runningSubject: 'Oracle is reading the full dream narrative', completedSubject: 'Oracle has completed the analysis', cancelledSubject: 'Analysis cancelled', failedSubject: 'Analysis was not completed',
+    viewPost: 'View post', completed: 'The result is ready.', cancelled: 'Incomplete results were not saved. You can try again from the beginning.', failed: 'Oracle could not complete this analysis. You can try again.',
+    step: 'Step {current}/{total}', completedSteps: 'Completed {total}/{total} steps',
+    stages: {
+      queued: { label: 'Waiting for analysis', detail: 'Each account can process one dream at a time.' },
+      preparing: { label: 'Preparing narrative and profile', detail: 'Separating the dream narrative, waking response, and supplied context.' },
+      retrievingContext: { label: 'Finding details and similar cases', detail: 'Comparing dictionary entries, narrative details, and previous dreams.' },
+      retrievingRules: { label: 'Selecting applicable knowledge', detail: 'Checking approved claims, sources, and permitted inference scope.' },
+      generatingAnalysis: { label: 'Synthesizing interpretive threads', detail: 'The model is writing from the selected data and evidence.' },
+      finalizing: { label: 'Verifying and finalizing', detail: 'Removing unsupported inferences, linking sources, and standardizing questions.' },
+    },
   },
 } as const
