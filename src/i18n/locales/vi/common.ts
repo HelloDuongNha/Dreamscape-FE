@@ -75,7 +75,7 @@ export default {
       sourceNone: 'Không có',
       sourceUnknown: 'Không xác định',
       identifiers: '\n• Định danh: {value}',
-      pdfStored: 'Đã lưu Cloudinary',
+      pdfStored: 'Đã lưu PDF gốc',
       pdfBlocked: 'Bị chặn bởi nguồn',
       pdfExternalOnly: 'Có link ngoài — không lưu tự động',
       pdfUnavailable: 'Không có PDF online',

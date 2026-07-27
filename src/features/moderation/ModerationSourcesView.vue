@@ -221,7 +221,7 @@
                   <span class="processing-status-text">Đang kiểm tra...</span>
                 </template>
                 <template v-else-if="source.originalFile">
-                  <span>Đã lưu Cloudinary</span>
+                  <span>Đã lưu PDF gốc</span>
                 </template>
                 <template v-else-if="source.pdfUrl">
                   <span>Có link online</span>

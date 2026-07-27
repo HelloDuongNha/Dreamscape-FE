@@ -75,7 +75,7 @@ export default {
       sourceNone: 'None',
       sourceUnknown: 'Unknown',
       identifiers: '\n• Identifiers: {value}',
-      pdfStored: 'Saved to Cloudinary',
+      pdfStored: 'Saved to DreamScape',
       pdfBlocked: 'Blocked by source',
       pdfExternalOnly: 'External link available — not saved automatically',
       pdfUnavailable: 'No online PDF',
