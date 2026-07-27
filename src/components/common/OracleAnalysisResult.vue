@@ -352,6 +352,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import type { AiDreamAnalysisResult } from '@/api/types'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { usePostStore } from '@/store/usePostStore'
@@ -386,6 +387,7 @@ const activeMode = computed(() => {
 })
 
 const router = useRouter()
+const { t } = useI18n({ useScope: 'global' })
 
 function formatCitationText(src: any): string {
   if (!src) return 'Tài liệu'
@@ -767,9 +769,9 @@ async function regenerateContinuation() {
         ?? history.length - 1
     }
     continuationProgress.value = 100
-    settingsStore.showToast('Đã viết lại phần tiếp theo.', 'success')
+    settingsStore.showToast(t('oracle.continuationRegenerated'), 'success')
   } catch (err: any) {
-    settingsStore.showToast(err.response?.data?.message || 'Không thể viết lại phần tiếp theo.', 'error')
+    settingsStore.showToast(t('oracle.continuationRegenerateFailed'), 'error')
   } finally {
     window.clearInterval(timer)
     window.setTimeout(() => {
