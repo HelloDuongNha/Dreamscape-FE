@@ -70,11 +70,18 @@ export interface SourceContribution {
     updatedAt?: string
   }
   readerBuildSnapshots?: Array<{
+    status?: 'success' | 'failed'
     engine: string
     sourceType: string
     sectionCount: number
     chunkCount: number
     builtAt: string
+    durationMs?: number
+    estimatedDurationSeconds?: number
+    pageCount?: number
+    ocrUsed?: boolean
+    failureCode?: string
+    failureMessage?: string
   }>
   pdfImportHistory?: Array<{
     durationMs: number

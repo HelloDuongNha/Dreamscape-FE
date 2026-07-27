@@ -845,14 +845,16 @@
               </div>
             </div>
 
-            <template v-if="props.actionMode === 'moderation-preview'">
+            <div
+              v-if="props.actionMode === 'moderation-preview'"
+              class="moderation-review-actions"
+            >
               <AppButton
                 variant="danger"
                 size="sm"
                 block
                 :loading="isReviewing"
                 @click="handleModerationReject"
-                style="margin-bottom: 8px;"
               >
                 {{ t('library.system.reject') }}
               </AppButton>
@@ -864,11 +866,10 @@
                 :loading="isReviewing"
                 :disabled="!moderationTitleValid"
                 @click="handleModerationApprove"
-                style="margin-bottom: 8px;"
               >
                 {{ t('library.system.approve') }}
               </AppButton>
-            </template>
+            </div>
 
             <AppButton
               variant="secondary"
@@ -894,19 +895,22 @@
                       <span class="history-accordion__chevron" aria-hidden="true">⌄</span>
                       <span class="history-accordion__main">
                         <strong>{{ build.label }}</strong>
-                        <small>{{ t('library.system.buildNumber', { number: build.number, date: formatRuleRunDate(build.builtAt) }) }}</small>
+                        <small>{{ t('library.system.buildNumber', { number: build.number }) }}</small>
                       </span>
                       <span class="history-accordion__meta">
-                        <strong>{{ t('library.system.sectionsChunks', { sections: build.sectionCount, chunks: build.chunkCount }) }}</strong>
+                        <strong :class="build.status === 'failed' ? 'run-status--failed' : ''">
+                          {{ build.status === 'failed' ? t('library.statuses.failed') : t('library.system.sectionsChunks', { sections: build.sectionCount, chunks: build.chunkCount }) }}
+                        </strong>
                         <small>{{ build.timing ? formatRuleDuration(build.timing.durationMs) : t('library.system.durationUnavailable') }}</small>
                       </span>
                     </summary>
                     <dl class="history-detail-grid">
                       <div><dt>{{ t('library.system.completedAt') }}</dt><dd>{{ formatRuleRunDate(build.builtAt) }}</dd></div>
-                      <div><dt>{{ t('library.system.duration') }}</dt><dd>{{ build.timing ? formatRuleDuration(build.timing.durationMs) : t('library.system.durationUnavailable') }}</dd></div>
-                      <div><dt>{{ t('library.system.contentSize') }}</dt><dd>{{ t('library.system.sectionsChunks', { sections: build.sectionCount, chunks: build.chunkCount }) }}</dd></div>
-                      <div v-if="build.timing"><dt>{{ t('library.system.pdfDetails') }}</dt><dd>{{ build.timing.pageCount }} {{ t('library.readerLocal.pagesShort') }} · {{ build.timing.ocrUsed ? 'OCR' : 'Docling' }}</dd></div>
-                      <div v-if="build.timing"><dt>{{ t('library.system.estimateDifference') }}</dt><dd :class="build.timing.estimatedDurationSeconds * 1000 >= build.timing.durationMs ? 'timing-early' : 'timing-late'">{{ formatReaderTimingDelta(build.timing) }}</dd></div>
+                      <div><dt>{{ t('library.system.readerEngine') }}</dt><dd>{{ build.engine }}</dd></div>
+                      <div><dt>{{ t('library.system.readerSourceType') }}</dt><dd>{{ build.sourceType }}</dd></div>
+                      <div v-if="build.status === 'failed'"><dt>{{ t('library.system.stopReason') }}</dt><dd>{{ build.failureMessage || build.failureCode || t('library.rule.failure.unknown') }}</dd></div>
+                      <div v-if="build.status !== 'failed' && build.isPdf && build.timing?.pageCount"><dt>{{ t('library.system.pdfDetails') }}</dt><dd>{{ build.timing.pageCount }} {{ t('library.readerLocal.pagesShort') }} · {{ build.timing.ocrUsed ? 'OCR' : (build.engine || 'PDF') }}</dd></div>
+                      <div v-if="build.status !== 'failed' && build.hasEstimate"><dt>{{ t('library.system.estimateDifference') }}</dt><dd :class="build.timing.estimatedDurationSeconds * 1000 >= build.timing.durationMs ? 'timing-early' : 'timing-late'">{{ formatReaderTimingDelta(build.timing) }}</dd></div>
                     </dl>
                   </details>
                 </div>
@@ -970,7 +974,7 @@
                       <summary>
                         <span class="history-accordion__chevron" aria-hidden="true">⌄</span>
                         <span class="history-accordion__main">
-                          <strong>{{ t('library.system.runNumber', { number: ruleV3Summary.runHistory.length - index, date: formatRuleRunDate(run.startedAt) }) }}</strong>
+                          <strong>{{ t('library.system.runNumber', { number: ruleV3Summary.runHistory.length - index }) }}</strong>
                           <small>{{ t('library.system.runCompact', { chunks: run.targetChunkCount ?? '—', saved: run.savedCandidateCount }) }}</small>
                         </span>
                         <span class="history-accordion__meta">
@@ -979,7 +983,7 @@
                         </span>
                       </summary>
                       <dl class="history-detail-grid">
-                        <div><dt>{{ t('library.system.duration') }}</dt><dd>{{ formatRuleDuration(run.durationMs) }}</dd></div>
+                        <div><dt>{{ t('library.system.startedAt') }}</dt><dd>{{ formatRuleRunDate(run.startedAt) }}</dd></div>
                         <div><dt>{{ t('library.system.batchProgress') }}</dt><dd>{{ run.processedBatches }}/{{ run.totalBatches }}</dd></div>
                         <div><dt>{{ t('library.system.rawVerified') }}</dt><dd>{{ run.rawCandidateCount }} / {{ run.verifiedCandidateCount }}</dd></div>
                         <div><dt>{{ t('library.system.createdMergedRejected') }}</dt><dd>{{ run.savedCandidateCount }} / {{ run.mergedCandidateCount }} / {{ run.rejectedCandidateCount }}</dd></div>
@@ -3656,10 +3660,18 @@ const readerBuildHistory = computed(() => {
   return readerBuildSnapshots.value.map((build: any, index: number) => {
     const provenance = `${build.engine || ''} ${build.sourceType || ''}`.toLowerCase()
     const isPdf = /docling|pdf|ocr/.test(provenance)
+    const isDocling = /docling/.test(String(build.engine || '').toLowerCase())
     const isStructured = /jats|xml|html|plos|frontiers|pmc/.test(provenance)
-    let timing: any = null
+    let timing: any = Number.isFinite(Number(build.durationMs))
+      ? {
+          durationMs: Number(build.durationMs),
+          estimatedDurationSeconds: Number(build.estimatedDurationSeconds) || 0,
+          pageCount: Number(build.pageCount) || 0,
+          ocrUsed: build.ocrUsed === true,
+        }
+      : null
 
-    if (isPdf) {
+    if (isPdf && !timing) {
       const builtAt = new Date(build.builtAt).getTime()
       let bestIndex = -1
       let bestDistance = Number.POSITIVE_INFINITY
@@ -3686,14 +3698,20 @@ const readerBuildHistory = computed(() => {
 
     return {
       ...build,
+      status: build.status || 'success',
       number: total - index,
       timing,
+      isPdf,
+      hasEstimate: Number(timing?.estimatedDurationSeconds) > 0 && Number(timing?.durationMs) > 0,
       label: isPdf
-        ? t('library.system.readerBuildPdf')
+        ? (isDocling
+            ? t('library.system.readerBuildPdf')
+            : t('library.system.readerBuildPdfEngine', { engine: build.engine || build.sourceType || 'PDF' }))
         : isStructured
           ? t('library.system.readerBuildStructured')
           : String(build.engine || build.sourceType || t('library.readerLocal.academicDocument')),
       isActive,
+      isDocling,
     }
   })
 })
@@ -4098,6 +4116,13 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.moderation-review-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .reader-debug-actions {
   display: flex;
   flex-direction: column;

@@ -8,12 +8,6 @@
         </p>
       </div>
       <div class="library-header-right">
-        <!-- Moderator Link -->
-        <RouterLink v-if="isModeratorUser" to="/moderation/sources" class="moderator-btn-link">
-          <AppButton variant="secondary" size="sm">
-            {{ t('library.moderateSources') }}
-          </AppButton>
-        </RouterLink>
         <AppButton id="open-wizard-btn" variant="primary" size="sm" @click="openWizard">
           {{ t('library.contribute') }}
         </AppButton>
@@ -173,11 +167,17 @@
     </div>
 
 
-    <!-- Wizard Modal -->
+    <AcademicContributionModal
+      :open="showModal"
+      :is-moderator="isModeratorUser"
+      @close="showModal = false"
+      @submitted="fetchApprovedSources"
+    />
+    <!-- Legacy wizard is disabled while the shared contribution modal is active. -->
     <Teleport to="body">
       <Transition name="modal-fade">
         <div
-          v-if="showModal"
+          v-if="false && showModal"
           id="contribution-wizard-modal"
           class="modal-overlay"
           role="dialog"
@@ -215,69 +215,19 @@
 
             <!-- Modal Content Area -->
             <div class="modal-body">
-              <!-- Step 1: Selection -->
-              <div v-if="step === 1" class="wizard-step-1">
-                <p class="step-desc" style="margin-bottom: var(--space-3); font-weight: var(--font-weight-medium); color: var(--color-text-secondary);">
-                  {{ t('library.wizard.pendingNotice') }}
-                </p>
-                <p class="step-desc">{{ t('library.wizard.chooseType') }}</p>
-                <div class="wizard-options">
-                  <button class="wizard-option" @click="selectType('doi')">
-                    <span class="wizard-option__title">{{ t('library.wizard.doiTitle') }}</span>
-                    <span class="wizard-option__desc">{{ t('library.wizard.doiDesc') }}</span>
-                  </button>
-                  <button class="wizard-option" @click="selectType('url')">
-                    <span class="wizard-option__title">{{ t('library.wizard.urlTitle') }}</span>
-                    <span class="wizard-option__desc">{{ t('library.wizard.urlDesc') }}</span>
-                  </button>
-                  <button class="wizard-option" @click="selectType('pdf')">
-                    <span class="wizard-option__title">{{ t('library.wizard.pdfTitle') }}</span>
-                    <span class="wizard-option__desc">{{ t('library.wizard.pdfDesc', { maxSize: PDF_MAX_FILE_SIZE_LABEL }) }}</span>
-                  </button>
-                  <button class="wizard-option" @click="selectType('isbn')">
-                    <span class="wizard-option__title">{{ t('library.wizard.isbnTitle') }}</span>
-                    <span class="wizard-option__desc">{{ t('library.wizard.isbnDesc') }}</span>
-                  </button>
-                </div>
-              </div>
-
               <!-- Step 2: Form Inputs -->
-              <div v-else-if="step === 2" class="wizard-step-2">
+              <div v-if="step === 2" class="wizard-step-2">
                 <div class="form-fields">
-                  <!-- DOI input -->
                   <AppInput
-                    v-if="contribType === 'doi'"
-                    id="input-doi"
-                    v-model="doi"
-                    :label="/^PMC\d+$/i.test(doi.trim()) ? 'PMCID' : 'DOI'"
-                    :placeholder="t('library.wizard.example', { value: /^PMC\d+$/i.test(doi.trim()) ? 'PMC11911046' : '10.3389/fpsyg.2016.00332' })"
-                    :error="doiError"
-                    maxlength="100"
-                    required
-                  />
-
-                  <!-- URL input -->
-                  <AppInput
-                    v-if="contribType === 'url'"
-                    id="input-url"
-                    v-model="url"
-                    :label="t('library.wizard.urlLabel')"
-                    :placeholder="t('library.wizard.example', { value: 'https://example.com/sleep-study.pdf' })"
-                    :error="urlError"
+                    v-if="contribType === 'lookup'"
+                    id="input-academic-source"
+                    v-model="lookupValue"
+                    :label="t('library.wizard.lookupLabel')"
+                    :placeholder="t('library.wizard.lookupPlaceholder')"
+                    :error="lookupError"
                     maxlength="500"
                     required
-                  />
-
-                  <!-- ISBN input -->
-                  <AppInput
-                    v-if="contribType === 'isbn'"
-                    id="input-isbn"
-                    v-model="isbn"
-                    label="ISBN"
-                    :placeholder="t('library.wizard.example', { value: '978-0-19-852442-7 / 019852442X' })"
-                    :error="isbnError"
-                    maxlength="50"
-                    required
+                    @keydown.enter.prevent="fetchPreview"
                   />
 
                   <!-- PDF upload selection & optional fields -->
@@ -300,8 +250,8 @@
                             <line x1="16" y1="17" x2="8" y2="17"></line>
                           </svg>
                           <div v-if="selectedFile" class="file-info-text">
-                            <span class="file-name">{{ selectedFile.name }}</span>
-                            <span class="file-size">({{ formatBytes(selectedFile.size) }})</span>
+                            <span class="file-name">{{ selectedFile?.name }}</span>
+                            <span class="file-size">({{ formatBytes(selectedFile?.size || 0) }})</span>
                           </div>
                           <div v-else class="file-prompt-text">
                             {{ t('library.wizard.pdfDrop', { maxSize: PDF_MAX_FILE_SIZE_LABEL }) }}
@@ -311,72 +261,7 @@
                       <span v-if="pdfFileError" class="app-input__error" style="display: block; margin-top: 4px;">{{ pdfFileError }}</span>
                     </div>
 
-                    <div style="margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4);">
-                      <p style="font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-semibold); text-transform: uppercase; margin-bottom: 2px;">
-                        {{ t('library.wizard.optionalMetadata') }}
-                      </p>
-                      
-                      <AppInput
-                        id="input-pdf-title"
-                        v-model="pdfTitle"
-                        :label="t('library.wizard.documentTitle')"
-                        :placeholder="t('library.wizard.example', { value: 'Dream analysis and neurobiology' })"
-                        maxlength="200"
-                      />
-
-                      <AppInput
-                        id="input-pdf-authors"
-                        v-model="pdfAuthors"
-                        :label="t('library.wizard.authors')"
-                        :placeholder="t('library.wizard.authorsPlaceholder')"
-                        maxlength="200"
-                      />
-
-                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
-                        <AppInput
-                          id="input-pdf-year"
-                          v-model="pdfYear"
-                          :label="t('library.wizard.year')"
-                          :placeholder="t('library.wizard.example', { value: '2024' })"
-                          maxlength="4"
-                        />
-                        <AppInput
-                          id="input-pdf-journal"
-                          v-model="pdfJournal"
-                          :label="t('library.wizard.journal')"
-                          :placeholder="t('library.wizard.example', { value: 'Nature' })"
-                          maxlength="150"
-                        />
-                      </div>
-
-                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);">
-                        <AppInput
-                          id="input-pdf-doi"
-                          v-model="pdfDoi"
-                          :label="t('library.wizard.linkedDoi')"
-                          :placeholder="t('library.wizard.example', { value: '10.1000/xyz123' })"
-                        />
-                        <AppInput
-                          id="input-pdf-url"
-                          v-model="pdfUrl"
-                          :label="t('library.wizard.linkedUrl')"
-                          :placeholder="t('library.wizard.example', { value: 'https://doi.org/...' })"
-                        />
-                      </div>
-                    </div>
                   </div>
-
-                  <!-- General Note input -->
-                  <AppInput
-                    id="input-note"
-                    v-model="submittedNote"
-                    type="textarea"
-                    :label="t('library.wizard.note')"
-                    :placeholder="t('library.wizard.notePlaceholder')"
-                    :error="noteError"
-                    maxlength="1000"
-                    :rows="3"
-                  />
                 </div>
 
                 <div class="wizard-actions">
@@ -394,7 +279,7 @@
               </div>
 
               <!-- Step 3: Metadata Preview -->
-              <div v-else-if="step === 3 && previewData" class="wizard-step-3">
+              <div v-if="step === 3 && previewData" class="wizard-step-3">
                 <p class="preview-prompt">{{ t('library.wizard.confirmPrompt') }}</p>
                 
                 <div class="preview-grid">
@@ -417,10 +302,6 @@
                   <div v-if="previewData.doi" class="preview-row">
                     <span class="preview-label">DOI:</span>
                     <span class="preview-value code-font" translate="no">{{ previewData.doi }}</span>
-                  </div>
-                  <div v-if="previewData.isbn" class="preview-row">
-                    <span class="preview-label">ISBN:</span>
-                    <span class="preview-value code-font" translate="no">{{ previewData.isbn }}</span>
                   </div>
                   <div v-if="contribType === 'pdf' && previewData.fileName" class="preview-row">
                     <span class="preview-label">{{ t('library.labels.fileName') }}</span>
@@ -514,6 +395,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
+import { parseAcademicLookupInput, type AcademicLookupError } from './utils/academicContributionLookup'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
@@ -522,6 +404,7 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
 import AppStatusBadge from '@/components/common/AppStatusBadge.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
+import AcademicContributionModal from '@/components/academic/AcademicContributionModal.vue'
 import apiClient from '@/api/client'
 import {
   PDF_MAX_FILE_SIZE_BYTES,
@@ -677,11 +560,11 @@ async function handleDeleteConfirm() {
 
 const showModal = ref(false)
 const step = ref(1)
-const contribType = ref<'doi' | 'url' | 'pdf' | 'isbn' | null>(null)
+const contribType = ref<'lookup' | 'pdf' | null>(null)
 
-const doi = ref('')
-const url = ref('')
-const isbn = ref('')
+const lookupValue = ref('')
+const lookupAttempted = ref(false)
+const lookupRequestError = ref('')
 const submittedNote = ref('')
 
 // PDF-specific states
@@ -706,55 +589,17 @@ const previewData = ref<any>(null)
 const stepTitle = computed(() => {
   if (step.value === 1) return t('library.wizard.step1')
   if (step.value === 2) {
-    if (contribType.value === 'doi') return t('library.wizard.stepDoi')
-    if (contribType.value === 'url') return t('library.wizard.stepUrl')
+    if (contribType.value === 'lookup') return t('library.wizard.stepLookup')
     if (contribType.value === 'pdf') return t('library.wizard.stepPdf')
-    if (contribType.value === 'isbn') return t('library.wizard.stepIsbn')
   }
   return t('library.wizard.stepConfirm')
 })
 
-// DOI & PMCID validation
-const doiError = computed(() => {
-  const d = doi.value.trim()
-  if (step.value === 2 && contribType.value === 'doi') {
-    if (!d) return t('library.validation.doiRequired')
-    if (d.length > 100) return t('library.validation.codeTooLong')
-    if (/^PMC\d+$/i.test(d)) {
-      return ''
-    }
-    if (!d.startsWith('10.')) return t('library.validation.doiPrefix')
-    if (!d.includes('/')) return t('library.validation.doiSlash')
-  }
-  return ''
-})
-
-// URL validation
-const urlError = computed(() => {
-  const u = url.value.trim()
-  if (step.value === 2 && contribType.value === 'url') {
-    if (!u) return t('library.validation.urlRequired')
-    if (u.length > 500) return t('library.validation.urlTooLong')
-    if (!/^https?:\/\//i.test(u)) return t('library.validation.urlProtocol')
-  }
-  return ''
-})
-
-// ISBN helper & validation
-function normalizeIsbn(val: string): string {
-  return val.replace(/[^0-9Xx]/g, '')
-}
-
-const isbnError = computed(() => {
-  const raw = isbn.value.trim()
-  if (step.value === 2 && contribType.value === 'isbn') {
-    if (!raw) return t('library.validation.isbnRequired')
-    const clean = normalizeIsbn(raw)
-    if (clean.length !== 10 && clean.length !== 13) {
-      return t('library.validation.isbnFormat')
-    }
-  }
-  return ''
+const lookupError = computed(() => {
+  if (!lookupAttempted.value || contribType.value !== 'lookup') return ''
+  if (lookupRequestError.value) return lookupRequestError.value
+  const parsed = parseAcademicLookupInput(lookupValue.value)
+  return parsed.error ? lookupErrorMessage(parsed.error) : ''
 })
 
 const noteError = computed(() => {
@@ -766,14 +611,8 @@ const noteError = computed(() => {
 // Input check for Step 2
 const isInputValid = computed(() => {
   if (noteError.value) return false
-  if (contribType.value === 'doi') {
-    return doi.value.trim().length > 0 && !doiError.value
-  }
-  if (contribType.value === 'url') {
-    return url.value.trim().length > 0 && !urlError.value
-  }
-  if (contribType.value === 'isbn') {
-    return isbn.value.trim().length > 0 && !isbnError.value
+  if (contribType.value === 'lookup') {
+    return lookupValue.value.trim().length > 0
   }
   if (contribType.value === 'pdf') {
     return !!selectedFile.value && !pdfFileError.value
@@ -819,9 +658,7 @@ function openWizard() {
   showModal.value = true
   step.value = 1
   contribType.value = null
-  doi.value = ''
-  url.value = ''
-  isbn.value = ''
+  resetLookup()
   submittedNote.value = ''
   selectedFile.value = null
   pdfFileError.value = ''
@@ -849,9 +686,7 @@ function closeWizard() {
   pdfDoi.value = ''
   pdfUrl.value = ''
   uploadProgress.value = 0
-  isbn.value = ''
-  doi.value = ''
-  url.value = ''
+  resetLookup()
   submittedNote.value = ''
   previewData.value = null
   duplicateSourceId.value = null
@@ -864,15 +699,9 @@ function goBack() {
   }
 }
 
-function selectType(type: 'doi' | 'url' | 'pdf' | 'isbn') {
-  contribType.value = type
-  step.value = 2
-}
-
 async function fetchPreview() {
-  if (!isInputValid.value) return
-
   if (contribType.value === 'pdf') {
+    if (!isInputValid.value) return
     // Generate mock preview locally for uploaded PDF to defer file uploads to step 3 confirm
     const titleVal = pdfTitle.value.trim() || selectedFile.value?.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ') || t('library.local.uploadedTitle')
     const authorsArr = pdfAuthors.value.trim() ? pdfAuthors.value.split(',').map((a: string) => a.trim()).filter(Boolean) : []
@@ -899,19 +728,20 @@ async function fetchPreview() {
     return
   }
 
+  if (contribType.value !== 'lookup' || noteError.value) return
+  lookupAttempted.value = true
+  lookupRequestError.value = ''
+  const lookup = parseAcademicLookupInput(lookupValue.value)
+  if (lookup.error) {
+    const message = lookupErrorMessage(lookup.error)
+    settingsStore.showToast(message, 'error')
+    return
+  }
+
   isFetchingPreview.value = true
   
   try {
-    const val = doi.value.trim();
-    const isPmc = /^PMC\d+$/i.test(val);
-    const payload = {
-      doi: (contribType.value === 'doi' && !isPmc) ? val : undefined,
-      pmcid: (contribType.value === 'doi' && isPmc) ? val : undefined,
-      url: contribType.value === 'url' ? url.value.trim() : undefined,
-      isbn: contribType.value === 'isbn' ? normalizeIsbn(isbn.value) : undefined
-    }
-    
-    const res = await previewSource(payload)
+    const res = await previewSource(lookup.payload)
     if (res.success && res.data) {
       previewData.value = res.data
       step.value = 3
@@ -932,6 +762,7 @@ async function fetchPreview() {
     } else {
       errMsg = t('library.local.network')
     }
+    lookupRequestError.value = errMsg
     settingsStore.showToast(errMsg, 'error')
   } finally {
     isFetchingPreview.value = false
@@ -983,7 +814,6 @@ async function submitContribution() {
         doi: previewData.value.doi || undefined,
         pmcid: previewData.value.pmcid || undefined,
         url: previewData.value.url || undefined,
-        isbn: previewData.value.isbn || undefined,
         submittedNote: submittedNote.value.trim() || undefined,
         metadata: previewData.value
       }
@@ -1021,6 +851,23 @@ async function submitContribution() {
     isSubmitting.value = false
   }
 }
+
+function resetLookup() {
+  lookupValue.value = ''
+  lookupAttempted.value = false
+  lookupRequestError.value = ''
+}
+
+function lookupErrorMessage(error: AcademicLookupError): string {
+  if (error === 'required') return t('library.validation.lookupRequired')
+  if (error === 'too_long') return t('library.validation.lookupTooLong')
+  return t('library.validation.lookupFormat')
+}
+
+watch(lookupValue, () => {
+  lookupAttempted.value = false
+  lookupRequestError.value = ''
+})
 </script>
 
 <style scoped>

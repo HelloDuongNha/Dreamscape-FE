@@ -18,6 +18,9 @@
             Quản lý và kiểm duyệt các bài báo, nghiên cứu khoa học được đóng góp bởi thành viên.
           </p>
         </div>
+        <AppButton variant="primary" size="sm" @click="showContributionModal = true">
+          {{ t('library.contribute') }}
+        </AppButton>
       </div>
 
       <!-- Filter Tabs -->
@@ -150,7 +153,15 @@
 
       <!-- Content Grid List -->
       <div v-else class="sources-list">
-        <div v-for="source in sources" :key="source._id" class="source-card">
+        <div
+          v-for="source in sources"
+          :key="source._id"
+          :class="['source-card', { 'source-card--clickable': source.reviewStatus === 'pending' }]"
+          :role="source.reviewStatus === 'pending' ? 'link' : undefined"
+          :tabindex="source.reviewStatus === 'pending' ? 0 : undefined"
+          @click="openSourcePreview(source, $event)"
+          @keydown="handleSourceCardKeydown(source, $event)"
+        >
           <!-- Card Header -->
           <div class="source-card__header">
             <h4 class="source-card__title">
@@ -460,12 +471,19 @@
       @confirm="confirmPdfDownload"
       @cancel="cancelPdfDownload"
     />
+    <AcademicContributionModal
+      :open="showContributionModal"
+      :is-moderator="true"
+      @close="showContributionModal = false"
+      @submitted="handleContributionSubmitted"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import {
   getModerationSources,
@@ -481,10 +499,18 @@ import AppInput from '@/components/common/AppInput.vue'
 import AppStatusBadge from '@/components/common/AppStatusBadge.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 import AppCopyButton from '@/components/common/AppCopyButton.vue'
+import AcademicContributionModal from '@/components/academic/AcademicContributionModal.vue'
 
 const settingsStore = useSettingsStore()
 const sourceProgressStore = useSourceProgressStore()
 const { t, locale } = useI18n()
+const router = useRouter()
+const showContributionModal = ref(false)
+
+function handleContributionSubmitted(): void {
+  showContributionModal.value = false
+  fetchSources()
+}
 
 watch(() => sourceProgressStore.status, (newStatus) => {
   if (newStatus === 'success' && activeStatus.value === 'pending') {
@@ -664,6 +690,21 @@ function openReviewModal(source: SourceContribution, action: 'approved' | 'rejec
   reviewAction.value = action
   reviewNote.value = ''
   showReviewModal.value = true
+}
+
+function openSourcePreview(source: SourceContribution, event?: MouseEvent): void {
+  if (source.reviewStatus !== 'pending') return
+  const target = event?.target
+  if (target instanceof Element && target.closest('a, button, input, textarea, select, summary')) {
+    return
+  }
+  router.push(`/moderation/sources/${source._id}/preview`)
+}
+
+function handleSourceCardKeydown(source: SourceContribution, event: KeyboardEvent): void {
+  if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return
+  event.preventDefault()
+  openSourcePreview(source)
 }
 
 function closeReviewModal() {
@@ -1146,6 +1187,23 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+.source-card--clickable {
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.source-card--clickable:hover {
+  border-color: var(--color-primary);
+  background: var(--color-bg-hover);
+}
+
+.source-card--clickable:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .source-card__header {

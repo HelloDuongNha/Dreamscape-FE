@@ -4,16 +4,16 @@ import type { PdfImportProgressResponse } from './moderationApi'
 
 export interface ContributeSourcePayload {
   doi?: string
+  pmcid?: string
   url?: string
-  isbn?: string
   submittedNote?: string
   metadata?: any
 }
 
 export interface PreviewSourcePayload {
   doi?: string
+  pmcid?: string
   url?: string
-  isbn?: string
 }
 
 /**
