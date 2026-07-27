@@ -170,7 +170,7 @@ test('14. Long-running task pins share one collapsible component', () => {
   assert.equal(
     containerContent.match(/<PinnedTaskToast\b/gu)?.length,
     5,
-    'Oracle, dream analysis, Rule V3, source import, and queued jobs must use the same pin component',
+    'Oracle, unified dream tasks, Rule V3, source import, and queued jobs must use the same pin component',
   );
   assert.ok(!containerContent.includes('pinned-toast__close'), 'task pins must not retain an X dismiss control');
   assert.ok(pinContent.includes('pinned-task-toast--collapsed'), 'shared pin must support edge collapse');

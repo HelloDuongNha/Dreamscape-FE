@@ -280,6 +280,18 @@ export interface ApiDream {
     replacementDurationMs?: number
     hasUnanalyzedAdditions?: boolean
   } | null
+  continuationMetadata?: {
+    runId?: string
+    status?: 'queued' | 'running' | 'completed' | 'failed'
+    progress?: number
+    statusMessage?: string
+    queuePosition?: number
+    enqueuedAt?: string
+    startedAt?: string
+    completedAt?: string
+    durationMs?: number
+    estimatedDurationSeconds?: number
+  } | null
   edit_history:   { content: string; editedAt: string }[]
   additions:      {
     sequence: number

@@ -296,11 +296,30 @@
           <small>Sáng tác tham khảo · không phải dự báo</small>
         </header>
         <div class="oracle-continuation__body">
-          <div v-if="continuationLoading" class="oracle-continuation__progress" aria-label="Tiến độ viết lại phần tiếp theo">
-            <span :style="{ width: `${continuationProgress}%` }"></span>
+          <div v-if="continuationLoading" class="oracle-continuation__progress-state">
+            <div class="oracle-continuation__progress" :aria-label="t('oracle.continuationProgressLabel')">
+              <span :style="{ width: `${continuationProgress}%` }"></span>
+            </div>
+            <span>{{ continuationProgress }}%</span>
           </div>
           <h3>{{ displayedContinuation.title }}</h3>
-          <p class="oracle-continuation__story" translate="no">{{ displayedContinuation.continuation }}</p>
+          <div
+            class="oracle-continuation__story-wrap"
+            :class="{ 'oracle-continuation__story-wrap--collapsed': continuationCanCollapse && !continuationExpanded }"
+          >
+            <p class="oracle-continuation__story" translate="no">{{ displayedContinuation.continuation }}</p>
+          </div>
+          <button
+            v-if="continuationCanCollapse"
+            type="button"
+            class="oracle-continuation__expand"
+            @click="continuationExpanded = !continuationExpanded"
+          >
+            <span>{{ t(continuationExpanded ? 'oracle.continuationCollapse' : 'oracle.continuationExpand') }}</span>
+            <span class="oracle-continuation__expand-icon" aria-hidden="true">
+              {{ continuationExpanded ? '⌃' : '⌄' }}
+            </span>
+          </button>
           <p class="oracle-continuation__connection"><strong>Mạch được nối tiếp:</strong> {{ displayedContinuation.connectionToCurrentDream }}</p>
           <div v-if="displayedContinuation.inspirations?.length" class="oracle-continuation__inspirations">
             <strong>Tham khảo mô-típ từ các giấc mơ tương đồng</strong>
@@ -350,7 +369,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { AiDreamAnalysisResult } from '@/api/types'
@@ -361,6 +380,7 @@ import apiClient from '@/api/client'
 import AppFeedbackChoiceGroup, { type FeedbackChoice } from '@/components/common/AppFeedbackChoiceGroup.vue'
 import OracleCitationModal from '@/features/oracle/components/OracleCitationModal.vue'
 import type { OracleCitationDto, OracleCitationRuleLinkDto } from '@/api/oracleApi'
+import { useDreamContinuationStore } from '@/store/useDreamContinuationStore'
 
 const props = withDefaults(defineProps<{
   analysis: AiDreamAnalysisResult | null | undefined
@@ -656,9 +676,14 @@ watch(() => props.analysis, (newVal) => {
 const settingsStore = useSettingsStore()
 const postStore = usePostStore()
 const dreamStore = useDreamStore()
-const continuationLoading = ref(false)
-const continuationProgress = ref(0)
+const continuationStore = useDreamContinuationStore()
+const continuationTask = computed(() => props.dreamId
+  ? continuationStore.findTask(props.dreamId)
+  : undefined)
+const continuationLoading = computed(() => continuationTask.value?.status === 'pending')
+const continuationProgress = computed(() => continuationTask.value?.progress || 0)
 const continuationIndex = ref(0)
+const continuationExpanded = ref(false)
 const continuationVersions = computed(() => {
   const stored = props.analysis?.creative_continuation_history || []
   if (stored.length) return stored
@@ -668,6 +693,8 @@ const displayedContinuation = computed(() =>
   continuationVersions.value[continuationIndex.value]
   || props.analysis?.creative_continuation,
 )
+const continuationCanCollapse = computed(() =>
+  String(displayedContinuation.value?.continuation || '').length > 650)
 
 watch(continuationVersions, (versions) => {
   const storedIndex = Number(props.analysis?.creative_continuation_index)
@@ -675,6 +702,27 @@ watch(continuationVersions, (versions) => {
     ? storedIndex
     : Math.max(0, versions.length - 1)
 }, { immediate: true })
+
+watch([() => props.dreamId, continuationIndex], () => {
+  continuationExpanded.value = false
+})
+
+watch(() => continuationTask.value?.dream, dream => {
+  if (!dream?.ai_result || !props.analysis) return
+  Object.assign(props.analysis, dream.ai_result)
+}, { deep: false })
+
+watch(() => continuationTask.value?.status, (status, previous) => {
+  if (status === 'completed' && previous === 'pending') {
+    settingsStore.showToast(t('oracle.continuationRegenerated'), 'success')
+  } else if (status === 'failed' && previous === 'pending') {
+    settingsStore.showToast(t('oracle.continuationRegenerateFailed'), 'error')
+  }
+})
+
+onUnmounted(() => {
+  if (props.dreamId) continuationStore.pin(props.dreamId)
+})
 
 async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null) {
   const targetDreamId = props.dreamId || postStore.focusedDream?._id
@@ -752,32 +800,11 @@ async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null)
 
 async function regenerateContinuation() {
   if (!props.dreamId || continuationLoading.value) return
-  continuationLoading.value = true
-  continuationProgress.value = 8
-  const timer = window.setInterval(() => {
-    continuationProgress.value = Math.min(92, continuationProgress.value + 7)
-  }, 900)
   try {
-    const response = await apiClient.post(`/dreams/${props.dreamId}/continuation/regenerate`)
-    const continuation = response.data?.data?.creative_continuation
-    if (continuation && props.analysis) {
-      props.analysis.creative_continuation = continuation
-      const history = response.data?.data?.creative_continuation_history || [continuation]
-      props.analysis.creative_continuation_history = history
-      props.analysis.creative_continuation_index = response.data?.data?.creative_continuation_index
-      continuationIndex.value = props.analysis.creative_continuation_index
-        ?? history.length - 1
-    }
-    continuationProgress.value = 100
-    settingsStore.showToast(t('oracle.continuationRegenerated'), 'success')
-  } catch (err: any) {
+    continuationExpanded.value = false
+    await continuationStore.start(props.dreamId)
+  } catch {
     settingsStore.showToast(t('oracle.continuationRegenerateFailed'), 'error')
-  } finally {
-    window.clearInterval(timer)
-    window.setTimeout(() => {
-      continuationLoading.value = false
-      continuationProgress.value = 0
-    }, 250)
   }
 }
 
@@ -1378,6 +1405,55 @@ function hasRealSource(source: string | undefined | null): boolean {
   line-height: 1.75;
 }
 
+.oracle-continuation__story-wrap {
+  position: relative;
+}
+
+.oracle-continuation__story-wrap--collapsed {
+  max-height: 12.25rem;
+  overflow: hidden;
+}
+
+.oracle-continuation__story-wrap--collapsed::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3.5rem;
+  background: linear-gradient(transparent, var(--color-bg-elevated));
+  content: '';
+  pointer-events: none;
+}
+
+.oracle-continuation__expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: stretch;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-bg-surface) 82%, var(--color-primary) 18%);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease;
+}
+
+.oracle-continuation__expand:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 60%, var(--color-border));
+  background: color-mix(in srgb, var(--color-bg-surface) 72%, var(--color-primary) 28%);
+}
+
+.oracle-continuation__expand-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
 .oracle-continuation__connection {
   color: var(--color-text-secondary);
   font-size: 12px;
@@ -1958,6 +2034,15 @@ function hasRealSource(source: string | undefined | null): boolean {
   overflow: hidden;
   border-radius: 999px;
   background: var(--color-border-subtle);
+}
+
+.oracle-continuation__progress-state {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  color: var(--color-text-muted);
+  font-size: 11px;
 }
 
 .oracle-continuation__progress span {

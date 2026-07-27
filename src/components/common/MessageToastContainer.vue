@@ -17,14 +17,14 @@
       />
 
       <PinnedTaskToast
-        v-for="task in oracleStore.pinnedTasks"
-        :key="`dream-analysis-${task.dreamId}`"
+        v-for="entry in dreamPinnedTasks"
+        :key="`${entry.kind}-${entry.task.dreamId}`"
         kind="dream-analysis"
-        :title="`Oracle: ${oracleTaskTitle(task)}`"
-        :message="oracleTaskMessage(task)"
-        :progress="task.status === 'pending' ? task.progress : 100"
-        :terminal="task.status !== 'pending'"
-        @open="handleOraclePinnedClick(task)"
+        :title="dreamPinnedTitle(entry)"
+        :message="dreamPinnedMessage(entry)"
+        :progress="entry.task.status === 'pending' ? entry.task.progress : 100"
+        :terminal="entry.task.status !== 'pending'"
+        @open="openDreamPinnedTask(entry)"
       />
 
       <PinnedTaskToast
@@ -98,6 +98,8 @@ import MessageToast             from './MessageToast.vue'
 import PinnedTaskToast from './PinnedTaskToast.vue'
 import { useOracleChatStore } from '@/store/useOracleChatStore'
 import type { DreamAnalysisTask } from '@/store/useOracleStore'
+import { useDreamContinuationStore, type DreamContinuationTask } from '@/store/useDreamContinuationStore'
+import { usePostStore } from '@/store/usePostStore'
 
 const toastStore = useMessageToastStore()
 const chatStore  = useChatStore()
@@ -107,9 +109,28 @@ const extractionStore = useExtractionStore()
 const sourceProgressStore = useSourceProgressStore()
 const academicQueue = useAcademicJobQueueStore()
 const oracleChatStore = useOracleChatStore()
+const continuationStore = useDreamContinuationStore()
 const { t } = useI18n()
 const oracleClock = ref(Date.now())
 let oracleClockTimer: ReturnType<typeof setInterval> | null = null
+
+type DreamPinnedEntry =
+  | { kind: 'dream-analysis'; task: DreamAnalysisTask }
+  | { kind: 'dream-continuation'; task: DreamContinuationTask }
+
+function isQueuedDreamEntry(entry: DreamPinnedEntry) {
+  return entry.kind === 'dream-analysis'
+    ? entry.task.dream.analysisMetadata?.currentStage === 'queued'
+    : entry.task.dream.continuationMetadata?.status === 'queued'
+}
+
+const dreamPinnedTasks = computed<DreamPinnedEntry[]>(() => [
+  ...oracleStore.pinnedTasks.map(task => ({ kind: 'dream-analysis' as const, task })),
+  ...continuationStore.pinnedTasks.map(task => ({ kind: 'dream-continuation' as const, task })),
+].sort((left, right) => {
+  const queueOrder = Number(isQueuedDreamEntry(left)) - Number(isQueuedDreamEntry(right))
+  return queueOrder || left.task.createdAt - right.task.createdAt
+}))
 
 function syncOracleClock(active: boolean) {
   if (active && !oracleClockTimer) {
@@ -193,9 +214,73 @@ onMounted(() => {
   syncOracleClock(Boolean(oracleChatStore.backgroundRun))
   void oracleChatStore.loadThreads().catch(() => undefined)
   void oracleStore.restoreTracking()
+  void continuationStore.restoreTracking()
   void extractionStore.restoreTracking()
   sourceProgressStore.restoreTracking()
 })
+
+function formatElapsed(seconds: number) {
+  if (seconds < 60) return t('oracle.continuationElapsedSeconds', { seconds })
+  return t('oracle.continuationElapsedMinutes', {
+    minutes: Math.floor(seconds / 60),
+    seconds: seconds % 60,
+  })
+}
+
+function formatDuration(seconds: number) {
+  if (seconds < 60) return t('oracle.durationSeconds', { seconds })
+  return t('oracle.durationMinutes', {
+    minutes: Math.floor(seconds / 60),
+    seconds: seconds % 60,
+  })
+}
+
+function continuationTaskTitle(task: DreamContinuationTask) {
+  if (task.status === 'completed') return t('oracle.continuationPinCompletedTitle')
+  if (task.status === 'failed') return t('oracle.continuationPinFailedTitle')
+  if (task.dream.continuationMetadata?.status === 'queued') {
+    return t('oracle.continuationWaitingTitle')
+  }
+  return t('oracle.continuationPinTitle')
+}
+
+function continuationTaskMessage(task: DreamContinuationTask) {
+  if (task.status === 'completed') return t('oracle.continuationRegenerated')
+  if (task.status === 'failed') return t('oracle.continuationRegenerateFailed')
+  const metadata = task.dream.continuationMetadata
+  const stage = metadata?.status === 'queued'
+    ? t('oracle.continuationQueued', { position: metadata.queuePosition || 1 })
+    : task.progress < 40
+      ? t('oracle.continuationReturning')
+      : task.progress < 80
+        ? t('oracle.continuationWriting')
+        : t('oracle.continuationFinalizing')
+  const timing = metadata?.status === 'queued'
+    ? t('oracle.dreamAnalysisWaited', { duration: formatDuration(task.elapsedSeconds) })
+    : formatElapsed(task.elapsedSeconds)
+  return `${stage} · ${task.progress}% · ${timing}`
+}
+
+function dreamPinnedTitle(entry: DreamPinnedEntry) {
+  return entry.kind === 'dream-analysis'
+    ? `Oracle: ${oracleTaskTitle(entry.task)}`
+    : continuationTaskTitle(entry.task)
+}
+
+function dreamPinnedMessage(entry: DreamPinnedEntry) {
+  return entry.kind === 'dream-analysis'
+    ? oracleTaskMessage(entry.task)
+    : continuationTaskMessage(entry.task)
+}
+
+async function openDreamPinnedTask(entry: DreamPinnedEntry) {
+  if (entry.kind === 'dream-analysis') {
+    handleOraclePinnedClick(entry.task)
+    return
+  }
+  continuationStore.showInDialog(entry.task.dreamId)
+  await usePostStore().openPost(entry.task.dreamId)
+}
 
 watch(
   () => Boolean(oracleChatStore.backgroundRun),
@@ -400,32 +485,33 @@ function handleSourcePinnedClick() {
 }
 
 function oracleTaskTitle(task: DreamAnalysisTask) {
-  if (task.status === 'completed') return 'Hoàn thành'
-  if (task.status === 'failed') return 'Thất bại'
-  if (task.status === 'cancelled') return 'Đã hủy'
+  if (task.status === 'completed') return t('oracle.dreamAnalysisCompletedTitle')
+  if (task.status === 'failed') return t('oracle.dreamAnalysisFailedTitle')
+  if (task.status === 'cancelled') return t('oracle.dreamAnalysisCancelledTitle')
   if (task.dream.analysisMetadata?.currentStage === 'queued') {
     const position = Number(task.dream.analysisMetadata?.queuePosition)
     return Number.isFinite(position) && position > 0
-      ? `Hàng chờ #${position}`
-      : 'Đang chờ'
+      ? t('oracle.dreamAnalysisQueuedTitle', { position })
+      : t('oracle.dreamAnalysisWaitingTitle')
   }
-  return 'Phân tích...'
+  return t('oracle.dreamAnalysisRunningTitle')
 }
 
 function oracleTaskMessage(task: DreamAnalysisTask) {
   if (task.status === 'completed') {
-    return 'Oracle đã phân tích xong giấc mơ.'
+    return t('oracle.dreamAnalysisCompletedMessage')
   }
   if (task.status === 'failed') {
-    return 'Oracle chưa thể phân tích giấc mơ này. Vui lòng thử lại sau.'
+    return t('oracle.dreamAnalysisFailedMessage')
   }
   if (task.status === 'cancelled') {
-    return 'Hủy tác vụ thành công.'
+    return t('oracle.dreamAnalysisCancelledMessage')
   }
-  const minutes = Math.floor(task.elapsedSeconds / 60)
-  const seconds = task.elapsedSeconds % 60
-  const elapsed = minutes > 0 ? `${minutes} phút ${seconds} giây` : `${seconds} giây`
-  return `${task.statusMessage} · ${task.progress}% · đã chạy ${elapsed}`
+  const elapsed = formatDuration(task.elapsedSeconds)
+  if (task.dream.analysisMetadata?.currentStage === 'queued') {
+    return `${task.statusMessage} · ${t('oracle.dreamAnalysisWaited', { duration: elapsed })}`
+  }
+  return `${task.statusMessage} · ${task.progress}% · ${t('oracle.dreamAnalysisRan', { duration: elapsed })}`
 }
 
 function handleOraclePinnedClick(task: DreamAnalysisTask) {

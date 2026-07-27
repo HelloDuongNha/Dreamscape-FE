@@ -1,5 +1,5 @@
 <template>
-  <div class="app-dropdown" @click.stop>
+  <div ref="rootRef" class="app-dropdown" @click.stop>
     <!-- Trigger slot (the 3-dot button or whatever the parent provides) -->
     <slot name="trigger" :toggle="toggle" :isOpen="isOpen" />
 
@@ -82,6 +82,7 @@ const emit = defineEmits<{
 // ── State ─────────────────────────────────────────────────────────────────────
 
 const isOpen = ref(false)
+const rootRef = ref<HTMLElement | null>(null)
 
 function toggle() { isOpen.value = !isOpen.value }
 function close()  { isOpen.value = false }
@@ -96,10 +97,12 @@ function handleClick(item: DropdownItem) {
 
 // ── Click-outside to close ────────────────────────────────────────────────────
 
-function onClickOutside() { close() }
+function onPointerDown(event: PointerEvent) {
+  if (rootRef.value && !rootRef.value.contains(event.target as Node)) close()
+}
 
-onMounted(()  => document.addEventListener('click', onClickOutside))
-onUnmounted(() => document.removeEventListener('click', onClickOutside))
+onMounted(() => document.addEventListener('pointerdown', onPointerDown, true))
+onUnmounted(() => document.removeEventListener('pointerdown', onPointerDown, true))
 </script>
 
 <style scoped>
