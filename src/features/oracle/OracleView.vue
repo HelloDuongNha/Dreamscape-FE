@@ -83,6 +83,8 @@ import {
   type OracleCitationDto,
 } from '@/api/oracleApi'
 import type { OracleMode, OracleShellMessage } from './oracleShell.types'
+import { materializeOracleBranch } from './services/oracleBranchPresentation.service'
+import { applyOracleStreamEvent } from './services/oracleStreamPresentation.service'
 
 const { t } = useI18n()
 const oracleStore = useOracleChatStore()
@@ -97,6 +99,7 @@ const {
   isLoading,
   isMutating,
   backgroundRun,
+  citationChange,
 } = storeToRefs(oracleStore)
 const isSidebarOpen = ref(false)
 const chatShell = ref<InstanceType<typeof OracleChatShell> | null>(null)
@@ -121,16 +124,11 @@ let presentationReady = false
 let lastPresentationAt = 0
 let drainResolvers: Array<() => void> = []
 let isLeavingView = false
+let routeSyncReady = false
 
-function streamEventTime(payload: Record<string, unknown>, preferredKey?: string): number {
-  const preferred = preferredKey ? payload[preferredKey] : undefined
-  const parsed = Date.parse(String(preferred || payload._eventCreatedAt || ''))
-  return Number.isFinite(parsed) ? parsed : Date.now()
-}
 const latestSuggestions = computed(() => {
   const assistant = [...activeMessages.value].reverse().find((message) => message.role === 'assistant')
-  const blocked = /^(tôi sẽ kể chi tiết giấc mơ|i will describe the dream in detail|oracle cần biết thêm điều gì để phân tích|what else does oracle need)/iu
-  return (assistant?.suggestedPrompts || []).filter((suggestion) => !blocked.test(suggestion.trim()))
+  return assistant?.suggestedPrompts || []
 })
 const latestContextUsage = computed(() => (
   [...activeMessages.value].reverse().find((message) => message.contextUsage)?.contextUsage || {
@@ -225,67 +223,6 @@ async function handleNewThread() {
   chatShell.value?.focusComposer()
 }
 
-function turnToMessage(turn: OracleTurnDto): OracleShellMessage {
-  const timing = turn.runTiming
-  return {
-    id: turn._id,
-    role: turn.role,
-    content: turn.contentBlocks.map((block) => block.text).join('\n'),
-    citations: turn.citations || [],
-    suggestedPrompts: turn.suggestedPrompts || [],
-    contextUsage: turn.contextUsage,
-    parentTurnId: turn.parentTurnId,
-    branchRootTurnId: turn.branchRootTurnId,
-    supersedesTurnId: turn.supersedesTurnId,
-    createdAt: turn.createdAt,
-    runState: timing ? 'completed' : undefined,
-    startedAt: timing ? new Date(timing.startedAt).getTime() : undefined,
-    thoughtCompletedAt: timing ? new Date(timing.thoughtCompletedAt).getTime() : undefined,
-    completedAt: timing ? new Date(timing.completedAt).getTime() : undefined,
-    expectedMinMs: timing?.expectedMinMs,
-    expectedMaxMs: timing?.expectedMaxMs,
-  }
-}
-
-function materializeBranch(turns: OracleTurnDto[], requestedLeafId?: string): OracleShellMessage[] {
-  if (!turns.length) return []
-  const byId = new Map(turns.map((turn) => [turn._id, turn]))
-  const defaultLeaf = [...turns].reverse().find((turn) => turn.role === 'assistant' && turn.contentBlocks.length)
-    || turns[turns.length - 1]
-  let current: OracleTurnDto | undefined = byId.get(requestedLeafId || '') || defaultLeaf
-  const ancestry: OracleTurnDto[] = []
-  while (current && ancestry.length < 100) {
-    ancestry.push(current)
-    current = current.parentTurnId ? byId.get(current.parentTurnId) : undefined
-  }
-  const selected = ancestry.length > 1 ? ancestry.reverse() : turns
-  return selected
-    .filter((turn) => turn.role === 'user' || turn.contentBlocks.length > 0)
-    .map((turn) => {
-      const message = turnToMessage(turn)
-      if (turn.role !== 'user') return message
-      const rootId = turn.branchRootTurnId || turn._id
-      const variants = turns
-        .filter((candidate) => candidate.role === 'user'
-          && (candidate._id === rootId || candidate.branchRootTurnId === rootId))
-        .sort((a, b) => a.sequence - b.sequence)
-      if (variants.length <= 1) return message
-      const index = variants.findIndex((candidate) => candidate._id === turn._id)
-      const assistantLeaf = (variant?: OracleTurnDto) => (
-        variant
-          ? turns.find((candidate) => candidate.role === 'assistant' && candidate.parentTurnId === variant._id)?._id
-          : undefined
-      )
-      message.branch = {
-        index: index + 1,
-        total: variants.length,
-        previousLeafId: assistantLeaf(variants[index - 1]),
-        nextLeafId: assistantLeaf(variants[index + 1]),
-      }
-      return message
-    })
-}
-
 async function loadThreadMessages(id: string, preferredLeafId?: string) {
   const data = await getOracleThread(id)
   allThreadTurns.value = data.turns
@@ -304,7 +241,10 @@ async function loadThreadMessages(id: string, preferredLeafId?: string) {
       },
     ]),
   )
-  const selected = materializeBranch(data.turns, preferredLeafId || selectedBranchLeafId.value || undefined)
+  const selected = materializeOracleBranch(
+    data.turns,
+    preferredLeafId || selectedBranchLeafId.value || undefined,
+  )
   selectedBranchLeafId.value = selected[selected.length - 1]?.id || null
   activeMessages.value = selected.map((message) => {
     const runtime = runtimeById.get(message.id)
@@ -316,25 +256,26 @@ async function loadThreadMessages(id: string, preferredLeafId?: string) {
   })
 }
 
-async function handleSelectThread(id: string) {
+async function handleSelectThread(id: string, updateRoute = true) {
   streamController?.abort()
   clearPresentation()
   oracleStore.selectThread(id)
-  await router.replace({ path: '/oracle', query: { thread: id } })
+  if (updateRoute) await router.replace({ path: '/oracle', query: { thread: id } })
   selectedBranchLeafId.value = null
   allThreadTurns.value = []
   isSidebarOpen.value = false
   try {
-    await loadThreadMessages(id)
     const thread = threads.value.find((item) => item.id === id)
     const tracked = backgroundRun.value?.threadId === id ? backgroundRun.value : null
     const runId = thread?.activeRunId || tracked?.runId
+    const assistantTurnId = thread?.activeRunAssistantTurnId || tracked?.assistantTurnId
+    await loadThreadMessages(id, assistantTurnId || undefined)
     if (runId && !isSending.value) {
       await resumeActiveRun(
         id,
         runId,
         thread?.activeRunStartedAt || tracked?.startedAt,
-        thread?.activeRunAssistantTurnId || tracked?.assistantTurnId,
+        assistantTurnId,
         thread?.activeRunStage || tracked?.stage,
         thread?.activeRunStageStartedAt || tracked?.stageStartedAt,
       )
@@ -370,10 +311,15 @@ function requestDeleteThread(id: string) {
 async function confirmDeleteThread() {
   if (!pendingDeleteThreadId.value) return
   try {
-    await oracleStore.removeThread(pendingDeleteThreadId.value)
+    const deletedThreadId = pendingDeleteThreadId.value
+    await oracleStore.removeThread(deletedThreadId)
     showDeleteConfirm.value = false
     pendingDeleteThreadId.value = null
     activeMessages.value = []
+    if (route.query.thread === deletedThreadId) {
+      await router.replace({ path: '/oracle', query: {} })
+    }
+    settingsStore.showToastKey('oracle.deleteSuccess', undefined, 'success')
   } catch {
     settingsStore.showToastKey('oracle.deleteError', undefined, 'error')
   }
@@ -429,45 +375,17 @@ async function handleSend(content: string) {
     await streamOracleRun(run.runId, (event) => {
       const target = activeMessages.value.find((message) => message.id === run.assistantTurnId)
       if (!target) return
-      if (event.type === 'token') {
-        if (!target.firstTokenAt) target.firstTokenAt = Date.now()
-        enqueuePresentation(run.assistantTurnId, String(event.payload.text || ''))
-      }
-      if (event.type === 'tool_progress' && event.payload.stage === 'preparing_answer') {
-        target.thoughtCompletedAt = streamEventTime(event.payload, 'stageStartedAt')
-        target.runState = 'preparing'
-      }
-      if (event.type === 'done') {
-        presentationReady = true
-        target.presentationStartedAt = Date.now()
-        target.runState = waitForComplete.value ? 'completed' : 'responding'
-        releasePresentation()
-        target.completedAt = streamEventTime(event.payload, 'completedAt')
-        target.suggestedPrompts = Array.isArray(event.payload.suggestedPrompts)
-          ? event.payload.suggestedPrompts.map(String)
-          : []
-        if (event.payload.contextUsage) {
-          target.contextUsage = event.payload.contextUsage as OracleShellMessage['contextUsage']
-        }
-      }
-      if (event.type === 'citation' && event.payload.citation) {
-        target.citations = [
-          ...(target.citations || []),
-          event.payload.citation as NonNullable<OracleShellMessage['citations']>[number],
-        ]
-      }
-      if (event.type === 'error') {
-        if (waitForComplete.value) clearPresentation(true)
-        target.runState = 'failed'
-        target.completedAt = Date.now()
-        target.content = target.content || t('oracle.responseUnavailable')
-      }
-      if (event.type === 'cancelled') {
-        if (waitForComplete.value) clearPresentation(true)
-        target.runState = 'cancelled'
-        target.completedAt = Date.now()
-        target.content = target.content || t('oracle.responseCancelled')
-      }
+      if (event.type === 'done') presentationReady = true
+      applyOracleStreamEvent({
+        event,
+        target,
+        waitForComplete: waitForComplete.value,
+        enqueueText: (text) => enqueuePresentation(run.assistantTurnId, text),
+        releasePresentation,
+        clearPresentation,
+        responseUnavailable: t('oracle.responseUnavailable'),
+        responseCancelled: t('oracle.responseCancelled'),
+      })
     }, streamController.signal)
     await waitForPresentationDrain()
     const completedTarget = activeMessages.value.find((message) => message.id === run.assistantTurnId)
@@ -523,33 +441,24 @@ async function handleEditMessage(message: OracleShellMessage, content: string) {
     const assistantMessage = activeMessages.value.find((item) => item.id === optimisticAssistantId)
     if (userMessage) userMessage.id = run.userTurnId
     if (assistantMessage) assistantMessage.id = run.assistantTurnId
+    selectedBranchLeafId.value = run.assistantTurnId
+    await loadThreadMessages(threadId, run.assistantTurnId)
     streamController?.abort()
     streamController = new AbortController()
     await streamOracleRun(run.runId, (event) => {
       const target = activeMessages.value.find((item) => item.id === run.assistantTurnId)
       if (!target) return
-      if (event.type === 'token') {
-        if (!target.firstTokenAt) target.firstTokenAt = Date.now()
-        enqueuePresentation(target.id, String(event.payload.text || ''))
-      }
-      if (event.type === 'tool_progress' && event.payload.stage === 'preparing_answer') {
-        target.thoughtCompletedAt = streamEventTime(event.payload, 'stageStartedAt')
-        target.runState = 'preparing'
-      }
-      if (event.type === 'done') {
-        presentationReady = true
-        target.presentationStartedAt = Date.now()
-        target.runState = waitForComplete.value ? 'completed' : 'responding'
-        releasePresentation()
-        target.completedAt = streamEventTime(event.payload, 'completedAt')
-        target.suggestedPrompts = Array.isArray(event.payload.suggestedPrompts)
-          ? event.payload.suggestedPrompts.map(String)
-          : []
-        if (event.payload.contextUsage) target.contextUsage = event.payload.contextUsage as OracleShellMessage['contextUsage']
-      }
-      if (event.type === 'citation' && event.payload.citation) {
-        target.citations = [...(target.citations || []), event.payload.citation as NonNullable<OracleShellMessage['citations']>[number]]
-      }
+      if (event.type === 'done') presentationReady = true
+      applyOracleStreamEvent({
+        event,
+        target,
+        waitForComplete: waitForComplete.value,
+        enqueueText: (text) => enqueuePresentation(target.id, text),
+        releasePresentation,
+        clearPresentation,
+        responseUnavailable: t('oracle.responseUnavailable'),
+        responseCancelled: t('oracle.responseCancelled'),
+      })
     }, streamController.signal)
     await waitForPresentationDrain()
     const completed = activeMessages.value.find((item) => item.id === run.assistantTurnId)
@@ -567,7 +476,7 @@ async function handleEditMessage(message: OracleShellMessage, content: string) {
 }
 
 function handleSelectBranch(leafId: string) {
-  const selected = materializeBranch(allThreadTurns.value, leafId)
+  const selected = materializeOracleBranch(allThreadTurns.value, leafId)
   selectedBranchLeafId.value = leafId
   activeMessages.value = selected
 }
@@ -598,6 +507,8 @@ async function resumeActiveRun(
   if (stage === 'preparing') {
     target.runState = 'preparing'
     target.thoughtCompletedAt = restoredStageAt || target.thoughtCompletedAt || runStartedAt
+  } else if (!target.runState) {
+    target.runState = 'thinking'
   }
   if (!existingTarget) activeMessages.value.push(target)
   isSending.value = true
@@ -611,36 +522,17 @@ async function resumeActiveRun(
   streamController = new AbortController()
   try {
     await streamOracleRun(runId, (event) => {
-      if (event.type === 'token') {
-        if (!target.firstTokenAt) target.firstTokenAt = Date.now()
-        enqueuePresentation(target.id, String(event.payload.text || ''))
-      }
-      if (event.type === 'tool_progress' && event.payload.stage === 'preparing_answer') {
-        target.thoughtCompletedAt = streamEventTime(event.payload, 'stageStartedAt')
-        target.runState = 'preparing'
-      }
-      if (event.type === 'citation' && event.payload.citation) {
-        target.citations = [...(target.citations || []), event.payload.citation as NonNullable<OracleShellMessage['citations']>[number]]
-      }
-      if (event.type === 'done') {
-        presentationReady = true
-        target.presentationStartedAt = Date.now()
-        target.runState = waitForComplete.value ? 'completed' : 'responding'
-        releasePresentation()
-        target.completedAt = streamEventTime(event.payload, 'completedAt')
-        target.suggestedPrompts = Array.isArray(event.payload.suggestedPrompts)
-          ? event.payload.suggestedPrompts.map(String)
-          : []
-        if (event.payload.contextUsage) {
-          target.contextUsage = event.payload.contextUsage as OracleShellMessage['contextUsage']
-        }
-      }
-      if (event.type === 'error' || event.type === 'cancelled') {
-        if (waitForComplete.value) clearPresentation(true)
-        target.runState = event.type === 'error' ? 'failed' : 'cancelled'
-        target.completedAt = Date.now()
-        target.content ||= event.type === 'error' ? t('oracle.responseUnavailable') : t('oracle.responseCancelled')
-      }
+      if (event.type === 'done') presentationReady = true
+      applyOracleStreamEvent({
+        event,
+        target,
+        waitForComplete: waitForComplete.value,
+        enqueueText: (text) => enqueuePresentation(target.id, text),
+        releasePresentation,
+        clearPresentation,
+        responseUnavailable: t('oracle.responseUnavailable'),
+        responseCancelled: t('oracle.responseCancelled'),
+      })
     }, streamController.signal)
     await waitForPresentationDrain()
     if (target.runState === 'responding') target.runState = 'completed'
@@ -704,6 +596,34 @@ watch(activeThread, (thread) => {
   if (thread) activeMode.value = thread.mode
 })
 
+watch(() => citationChange.value?.revision, async () => {
+  const threadId = activeThreadId.value
+  const change = citationChange.value
+  if (!threadId || !change?.threadIds.includes(threadId)) return
+  showCitationModal.value = false
+  selectedCitation.value = null
+  await loadThreadMessages(threadId)
+})
+
+watch(
+  () => route.query.thread,
+  async (value) => {
+    if (!routeSyncReady) return
+    const threadId = typeof value === 'string' ? value : null
+    if (threadId === activeThreadId.value) return
+    if (!threadId) {
+      streamController?.abort()
+      clearPresentation()
+      oracleStore.selectThread(null)
+      activeMessages.value = []
+      allThreadTurns.value = []
+      selectedBranchLeafId.value = null
+      return
+    }
+    await handleSelectThread(threadId, false)
+  },
+)
+
 onMounted(async () => {
   try {
     await oracleStore.loadThreads()
@@ -712,18 +632,19 @@ onMounted(async () => {
       : activeThreadId.value
     if (requestedThreadId) {
       oracleStore.selectThread(requestedThreadId)
-      await loadThreadMessages(requestedThreadId)
       const thread = threads.value.find((item) => item.id === requestedThreadId)
       const tracked = backgroundRun.value?.threadId === requestedThreadId
         ? backgroundRun.value
         : null
       const runId = thread?.activeRunId || tracked?.runId
+      const assistantTurnId = thread?.activeRunAssistantTurnId || tracked?.assistantTurnId
+      await loadThreadMessages(requestedThreadId, assistantTurnId || undefined)
       if (runId) {
         await resumeActiveRun(
           requestedThreadId,
           runId,
           thread?.activeRunStartedAt || tracked?.startedAt,
-          thread?.activeRunAssistantTurnId || tracked?.assistantTurnId,
+          assistantTurnId,
           thread?.activeRunStage || tracked?.stage,
           thread?.activeRunStageStartedAt || tracked?.stageStartedAt,
         )
@@ -733,6 +654,8 @@ onMounted(async () => {
     if (!isLeavingView && error?.name !== 'AbortError') {
       settingsStore.showToastKey('oracle.loadError', undefined, 'error')
     }
+  } finally {
+    routeSyncReady = true
   }
 })
 

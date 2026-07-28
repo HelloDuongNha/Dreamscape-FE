@@ -55,7 +55,7 @@ test('6. Send is enabled only with content and emits through the real Oracle flo
   const content = fs.readFileSync(composerPath, 'utf8');
   assert.ok(content.includes(':disabled="!inputContent.trim() && !isSending"'), 'empty idle composer must be disabled');
   assert.ok(content.includes("emit('send', content)"), 'non-empty content must emit a real send event');
-  assert.ok(content.includes('@keydown.enter.exact.prevent="submit"'), 'Enter must submit through the same path');
+  assert.ok(content.includes('@keydown.enter.exact="handleEnter"'), 'Enter must submit through the IME-safe send path');
   assert.ok(content.includes("$emit('cancel')"), 'running composer must expose stop generation');
 
   const chatShellPath = path.resolve(feRoot, 'src/features/oracle/components/OracleChatShell.vue');
@@ -126,6 +126,10 @@ test('13. Background runs survive navigation and ETA uses one remaining-time val
     path.resolve(feRoot, 'src/store/useOracleChatStore.ts'),
     'utf8',
   );
+  const runStoreContent = fs.readFileSync(
+    path.resolve(feRoot, 'src/store/useOracleRunStore.ts'),
+    'utf8',
+  );
   const chatShellContent = fs.readFileSync(
     path.resolve(feRoot, 'src/features/oracle/components/OracleChatShell.vue'),
     'utf8',
@@ -140,7 +144,7 @@ test('13. Background runs survive navigation and ETA uses one remaining-time val
     'leaving the page after a run is persisted must not delete its new thread',
   );
   assert.ok(
-    storeContent.includes('await getOracleRunStatus(tracked.runId)'),
+    runStoreContent.includes('await getOracleRunStatus(tracked.runId)'),
     'background completion must be determined from the exact run resource',
   );
   assert.ok(
@@ -174,7 +178,11 @@ test('14. Long-running task pins share one collapsible component', () => {
   );
   assert.ok(!containerContent.includes('pinned-toast__close'), 'task pins must not retain an X dismiss control');
   assert.ok(pinContent.includes('pinned-task-toast--collapsed'), 'shared pin must support edge collapse');
-  assert.ok(pinContent.includes('if (terminal && !previous) collapsed.value = false'), 'completed hidden work must slide back out');
+  assert.match(
+    pinContent,
+    /if\s*\(terminal\s*&&\s*!previous\)\s*\{[\s\S]*?collapsed\.value\s*=\s*false/u,
+    'completed hidden work must slide back out',
+  );
   for (const kind of ['oracle-chat', 'dream-analysis', 'rule-analysis', 'source-import', 'queue']) {
     assert.ok(pinContent.includes(`pinned-task-toast--${kind}`), `${kind} must have a distinct accent`);
   }
@@ -211,15 +219,63 @@ test('16. Editing reuses the composer and replaces the visible branch', () => {
     path.resolve(feRoot, 'src/features/oracle/OracleView.vue'),
     'utf8',
   );
+  const branchContent = fs.readFileSync(
+    path.resolve(feRoot, 'src/features/oracle/services/oracleBranchPresentation.service.ts'),
+    'utf8',
+  );
 
   assert.ok(!shellContent.includes('oracle-msg__editor'), 'timeline must not render a second editing textarea');
   assert.ok(shellContent.includes('oracle-edit-context'), 'editing context must sit above the main composer');
   assert.ok(shellContent.includes('composer.value?.setContent(message.content)'), 'edit must preload the main composer');
   assert.ok(composerContent.includes('defineExpose({ focus, setContent, clear })'), 'composer must expose safe edit controls');
+  assert.ok(composerContent.includes('event.isComposing || isComposing.value'), 'Enter must not submit before Vietnamese IME composition finishes');
   assert.ok(viewContent.includes('activeMessages.value.splice(editedMessageIndex)'), 'the old branch must be replaced before rendering its edit');
+  assert.ok(viewContent.includes('await loadThreadMessages(threadId, run.assistantTurnId)'), 'the edited branch must be selected before its response streams');
+  assert.ok(branchContent.includes("turn._id === requestedLeafId"), 'an empty in-progress assistant leaf must remain visible after reload');
   assert.match(
     shellContent,
     /\.oracle-msg__user-tools\s*\{[\s\S]*?opacity:\s*1;/u,
     'copy, edit, and branch navigation must remain visible without hover',
+  );
+});
+
+test('17. Dream post citations share Oracle markers and expose every active source question', () => {
+  const resultContent = fs.readFileSync(
+    path.resolve(feRoot, 'src/components/common/OracleAnalysisResult.vue'),
+    'utf8',
+  );
+  const modalContent = fs.readFileSync(
+    path.resolve(feRoot, 'src/features/home/PostDetailModal.vue'),
+    'utf8',
+  );
+  const postStoreContent = fs.readFileSync(
+    path.resolve(feRoot, 'src/store/usePostStore.ts'),
+    'utf8',
+  );
+
+  assert.ok(
+    resultContent.includes('splitOracleInlineParts(segment.text)'),
+    'Dream analysis must use the shared Oracle inline citation parser',
+  );
+  assert.ok(
+    resultContent.includes('v-for="entry in verificationQuestions"')
+      && resultContent.includes('selectDreamVerificationQuestions(props.analysis)'),
+    'every question backed by the active resolved citation ledger must be displayed',
+  );
+  assert.ok(
+    !resultContent.includes('visibleHypotheses'),
+    'source questions must not be hidden behind an unrelated reveal counter',
+  );
+  assert.ok(
+    modalContent.includes(':show-hypothesis-actions="isOwner && isCurrentVersion"'),
+    'only the owner may answer questions on the current Dream version',
+  );
+  assert.ok(
+    modalContent.includes("window.addEventListener('focus', refreshOpenDream)"),
+    'an open Dream must refresh after the user returns from a source lifecycle action',
+  );
+  assert.ok(
+    postStoreContent.includes('async function refreshFocusedDream()'),
+    'refreshing citation state must not reload comments or reopen the modal',
   );
 });

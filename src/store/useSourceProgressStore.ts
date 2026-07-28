@@ -13,6 +13,10 @@ import {
   getUploadedPdfImportProgressForApprovedSource,
   cancelUploadedPdfImportForApprovedSource,
 } from '@/api/sourceApi'
+import {
+  estimateStructuredReaderSeconds,
+  type ReaderBuildTimingSample,
+} from '@/features/library/services/structuredReaderEstimate.service'
 import { useAcademicJobQueueStore } from './useAcademicJobQueueStore'
 
 const SOURCE_TASK_KEY = 'dreamscape:pinned-task:source-progress:v1'
@@ -218,7 +222,25 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     }, 1500)
   }
 
+  async function loadInitialPdfEstimate(
+    id: string,
+    targetType: 'contribution' | 'approved_source',
+  ): Promise<number | null> {
+    try {
+      const response = targetType === 'contribution'
+        ? await getUploadedPdfImportProgressForContribution(id)
+        : await getUploadedPdfImportProgressForApprovedSource(id)
+      const estimate = Number(
+        response.progress?.expectedDurationSeconds || response.estimateSeconds,
+      )
+      return Number.isFinite(estimate) && estimate > 0 ? Math.round(estimate) : null
+    } catch {
+      return null
+    }
+  }
+
   async function runPdfOnlyPipeline(id: string, title: string, targetType: 'contribution' | 'approved_source' = 'contribution', forceReplace = false, structuredFirst = false, promotedFromQueue = false) {
+    const initialEstimate = await loadInitialPdfEstimate(id, targetType)
     clearTerminalDismissal()
     contributionId.value = id
     sourceTitle.value = title
@@ -234,7 +256,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     pdfResult.value = 'success'
     selectedSource.value = 'none'
     detectedIdentifiers.value = null
-    expectedTotalSeconds.value = null
+    expectedTotalSeconds.value = initialEstimate
     timingDeltaSeconds.value = null
     ocrExpected.value = false
     pdfStage.value = 'received'
@@ -448,7 +470,13 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     scheduleTerminalDismiss()
   }
 
-  async function runStructuredReader(id: string, title: string, reimport = true, promotedFromQueue = false) {
+  async function runStructuredReader(
+    id: string,
+    title: string,
+    reimport = true,
+    history: ReaderBuildTimingSample[] = [],
+    promotedFromQueue = false,
+  ) {
     clearTerminalDismissal()
     const startedAt = Date.now()
     contributionId.value = id
@@ -467,7 +495,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     pdfResult.value = 'none'
     selectedSource.value = 'none'
     detectedIdentifiers.value = null
-    expectedTotalSeconds.value = null
+    expectedTotalSeconds.value = estimateStructuredReaderSeconds(history)
     timingDeltaSeconds.value = null
     pdfStage.value = null
     stageDetail.value = 'Đang tìm nguồn có cấu trúc phù hợp và kiểm tra nội dung trả về.'
@@ -475,7 +503,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
 
     try {
       progress.value = 35
-      startSmoothProgress(88, 45_000)
+      startSmoothProgress(88, expectedTotalSeconds.value * 1000)
       const response: any = reimport
         ? await reimportFullText(id, activeRequestController.signal)
         : await importFullText(id, activeRequestController.signal)
@@ -521,6 +549,8 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
         await new Promise((resolve) => setTimeout(resolve, remainingMs))
       }
       progress.value = 100
+      timingDeltaSeconds.value = Math.ceil((Date.now() - startedAt) / 1000)
+        - expectedTotalSeconds.value
       isDialogVisible.value = false
       isPinnedVisible.value = true
       finishTimers()
@@ -573,12 +603,23 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     })
   }
 
-  function startStructuredReader(id: string, title: string, reimport = true) {
+  function startStructuredReader(
+    id: string,
+    title: string,
+    reimport = true,
+    history: ReaderBuildTimingSample[] = [],
+  ) {
     return useAcademicJobQueueStore().enqueue({
       sourceId: id,
       title,
       kind: 'structured',
-      run: ({ promotedFromQueue }) => runStructuredReader(id, title, reimport, promotedFromQueue),
+      run: ({ promotedFromQueue }) => runStructuredReader(
+        id,
+        title,
+        reimport,
+        history,
+        promotedFromQueue,
+      ),
     })
   }
 

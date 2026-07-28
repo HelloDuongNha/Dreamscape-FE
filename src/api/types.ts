@@ -112,9 +112,13 @@ export interface AiRealLifeHypothesis {
   confidence:            number
   needsUserConfirmation: boolean
   followUpQuestion:      string
+  localizedFollowUpQuestion?: { vi?: string; en?: string }
   reasonForAsking?:      string
+  localizedReasonForAsking?: { vi?: string; en?: string }
   ifYesMeaning?:         string
+  localizedIfYesMeaning?: { vi?: string; en?: string }
   ifNoMeaning?:          string
+  localizedIfNoMeaning?: { vi?: string; en?: string }
   questionType?:         'past' | 'present' | 'future'
   verificationKey?:      string
   questionBasis?:        'academic_rule' | 'dream_sequence' | 'sleep_context'
@@ -240,6 +244,29 @@ export interface AiDreamAnalysisResult {
     interpretation: string
     ruleId?: string
   }[]
+  citations?: Array<{
+    index: number
+    sourceType: 'academic_source'
+    sourceId: string
+    title: string
+    year?: number
+    excerpt: string
+    detail?: string
+  }>
+  claim_bindings?: Array<{
+    claimId: string
+    claimText: string
+    contentPath: string
+    status: 'unresolved' | 'resolved'
+    citationIndex?: number
+    source?: {
+      sourceId?: string
+      doi?: string
+    }
+    ruleId?: string
+    evidenceId?: string
+    verificationKey?: string
+  }>
 }
 
 export interface ApiDream {

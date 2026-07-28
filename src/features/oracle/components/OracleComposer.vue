@@ -10,7 +10,9 @@
         :aria-label="t('oracle.composerPlaceholder')"
         rows="1"
         :disabled="isSending"
-        @keydown.enter.exact.prevent="submit"
+        @compositionstart="isComposing = true"
+        @compositionend="isComposing = false"
+        @keydown.enter.exact="handleEnter"
       />
 
       <div class="oracle-composer__actions">
@@ -109,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/common/AppButton.vue'
 
@@ -144,12 +146,20 @@ const { t } = useI18n()
 const inputContent = ref('')
 const textarea = ref<HTMLTextAreaElement | null>(null)
 const showDeliveryHelp = ref(false)
+const isComposing = ref(false)
 
-function submit() {
+async function submit() {
+  await nextTick()
   const content = inputContent.value.trim()
   if (!content || props.isSending) return
   emit('send', content)
   inputContent.value = ''
+}
+
+function handleEnter(event: KeyboardEvent) {
+  if (event.isComposing || isComposing.value || event.keyCode === 229) return
+  event.preventDefault()
+  void submit()
 }
 
 function focus() {

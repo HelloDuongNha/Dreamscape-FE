@@ -398,6 +398,8 @@
             <AppButton
               variant="smart"
               size="sm"
+              :disabled="isReaderBuildInProgress(source)"
+              :title="isReaderBuildInProgress(source) ? t('library.moderation.actions.waitForReader') : undefined"
               @click="openReviewModal(source, 'approved')"
             >
               {{ t('library.moderation.actions.approve') }}
@@ -751,10 +753,28 @@ watch(locale, (value) => {
 })
 
 function openReviewModal(source: SourceContribution, action: 'approved' | 'rejected') {
+  if (action === 'approved' && isReaderBuildInProgress(source)) {
+    settingsStore.showToast(t('library.moderation.actions.waitForReader'), 'error')
+    return
+  }
   selectedSource.value = source
   reviewAction.value = action
   reviewNote.value = ''
   showReviewModal.value = true
+}
+
+function isReaderBuildInProgress(source: SourceContribution): boolean {
+  const activeStages = new Set([
+    'uploaded',
+    'inspecting',
+    'extracting_text',
+    'resolving_identifiers',
+    'fetching_preferred_source',
+    'ocr_processing',
+    'compiling_reader',
+  ])
+  return source.fullTextStatus === 'importing'
+    || activeStages.has(String(source.extractionStatus || ''))
 }
 
 function openSourcePreview(source: SourceContribution, event?: MouseEvent): void {
@@ -786,6 +806,7 @@ async function submitReview() {
   const payload = {
     reviewStatus: reviewAction.value,
     reviewNote: reviewNote.value.trim() || undefined,
+    title: selectedSource.value.title || selectedSource.value.metadata?.title,
   }
 
   try {

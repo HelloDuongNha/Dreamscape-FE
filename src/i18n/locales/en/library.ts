@@ -93,6 +93,7 @@ export default {
       system: 'System',
     },
     actions: {
+      waitForReader: 'Wait for the Smart Reader build to finish before approving.',
       preview: 'Preview',
       reject: 'Reject',
       approve: 'Approve',

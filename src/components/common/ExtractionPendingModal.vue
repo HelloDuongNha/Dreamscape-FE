@@ -17,6 +17,7 @@
     :estimated-remaining-seconds="extractionStore.estimatedRemainingSeconds"
     :timing-delta-seconds="extractionStore.timingDeltaSeconds"
     :completed="extractionStore.status !== 'pending'"
+    :hide-elapsed="extractionStore.currentStage === 'queued'"
     :cancelable="extractionStore.status === 'pending'"
     :cancel-loading="extractionStore.isCancelling"
     :cancel-label="t('common.longTask.cancel')"
@@ -47,7 +48,9 @@ const stages = computed(() => [
 const stageOrder = ['initializing', 'extracting_candidates', 'saving_candidates', 'merging_candidates', 'completed'] as const
 const currentStageIndex = computed(() => extractionStore.currentStage === 'completed'
   ? stages.value.length
-  : Math.max(0, stageOrder.indexOf(extractionStore.currentStage)))
+  : extractionStore.currentStage === 'queued'
+    ? 0
+    : Math.max(0, stageOrder.indexOf(extractionStore.currentStage)))
 const renderedStages = computed<LongRunningTaskStage[]>(() => stages.value.map((stage, index) => ({
   ...stage,
   activeDetail: localizedStageDetail.value,
@@ -58,6 +61,7 @@ const renderedStages = computed<LongRunningTaskStage[]>(() => stages.value.map((
       : 'pending',
 })))
 const localizedStepText = computed(() => {
+  if (extractionStore.currentStage === 'queued') return t('rules.extraction.queued')
   if (extractionStore.currentStage === 'extracting_candidates') {
     return t('rules.extraction.extracting', {
       processed: extractionStore.processedBatches,
@@ -70,6 +74,7 @@ const localizedStepText = computed(() => {
   return t('rules.extraction.preparing')
 })
 const localizedStageDetail = computed(() => {
+  if (extractionStore.currentStage === 'queued') return t('rules.extraction.queuedDetail')
   if (extractionStore.currentStage === 'extracting_candidates') {
     return t('rules.extraction.candidateCounts', {
       raw: extractionStore.rawCandidateCount,

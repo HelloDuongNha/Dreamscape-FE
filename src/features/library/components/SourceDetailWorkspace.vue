@@ -3751,7 +3751,8 @@ async function handleImport() {
       await sourceProgressStore.startStructuredReader(
         source.value._id,
         source.value.title || t('library.readerLocal.academicDocument'),
-        false
+        false,
+        source.value.readerBuildSnapshots || [],
       )
     } finally {
       await fetchSource()
@@ -3780,7 +3781,8 @@ async function handleReimportConfirm() {
     await sourceProgressStore.startStructuredReader(
       currentSource._id,
       currentSource.title || t('library.readerLocal.academicDocument'),
-      true
+      true,
+      currentSource.readerBuildSnapshots || [],
     )
     await fetchSource()
   } finally {

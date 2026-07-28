@@ -55,18 +55,33 @@ export const usePostStore = defineStore('post', () => {
         apiClient.get<{ success: boolean; data: ApiDream }>(`/dreams/${id}`),
       ])
       focusedComments.value = commentsRes.data.data
-      if (existingDream) {
-        const populatedUser = existingDream.userId
-        Object.assign(existingDream, dreamRes.data.data, { userId: populatedUser })
-        fetchedDream.value = existingDream
-      } else {
-        fetchedDream.value = dreamRes.data.data
-      }
+      mergeDreamSnapshot(dreamRes.data.data, existingDream)
     } catch (err) {
       console.error('Failed to open post:', err)
     } finally {
       isLoadingComments.value = false
     }
+  }
+
+  async function refreshFocusedDream(): Promise<void> {
+    const id = focusedId.value
+    if (!id) return
+    const { data } = await apiClient.get<{ success: boolean; data: ApiDream }>(
+      `/dreams/${id}`,
+    )
+    if (focusedId.value !== id) return
+    const existingDream = useDreamStore().dreams.find(dream => dream._id === id)
+    mergeDreamSnapshot(data.data, existingDream)
+  }
+
+  function mergeDreamSnapshot(snapshot: ApiDream, existingDream?: ApiDream): void {
+    if (!existingDream) {
+      fetchedDream.value = snapshot
+      return
+    }
+    const populatedUser = existingDream.userId
+    Object.assign(existingDream, snapshot, { userId: populatedUser })
+    fetchedDream.value = existingDream
   }
 
   function closePost(): void {
@@ -106,6 +121,7 @@ export const usePostStore = defineStore('post', () => {
     isLoadingComments,
     editRequested,
     openPost,
+    refreshFocusedDream,
     closePost,
     consumeEditRequest,
     addComment,

@@ -93,6 +93,8 @@ export interface RuleCandidate {
   legitimacyLevel?: 'weak' | 'moderate' | 'strong' | 'mixed'
   legitimacyReason?: string
   evidenceCredibilityScore?: number
+  sourceEvidenceScore?: number
+  userValidationAdjustment?: number
   validationStats?: {
     supports: number
     weakens: number
@@ -290,7 +292,8 @@ export const runRuleV3BulkAction = async (
 export interface RuleV3ExtractionRun {
   _id: string
   status: 'pending' | 'success' | 'failed' | 'cancelled'
-  currentStage: 'initializing' | 'extracting_candidates' | 'saving_candidates' | 'merging_candidates' | 'completed' | 'failed' | 'cancelled'
+  currentStage: 'queued' | 'initializing' | 'extracting_candidates' | 'saving_candidates' | 'merging_candidates' | 'completed' | 'failed' | 'cancelled'
+  queuePosition?: number
   totalBatches: number
   processedBatches: number
   rawCandidateCount: number

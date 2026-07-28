@@ -23,7 +23,7 @@ export default {
   progress: {
     elapsed: 'Running for {duration}', seconds: '{count} seconds', minutes: '{count} minutes',
     minutesSeconds: '{minutes} minutes {seconds} seconds', hoursMinutes: '{hours} hours {minutes} minutes',
-    measuring: 'Measuring processing speed to estimate completion', remaining: 'About {duration} remaining',
+    measuring: 'Measuring processing speed to estimate completion', estimateUnavailable: 'Time estimate unavailable', remaining: 'About {duration} remaining',
     overdue: 'Taking {duration} longer than expected · still processing',
     finishedEarly: 'Finished {duration} earlier than estimated',
     finishedLate: 'Finished {duration} later than estimated',
@@ -53,6 +53,13 @@ export default {
     parseDocling: 'Parse layout with Docling', parseDoclingDetail: 'Recover headings, paragraphs, tables, figures, and reading order.',
     cleanOcr: 'Clean OCR errors', cleanOcrDetail: 'Repair characters, spacing, and broken lines before saving.',
     buildReader: 'Build Smart Reader', buildReaderDetail: 'Only cleaned data is written to the final reader.',
+    structuredPrepare: 'Check identifiers and access', structuredPrepareDetail: 'Identify the DOI, URL, and content that may be imported.',
+    structuredRetrieve: 'Retrieve structured content', structuredRetrieveDetail: 'Prefer JATS/XML and HTML to preserve headings, tables, figures, and reading order.',
+    structuredCompile: 'Validate and build Smart Reader', structuredCompileDetail: 'Only valid content is written to Smart Reader.',
+    importPrepare: 'Receive source', importPrepareDetail: 'Validate the input and content access.',
+    importReader: 'Import Smart Reader', importReaderDetail: 'Prefer structured content before using a PDF fallback.',
+    importOriginal: 'Preserve original document', importOriginalDetail: 'Only save a lawful online PDF or a user-uploaded file.',
+    importFinish: 'Finalize document data', importFinishDetail: 'Synchronize identifiers, reader state, and preview information.',
     pin: {
       prefix: 'Document',
       runningTitle: 'Processing',

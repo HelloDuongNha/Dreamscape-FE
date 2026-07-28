@@ -66,6 +66,17 @@ export const useDreamStore = defineStore('dream', () => {
     }
   }
 
+  async function refreshDream(dreamId: string): Promise<ApiDream | null> {
+    const index = dreams.value.findIndex(dream => dream._id === dreamId)
+    if (index === -1) return null
+    const { data } = await apiClient.get<{ success: boolean; data: ApiDream }>(
+      `/dreams/${dreamId}`,
+    )
+    const populatedUser = dreams.value[index].userId
+    dreams.value[index] = { ...data.data, userId: populatedUser }
+    return dreams.value[index]
+  }
+
   /** Create a dream and prepend it to the feed */
   async function addDream(
     content: string,
@@ -166,6 +177,8 @@ export const useDreamStore = defineStore('dream', () => {
    */
   async function removeDream(dreamId: string): Promise<void> {
     await apiClient.delete(`/dreams/${dreamId}`)
+    const { useOracleStore } = await import('@/store/useOracleStore')
+    useOracleStore().stopTracking(dreamId)
     dreams.value = dreams.value.filter(d => d._id !== dreamId)
     const { useSettingsStore } = await import('@/store/useSettingsStore')
     useSettingsStore().showToastKey('home.deletedSuccess', undefined, 'success')
@@ -224,6 +237,7 @@ export const useDreamStore = defineStore('dream', () => {
     searchQuery,
     loadFeed,
     loadMore,
+    refreshDream,
     addDream,
     toggleLike,
     editDream,

@@ -26,7 +26,7 @@ export const useExtractionStore = defineStore('extraction', () => {
   const elapsedSeconds = ref(0)
   const estimatedRemainingSeconds = ref<number | null>(null)
   const processedLabel = ref('')
-  const currentStage = ref<'initializing' | 'extracting_candidates' | 'saving_candidates' | 'merging_candidates' | 'completed'>('initializing')
+  const currentStage = ref<'queued' | 'initializing' | 'extracting_candidates' | 'saving_candidates' | 'merging_candidates' | 'completed'>('initializing')
   const totalBatches = ref(0)
   const processedBatches = ref(0)
   const rawCandidateCount = ref(0)
@@ -268,7 +268,8 @@ export const useExtractionStore = defineStore('extraction', () => {
       const run = response.data
       const total = Math.max(0, run.totalBatches || 0)
       const processed = Math.max(0, run.processedBatches || 0)
-      currentStage.value = run.currentStage === 'merging_candidates' ? 'merging_candidates'
+      currentStage.value = run.currentStage === 'queued' ? 'queued'
+        : run.currentStage === 'merging_candidates' ? 'merging_candidates'
         : run.currentStage === 'saving_candidates' ? 'saving_candidates'
         : run.currentStage === 'extracting_candidates' ? 'extracting_candidates' : 'initializing'
       totalBatches.value = total
@@ -277,10 +278,22 @@ export const useExtractionStore = defineStore('extraction', () => {
       verifiedCandidateCount.value = Math.max(0, run.verifiedCandidateCount || 0)
       persistTask()
 
-      if (run.currentStage === 'initializing') {
+      if (run.currentStage === 'queued') {
+        const position = Math.max(1, Number(run.queuePosition) || 1)
+        progress.value = 0
+        stepText.value = `Đang chờ tới lượt phân tích · vị trí ${position}`
+        stageDetail.value = 'Tác vụ sẽ tự bắt đầu khi lượt phân tích trước hoàn tất.'
+        processedLabel.value = ''
+        if (etaAnchorSeconds === null && total > 0) {
+          setEtaAnchor(estimateRuleDurationSeconds(total, plannedSecondsPerBatch) * (position + 1))
+        }
+      } else if (run.currentStage === 'initializing') {
         progress.value = 5
         stepText.value = 'Đang lập kế hoạch phân tích Rule V3…'
         stageDetail.value = 'Đang xác định loại tài liệu, section mục tiêu và các lô bằng chứng.'
+        if (etaAnchorSeconds === null && total > 0) {
+          setEtaAnchor(estimateRuleDurationSeconds(total, plannedSecondsPerBatch))
+        }
       } else if (run.currentStage === 'extracting_candidates') {
         const ratio = total > 0 ? processed / total : 0
         progress.value = 10 + Math.round(ratio * 80)

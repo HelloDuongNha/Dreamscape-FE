@@ -94,6 +94,7 @@ export interface SourceContribution {
   }>
   readableInApp?: boolean
   fullTextStatus?: 'none' | 'importing' | 'imported' | 'failed' | 'available'
+  extractionStatus?: 'uploaded' | 'inspecting' | 'extracting_text' | 'resolving_identifiers' | 'fetching_preferred_source' | 'ocr_processing' | 'compiling_reader' | 'completed' | 'partial' | 'failed'
   pdfUrl?: string
   license?: string
   allowedUse?: 'metadata_only' | 'abstract_only' | 'open_access_fulltext'

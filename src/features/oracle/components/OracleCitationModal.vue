@@ -40,8 +40,14 @@
                 <div class="oracle-citation-rule__heading">
                   <p>{{ localizedStatement(rule) }}</p>
                   <div
-                    class="oracle-score"
-                    :title="t('oracle.sourceArgumentScoreHelp')"
+                    :class="['oracle-score', { 'is-admin-link': isModerator }]"
+                    :title="isModerator
+                      ? t('oracle.sourceArgumentScoreAdminHelp')
+                      : t('oracle.sourceArgumentScoreHelp')"
+                    :role="isModerator ? 'link' : undefined"
+                    :tabindex="isModerator ? 0 : undefined"
+                    @click="openRuleScore(rule)"
+                    @keydown.enter.prevent="openRuleScore(rule)"
                   >
                     <Transition name="score-delta">
                       <b
@@ -111,6 +117,9 @@ import {
   type OracleCitationRuleLinkDto,
 } from '@/api/oracleApi'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { useAuthStore } from '@/store/useAuthStore'
+import { useRouter } from 'vue-router'
+import { isModeratorUserId } from '@/utils/moderatorAccess'
 import apiClient from '@/api/client'
 import {
   inferOracleTextLanguage,
@@ -132,6 +141,8 @@ const emit = defineEmits<{
 }>()
 const { t, locale } = useI18n()
 const settingsStore = useSettingsStore()
+const authStore = useAuthStore()
+const router = useRouter()
 const savingRuleId = ref('')
 const modalRef = ref<HTMLElement | null>(null)
 const scoreDeltas = ref<Record<string, number>>({})
@@ -141,6 +152,7 @@ let translationRun = 0
 const interactiveRules = computed(() =>
   (props.citation?.ruleLinks || []).filter((rule) => Boolean(rule.verificationQuestion)),
 )
+const isModerator = computed(() => isModeratorUserId(authStore.user?._id))
 
 watch([
   () => props.modelValue,
@@ -162,6 +174,15 @@ onBeforeUnmount(() => {
 
 function close() {
   emit('update:modelValue', false)
+}
+
+function openRuleScore(rule: OracleCitationRuleLinkDto) {
+  if (!isModerator.value) return
+  close()
+  void router.push({
+    name: 'moderation-rule-candidates',
+    query: { ruleId: rule.ruleId },
+  })
 }
 
 function localizedStatement(rule: OracleCitationRuleLinkDto): string {
@@ -276,6 +297,7 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
 .oracle-citation-rule{display:grid;gap:14px;padding:16px;border:1px solid var(--color-border);border-radius:14px;background:color-mix(in srgb,var(--color-bg-elevated) 78%,var(--color-bg-surface))}
 .oracle-citation-rule+.oracle-citation-rule{margin-top:11px}.oracle-citation-rule__heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.oracle-citation-rule__heading>p{margin:2px 0 0;color:var(--color-text-primary);font-size:13px;font-weight:650;line-height:1.52}
 .oracle-score{position:relative;display:grid;grid-template-columns:auto auto;align-content:center;justify-content:center;min-width:128px;padding:10px 10px 8px;border:1px solid rgb(96 165 250 / 35%);border-radius:12px;background:rgb(59 130 246 / 10%);color:#93c5fd;text-align:center}.oracle-score strong{font-size:19px;line-height:1}.oracle-score>span{align-self:end;font-size:10px}.oracle-score small{grid-column:1/-1;margin-top:5px;color:var(--color-text-muted);font-size:9px;line-height:1.15}.oracle-score__breakdown{max-width:150px}.oracle-score>b{position:absolute;top:-9px;right:-8px;display:grid;place-items:center;min-width:27px;height:20px;padding:0 5px;border:2px solid var(--color-bg-surface);border-radius:999px;font-size:10px;box-shadow:0 3px 9px rgb(0 0 0 / 22%)}.oracle-score>b.is-positive{background:#0f9f6e;color:white}.oracle-score>b.is-negative{background:#dc4c55;color:white}
+.oracle-score.is-admin-link{cursor:pointer;transition:background-color .18s ease,border-color .18s ease,transform .18s ease}.oracle-score.is-admin-link:hover,.oracle-score.is-admin-link:focus-visible{border-color:rgb(96 165 250 / 55%);background:rgb(59 130 246 / 16%);transform:translateY(-1px);outline:none}
 .oracle-citation-rule details summary{cursor:pointer;color:var(--color-text-secondary);font-size:12px}.oracle-citation-rule details blockquote{margin-top:9px}
 .oracle-citation-rule__verification{padding-top:12px;border-top:1px solid var(--color-border)}.oracle-citation-rule__verification h4{margin:0 0 6px;font-size:12px}.oracle-citation-rule__verification p{margin:0;color:var(--color-text-secondary);font-size:13px;line-height:1.55}
 .oracle-citation-rule__verification :deep(.feedback-choice-group){margin-top:11px}.score-delta-enter-active,.score-delta-leave-active{transition:transform .18s ease,opacity .18s ease}.score-delta-enter-from,.score-delta-leave-to{transform:translateY(4px) scale(.8);opacity:0}.modal-fade-enter-active,.modal-fade-leave-active{transition:opacity .18s ease}.modal-fade-enter-active .oracle-citation-modal,.modal-fade-leave-active .oracle-citation-modal{transition:transform .18s ease,opacity .18s ease}.modal-fade-enter-from,.modal-fade-leave-to{opacity:0}.modal-fade-enter-from .oracle-citation-modal,.modal-fade-leave-to .oracle-citation-modal{transform:translateY(10px);opacity:0}

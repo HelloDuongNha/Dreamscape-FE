@@ -14,7 +14,7 @@
     </div>
 
     <div class="pipeline-progress__meta">
-      <span>{{ t('common.progress.elapsed', { duration: elapsedLabel }) }}</span>
+      <span v-if="!hideElapsed">{{ t('common.progress.elapsed', { duration: elapsedLabel }) }}</span>
       <span v-if="processedLabel">{{ processedLabel }}</span>
       <span>{{ remainingLabel }}</span>
     </div>
@@ -37,6 +37,7 @@ const props = defineProps<{
   remainingText?: string
   timingDeltaSeconds?: number | null
   completed?: boolean
+  hideElapsed?: boolean
 }>()
 
 function durationLabel(totalSeconds: number): string {
@@ -62,7 +63,7 @@ const remainingLabel = computed(() => {
   }
   const estimate = props.estimatedRemainingSeconds
   if (typeof estimate !== 'number') {
-    return t('common.progress.measuring')
+    return t('common.progress.estimateUnavailable')
   }
   if (estimate < 0) return t('common.progress.overdue', { duration: durationLabel(Math.abs(estimate)) })
   return t('common.progress.remaining', { duration: durationLabel(estimate) })

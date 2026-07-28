@@ -200,6 +200,7 @@ export default {
       system: 'Hệ thống',
     },
     actions: {
+      waitForReader: 'Hãy chờ bản đọc thông minh hoàn tất trước khi duyệt.',
       preview: 'Xem trước',
       reject: 'Từ chối',
       approve: 'Duyệt',

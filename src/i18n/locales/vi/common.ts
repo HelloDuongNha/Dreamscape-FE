@@ -23,7 +23,7 @@ export default {
   progress: {
     elapsed: 'Đã chạy {duration}', seconds: '{count} giây', minutes: '{count} phút',
     minutesSeconds: '{minutes} phút {seconds} giây', hoursMinutes: '{hours} giờ {minutes} phút',
-    measuring: 'Đang đo tốc độ xử lý để ước tính', remaining: 'Còn khoảng {duration}',
+    measuring: 'Đang đo tốc độ xử lý để ước tính', estimateUnavailable: 'Chưa có thời gian dự kiến', remaining: 'Còn khoảng {duration}',
     overdue: 'Lâu hơn dự kiến {duration} · vẫn đang xử lý',
     finishedEarly: 'Hoàn tất sớm hơn dự kiến {duration}',
     finishedLate: 'Hoàn tất muộn hơn dự kiến {duration}',
@@ -53,6 +53,13 @@ export default {
     parseDocling: 'Phân tích bố cục bằng Docling', parseDoclingDetail: 'Khôi phục heading, đoạn văn, bảng, hình và thứ tự đọc.',
     cleanOcr: 'Làm sạch lỗi OCR', cleanOcrDetail: 'Sửa lỗi ký tự, khoảng trắng và dòng vỡ trước khi lưu.',
     buildReader: 'Dựng Bản đọc thông minh', buildReaderDetail: 'Chỉ dữ liệu đã làm sạch mới được ghi vào bản đọc cuối.',
+    structuredPrepare: 'Kiểm tra định danh và quyền truy cập', structuredPrepareDetail: 'Xác định DOI, URL và phạm vi nội dung được phép nhập.',
+    structuredRetrieve: 'Lấy nội dung có cấu trúc', structuredRetrieveDetail: 'Ưu tiên JATS/XML và HTML để giữ heading, bảng, hình và thứ tự đọc.',
+    structuredCompile: 'Kiểm tra và dựng Bản đọc', structuredCompileDetail: 'Chỉ nội dung hợp lệ được ghi vào Bản đọc thông minh.',
+    importPrepare: 'Tiếp nhận nguồn', importPrepareDetail: 'Kiểm tra dữ liệu đầu vào và quyền truy cập.',
+    importReader: 'Nhập Bản đọc thông minh', importReaderDetail: 'Ưu tiên nguồn có cấu trúc trước khi dùng PDF.',
+    importOriginal: 'Lưu tài liệu gốc', importOriginalDetail: 'Chỉ lưu PDF từ nguồn hợp pháp hoặc tệp đã được tải lên.',
+    importFinish: 'Hoàn thiện dữ liệu', importFinishDetail: 'Đồng bộ định danh, trạng thái đọc và thông tin xem trước.',
     pin: {
       prefix: 'Tài liệu',
       runningTitle: 'Đang xử lý',

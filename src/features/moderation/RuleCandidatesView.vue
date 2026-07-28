@@ -97,7 +97,6 @@
               </div>
               <h2>{{ ruleText(selectedCandidate, 'label', selectedCandidate.label) }}</h2>
               <span v-if="selectedCandidate.isComposite" class="composite-badge">{{ t('rules.compositeRule', { count: selectedCandidate.compositeComponents?.length || 0 }) }}</span>
-              <p class="source-line" translate="no">{{ formattedSource }}</p>
               <div v-if="selectedCandidate.qualityAccepted === false" class="quality-blocked">
                 <strong>{{ t('rules.qualityFailed') }}</strong>
                 <span>{{ ruleText(selectedCandidate, 'qualitySummary', selectedCandidate.qualitySummary || '') }}</span>
@@ -170,6 +169,13 @@
                   <span :style="{ width: `${selectedCandidate.evidenceCredibilityScore ?? 0}%`, backgroundColor: scoreColor(selectedCandidate.evidenceCredibilityScore) }"></span>
                 </div>
                 <p class="score-conclusion">{{ evidenceScoreConclusion }}</p>
+                <p class="score-formula">
+                  {{ t('rules.scoreFormula', {
+                    source: selectedCandidate.sourceEvidenceScore ?? selectedCandidate.evidenceCredibilityScore ?? 0,
+                    feedback: signedScore(selectedCandidate.userValidationAdjustment),
+                    total: selectedCandidate.evidenceCredibilityScore ?? 0,
+                  }) }}
+                </p>
                 <p class="score-note">{{ t('rules.scoreNote') }}</p>
                 <dl v-if="selectedCandidate.validationStats" class="validation-stats">
                   <div><dt>{{ t('rules.validationSupports') }}</dt><dd>{{ selectedCandidate.validationStats.supports }}</dd></div>
@@ -391,6 +397,7 @@ import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/common/AppButton.vue'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { isModeratorUserId } from '@/utils/moderatorAccess'
 import {
   createBrowserTranslator,
   translateBrowserText,
@@ -416,8 +423,7 @@ const settingsStore = useSettingsStore()
 const { t, locale } = useI18n({ useScope: 'global' })
 
 const isUnauthorized = computed(() => {
-  const ids = (import.meta.env.VITE_MODERATOR_USER_IDS || '').split(',').map((id: string) => id.trim().toLowerCase())
-  return !authStore.user?._id || !ids.includes(authStore.user._id.toLowerCase())
+  return !isModeratorUserId(authStore.user?._id)
 })
 
 const statusTabs = computed(() => [
@@ -427,6 +433,7 @@ const statusTabs = computed(() => [
 ])
 const activeStatus = ref('pending')
 const sourceIdFilter = computed(() => route.query.sourceId ? String(route.query.sourceId) : null)
+const focusedRuleId = computed(() => route.query.ruleId ? String(route.query.ruleId) : null)
 const candidates = ref<RuleCandidate[]>([])
 const selectedId = ref<string | null>(null)
 const selectedCandidate = ref<RuleCandidate | null>(null)
@@ -515,16 +522,6 @@ function relationshipWhyShown(item: RuleRelationshipRow) {
       : ''
   return `${similarity} ${t('rules.keptSeparateBecause', { difference })}${boundary}`
 }
-
-const formattedSource = computed(() => {
-  const candidate = selectedCandidate.value
-  if (!candidate) return ''
-  const authors = candidate.sourceAuthors?.length ? candidate.sourceAuthors.join(', ') : t('rules.unknownAuthor')
-  const year = candidate.sourceYear ? ` (${candidate.sourceYear})` : ''
-  const title = candidate.sourceTitle || t('rules.untitledSource')
-  const doi = candidate.sourceDoi ? ` · DOI ${candidate.sourceDoi}` : ''
-  return `${authors}${year} · ${title}${doi}`
-})
 
 const translatedRuleFields = ref(new Map<string, string>())
 const translatorPromises = new Map<string, Promise<BrowserTranslatorInstance>>()
@@ -695,6 +692,11 @@ function punctuatedList(items: string[], separator: string) {
   return /[.!?]$/u.test(value) ? value : `${value}.`
 }
 
+function signedScore(value?: number) {
+  const score = Number(value) || 0
+  return score > 0 ? `+${score}` : String(score)
+}
+
 const evidenceScoreConclusion = computed(() => {
   const candidate = selectedCandidate.value
   const score = candidate?.evidenceCredibilityScore || 0
@@ -707,10 +709,22 @@ const evidenceScoreConclusion = computed(() => {
 })
 
 watch(
-  [() => route.query.sourceId, () => authStore.user?._id],
-  () => { if (!isUnauthorized.value) void fetchCandidates() },
-  { immediate: true }
+  [() => route.query.sourceId, () => route.query.ruleId, () => authStore.user?._id],
+  () => { if (!isUnauthorized.value) void loadRequestedCandidates() },
+  { immediate: true },
 )
+
+async function loadRequestedCandidates() {
+  if (focusedRuleId.value) {
+    try {
+      const response = await getRuleCandidateDetail(focusedRuleId.value)
+      activeStatus.value = response.data.candidate.status
+    } catch {
+      settingsStore.showToast(t('rules.toasts.detailFailed'), 'error')
+    }
+  }
+  await fetchCandidates()
+}
 
 function clearSourceFilter() {
   void router.push({ path: route.path })
@@ -759,7 +773,12 @@ async function fetchCandidates() {
     })
     candidates.value = response.data || []
     if (candidates.value.length > 0) {
-      const nextId = candidates.value.some(item => item._id === selectedId.value) ? selectedId.value! : candidates.value[0]._id
+      const requestedId = focusedRuleId.value
+      const nextId = requestedId && candidates.value.some(item => item._id === requestedId)
+        ? requestedId
+        : candidates.value.some(item => item._id === selectedId.value)
+          ? selectedId.value!
+          : candidates.value[0]._id
       await selectCandidate(nextId)
     } else {
       selectedId.value = null
@@ -981,7 +1000,6 @@ function scoreColor(score?: number) {
 .hero-topline, .section-heading, .score-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
 .rule-code, .formula-version { color: var(--color-text-muted); font: 600 .68rem var(--font-family-mono), monospace; }
 .rule-hero h2 { margin: 14px 0 10px; color: var(--color-text-primary); font-size: clamp(1.3rem, 2vw, 1.75rem); line-height: 1.35; }
-.source-line { margin: 0; color: var(--color-text-secondary); font-size: .85rem; line-height: 1.5; }
 .content-card { margin-top: var(--space-4); padding: clamp(16px, 2vw, 22px); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-base); }
 .section-heading h3 { margin: 0; color: var(--color-text-primary); }.section-description { margin: 5px 0 0; color: var(--color-text-muted); font-size: .76rem; line-height: 1.45; }.rule-explanation { margin: 16px 0 0; padding: 13px 14px; border-left: 3px solid #818cf8; border-radius: 0 var(--radius-md) var(--radius-md) 0; background: rgba(49,46,129,.16); color: var(--color-text-primary); line-height: 1.6; }.relationship-flow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: stretch; margin-top: 18px; }
 .relationship-flow > div:not(.relationship-arrow) { padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.relationship-flow span { display: block; margin-bottom: 6px; color: var(--color-text-muted); font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }.relationship-flow strong { color: var(--color-text-primary); line-height: 1.45; }.relationship-arrow { align-self: center; color: var(--accent); font-size: 1.4rem; }

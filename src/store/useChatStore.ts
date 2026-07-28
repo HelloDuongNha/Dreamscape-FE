@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import apiClient from '@/api/client'
 import router from '@/router'
+import { useDreamStore } from '@/store/useDreamStore'
+import { usePostStore } from '@/store/usePostStore'
 import type {
   ApiConversation,
   ApiMessage,
@@ -45,6 +47,8 @@ export const useChatStore = defineStore('chat', () => {
   // Socket — lazily initialized when user logs in
   let socket: Socket | null = null
   let sessionEpoch = 0
+  let dreamCitationRefreshTimer: ReturnType<typeof setTimeout> | null = null
+  const pendingDreamCitationRefreshes = new Set<string>()
 
   // ── Getters ────────────────────────────────────────────────────────────────
 
@@ -268,13 +272,58 @@ export const useChatStore = defineStore('chat', () => {
         useNotificationStore().addNotification(payload)
       })
     })
+
+    socket.on('dream_citation_state_changed', (payload: { dreamIds?: string[] }) => {
+      scheduleDreamCitationRefresh(payload?.dreamIds || [])
+    })
+
+    socket.on('oracle_citation_state_changed', (payload: {
+      threadIds?: string[]
+      turnIds?: string[]
+    }) => {
+      void import('@/store/useOracleChatStore').then(({ useOracleChatStore }) => {
+        useOracleChatStore().notifyCitationStateChanged(payload)
+      })
+    })
   }
 
   /** Disconnect socket (called on logout) */
   function disconnectSocket(): void {
+    if (dreamCitationRefreshTimer) clearTimeout(dreamCitationRefreshTimer)
+    dreamCitationRefreshTimer = null
+    pendingDreamCitationRefreshes.clear()
     socket?.removeAllListeners()
     socket?.disconnect()
     socket = null
+  }
+
+  function scheduleDreamCitationRefresh(dreamIds: string[]): void {
+    for (const dreamId of dreamIds) {
+      if (dreamId) pendingDreamCitationRefreshes.add(dreamId)
+    }
+    if (dreamCitationRefreshTimer || pendingDreamCitationRefreshes.size === 0) return
+    dreamCitationRefreshTimer = setTimeout(() => {
+      dreamCitationRefreshTimer = null
+      void refreshChangedDreams()
+    }, 120)
+  }
+
+  async function refreshChangedDreams(): Promise<void> {
+    const dreamIds = [...pendingDreamCitationRefreshes]
+    pendingDreamCitationRefreshes.clear()
+    const dreamStore = useDreamStore()
+    const postStore = usePostStore()
+    await Promise.all(dreamIds.map(async dreamId => {
+      try {
+        if (postStore.focusedId === dreamId) {
+          await postStore.refreshFocusedDream()
+          return
+        }
+        await dreamStore.refreshDream(dreamId)
+      } catch (error) {
+        console.warn('Could not refresh a Dream citation update.', error)
+      }
+    }))
   }
 
   function resetSession(): void {

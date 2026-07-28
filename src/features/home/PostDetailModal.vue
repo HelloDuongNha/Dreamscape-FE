@@ -204,7 +204,7 @@
                   :analysis="analysis"
                   :dream-id="postStore.focusedDream._id"
                   :can-manage-continuation="isOwner && isCurrentVersion"
-                  :show-hypothesis-actions="true"
+                  :show-hypothesis-actions="isOwner && isCurrentVersion"
                   mode="collapsed"
                 />
               </div>
@@ -389,7 +389,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink }    from 'vue-router'
 import { usePostStore }  from '@/store/usePostStore'
@@ -802,6 +802,24 @@ watch(
     }
   },
 )
+
+function refreshOpenDream(): void {
+  if (!postStore.focusedId) return
+  void postStore.refreshFocusedDream().catch(() => undefined)
+}
+
+function refreshVisibleDream(): void {
+  if (document.visibilityState === 'visible') refreshOpenDream()
+}
+
+onMounted(() => {
+  window.addEventListener('focus', refreshOpenDream)
+  document.addEventListener('visibilitychange', refreshVisibleDream)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', refreshOpenDream)
+  document.removeEventListener('visibilitychange', refreshVisibleDream)
+})
 </script>
 
 <style scoped>

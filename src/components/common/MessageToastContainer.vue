@@ -311,7 +311,18 @@ const sourceTitle = computed(() => {
   return t('common.sourceProgress.pin.runningTitle')
 })
 
-const localizedPdfStep = computed(() => {
+const localizedSourceStep = computed(() => {
+  if (sourceProgressStore.pipelineKind === 'structured') {
+    if (sourceProgressStore.progress >= 90) return t('common.sourceProgress.structuredCompile')
+    if (sourceProgressStore.progress >= 35) return t('common.sourceProgress.structuredRetrieve')
+    return t('common.sourceProgress.structuredPrepare')
+  }
+  if (sourceProgressStore.pipelineKind === 'submission') {
+    if (sourceProgressStore.progress >= 75) return t('common.sourceProgress.importFinish')
+    if (sourceProgressStore.progress >= 45) return t('common.sourceProgress.importOriginal')
+    if (sourceProgressStore.progress >= 20) return t('common.sourceProgress.importReader')
+    return t('common.sourceProgress.importPrepare')
+  }
   if (sourceProgressStore.pipelineKind !== 'pdf') return sourceProgressStore.stepText
   const keys: Record<string, string> = {
     received: 'receivePdf',
@@ -343,7 +354,7 @@ function compactProgressDuration(totalSeconds: number): string {
 
 const sourceTimingMessage = computed(() => {
   const estimate = sourceProgressStore.estimatedRemainingSeconds
-  if (typeof estimate !== 'number') return t('common.progress.measuring')
+  if (typeof estimate !== 'number') return t('common.progress.estimateUnavailable')
   if (estimate < 0) {
     return t('common.progress.overdue', {
       duration: compactProgressDuration(Math.abs(estimate)),
@@ -356,7 +367,7 @@ const sourceTimingMessage = computed(() => {
 
 const sourceMessage = computed(() => {
   if (sourceProgressStore.status === 'pending') {
-    return `${localizedPdfStep.value} (${sourceProgressStore.progress}%) · ${sourceTimingMessage.value}`
+    return `${localizedSourceStep.value} (${sourceProgressStore.progress}%) · ${sourceTimingMessage.value}`
   }
   if (sourceProgressStore.status === 'cancelled') {
     return t('common.sourceProgress.pin.cancelledMessage')

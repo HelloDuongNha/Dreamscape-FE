@@ -12,7 +12,7 @@ export default {
   compositeScoreMethod: 'Điểm được giới hạn bởi mệnh đề yếu nhất ({code}).', pooledScoreMethod: 'Điểm được chấm lại từ các nguồn độc lập cùng hỗ trợ một kết luận.', minimumScoreExplanation: 'Gộp các mệnh đề từ cùng tài liệu hoặc cùng đoạn nguồn không tạo thêm bằng chứng độc lập, nên phần điểm từ tài liệu không tự tăng.', pooledScoreExplanation: 'Chỉ bằng chứng từ các tài liệu độc lập cùng hỗ trợ một kết luận tương đương mới được gộp để chấm lại.',
   factor: 'Yếu tố / chủ thể', outcome: 'Kết quả / hiện tượng', appliesOnlyWhen: 'Chỉ áp dụng trong bối cảnh:', noSpecificContext: 'Tài liệu chưa nêu bối cảnh đủ cụ thể.',
   dreamSignals: 'Dấu hiệu cần xuất hiện trong lời kể:', noDreamSignals: 'Chưa xác định được dấu hiệu phù hợp.', limitations: 'Giới hạn cần giữ:', noClearLimitations: 'Tài liệu chưa nêu giới hạn đủ rõ.',
-  evidenceSupport: 'Điểm lập luận', evidenceSupportAria: 'Điểm lập luận', scoreNote: 'Một điểm duy nhất kết hợp mức hỗ trợ từ tài liệu và câu trả lời xác minh thực tế; đây không phải xác suất kết luận đúng trong mọi trường hợp.',
+  evidenceSupport: 'Điểm lập luận', evidenceSupportAria: 'Điểm lập luận', scoreFormula: 'Dẫn chứng tài liệu {source} + phản hồi trường hợp {feedback} = {total}/100', scoreNote: 'Một điểm duy nhất kết hợp mức hỗ trợ từ tài liệu và câu trả lời xác minh thực tế; đây không phải xác suất kết luận đúng trong mọi trường hợp.',
   validationSupports: 'Đồng ý', validationWeakens: 'Không đồng ý', validationUnsure: 'Chưa chắc', validationAdjustment: 'Điều chỉnh từ phản hồi',
   criterionHelp: 'Giải thích tiêu chí', scoreThreshold: 'Ngưỡng chấm điểm', scoreReason: 'Vì sao lập luận nhận {score}/{maxScore}',
   evidenceGapMatches: 'Nhu cầu dẫn chứng liên quan', evidenceGapMatchesDescription: 'Cho biết lập luận này khớp với nhận định `[?]` nào của Oracle và đoạn trích nào có thể làm căn cứ.', evidenceGapOccurrences: 'Xuất hiện {count} lần',
@@ -53,6 +53,8 @@ export default {
   relationKinds: { equivalent: 'Cùng nội dung', overlapping: 'Liên quan nhưng khác phạm vi', complementary: 'Mệnh đề bổ sung', scope_tension: 'Căng thẳng do khác phạm vi', shared_context: 'Cùng ngữ cảnh nguồn', contradictory: 'Kết luận trái chiều', reverse_direction: 'Quan hệ đảo chiều' },
   toasts: { bulkDone: 'Đã xử lý {processed} lập luận.', bulkPartial: 'Đã xử lý {processed} lập luận; {failed} lập luận cần kiểm tra riêng.', bulkFailed: 'Không thể thực hiện thao tác hàng loạt.', listFailed: 'Không thể tải danh sách Rule V3.', detailFailed: 'Không thể tải chi tiết Rule V3.', approved: 'Đã phê duyệt lập luận.', approveFailed: 'Không thể phê duyệt lập luận.', rejected: 'Đã từ chối lập luận.', rejectFailed: 'Không thể từ chối lập luận.' },
   extraction: {
+    queued: 'Đang chờ tới lượt phân tích',
+    queuedDetail: 'Tác vụ sẽ tự bắt đầu khi lượt phân tích trước hoàn tất.',
     title: 'Phân tích Rule V3', dialogAria: 'Đang phân tích tài liệu', minimize: 'Ẩn tiến trình phân tích',
     subtitle: 'Hệ thống đang xử lý toàn bộ tài liệu, đối chiếu trích dẫn và gộp các kết luận trùng nhau.',
     preparing: 'Đang lập kế hoạch phân tích…', extracting: 'Đang trích xuất và kiểm tra trích dẫn… ({processed}/{total})',

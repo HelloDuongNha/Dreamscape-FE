@@ -41,6 +41,7 @@
               :remaining-text="remainingText"
               :timing-delta-seconds="timingDeltaSeconds"
               :completed="completed"
+              :hide-elapsed="hideElapsed"
             />
 
             <ol class="long-task-stages" :aria-label="stepsAriaLabel">
@@ -140,6 +141,7 @@ const props = withDefaults(defineProps<{
   remainingText?: string
   timingDeltaSeconds?: number | null
   completed?: boolean
+  hideElapsed?: boolean
   cancelable?: boolean
   cancelLoading?: boolean
   cancelLabel: string
@@ -156,6 +158,7 @@ const props = withDefaults(defineProps<{
   remainingText: '',
   timingDeltaSeconds: null,
   completed: false,
+  hideElapsed: false,
   cancelable: false,
   cancelLoading: false,
 })

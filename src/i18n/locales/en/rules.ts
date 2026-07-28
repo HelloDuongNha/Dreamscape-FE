@@ -12,7 +12,7 @@ export default {
   compositeScoreMethod: 'Score is limited by the weakest claim ({code}).', pooledScoreMethod: 'The score is recalculated from independent sources supporting the same conclusion.', minimumScoreExplanation: 'Combining claims from the same document or source paragraph does not create independent evidence, so the source-supported portion does not automatically increase.', pooledScoreExplanation: 'Only independent documents supporting an equivalent conclusion are pooled for rescoring.',
   factor: 'Factor / subject', outcome: 'Outcome / phenomenon', appliesOnlyWhen: 'Apply only in this context:', noSpecificContext: 'The source does not state a sufficiently specific context.',
   dreamSignals: 'Required features in the dream report:', noDreamSignals: 'No applicable feature has been identified.', limitations: 'Required boundaries:', noClearLimitations: 'The source does not state sufficiently clear limitations.',
-  evidenceSupport: 'Argument score', evidenceSupportAria: 'Argument score', scoreNote: 'One score combines documentary support with real-case verification answers; it is not the probability that the conclusion is true in every case.',
+  evidenceSupport: 'Argument score', evidenceSupportAria: 'Argument score', scoreFormula: 'Document evidence {source} + case feedback {feedback} = {total}/100', scoreNote: 'One score combines documentary support with real-case verification answers; it is not the probability that the conclusion is true in every case.',
   validationSupports: 'Agrees', validationWeakens: 'Disagrees', validationUnsure: 'Unsure', validationAdjustment: 'Feedback adjustment',
   criterionHelp: 'Explain criterion', scoreThreshold: 'Scoring thresholds', scoreReason: 'Why this argument received {score}/{maxScore}',
   evidenceGapMatches: 'Related evidence needs', evidenceGapMatchesDescription: 'Shows which Oracle `[?]` claim this argument matches and which excerpt can support it.', evidenceGapOccurrences: 'Appeared {count} times',
@@ -53,6 +53,8 @@ export default {
   relationKinds: { equivalent: 'Equivalent content', overlapping: 'Related with a different scope', complementary: 'Complementary claim', scope_tension: 'Scope-dependent tension', shared_context: 'Shared source context', contradictory: 'Contradictory conclusion', reverse_direction: 'Reverse direction' },
   toasts: { bulkDone: 'Processed {processed} arguments.', bulkPartial: 'Processed {processed} arguments; {failed} require individual review.', bulkFailed: 'Could not perform the bulk action.', listFailed: 'Could not load the Argument V3 list.', detailFailed: 'Could not load Argument V3 details.', approved: 'Argument approved.', approveFailed: 'Could not approve the argument.', rejected: 'Argument rejected.', rejectFailed: 'Could not reject the argument.' },
   extraction: {
+    queued: 'Waiting for analysis',
+    queuedDetail: 'This task will start automatically after the previous analysis finishes.',
     title: 'Argument V3 analysis', dialogAria: 'Analyzing academic document', minimize: 'Hide analysis progress',
     subtitle: 'The system is processing the full document, verifying citations, and merging duplicate conclusions.',
     preparing: 'Planning the analysis…', extracting: 'Extracting conclusions and verifying citations… ({processed}/{total})',

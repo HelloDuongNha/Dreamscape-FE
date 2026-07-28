@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import apiClient from '@/api/client'
 import { useChatStore } from '@/store/useChatStore'
+import { useOracleChatStore } from '@/store/useOracleChatStore'
 import type { ApiUser, AuthResponse } from '@/api/types'
 
 const TOKEN_KEY = 'ds_token'
@@ -31,6 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem(USER_KEY,  JSON.stringify(u))
     // Reset all account-scoped chat state before loading the new account.
     useChatStore().startSession(u._id)
+    useOracleChatStore().startAccountSession(u._id)
   }
 
   function _clear() {
@@ -39,6 +41,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
     useChatStore().resetSession()
+    useOracleChatStore().endAccountSession()
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -83,6 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
   // If the app loads with an existing token in localStorage, reconnect the socket
   if (token.value) {
     useChatStore().connectSocket()
+    if (user.value?._id) useOracleChatStore().startAccountSession(user.value._id)
   }
 
   return { token, user, isLoggedIn, myId, myUser, register, login, logout, updateCurrentUser, clearSession }
