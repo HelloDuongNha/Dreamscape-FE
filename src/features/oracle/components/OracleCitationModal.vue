@@ -53,12 +53,22 @@
                     </Transition>
                     <strong>{{ rule.evidenceScore }}</strong><span>/100</span>
                     <small>{{ t('oracle.sourceArgumentScore') }}</small>
+                    <small v-if="rule.sourceEvidenceScore != null" class="oracle-score__breakdown">
+                      {{ t('oracle.sourceArgumentScoreBreakdown', {
+                        source: rule.sourceEvidenceScore,
+                        feedback: signedAdjustment(rule.userValidationAdjustment),
+                      }) }}
+                    </small>
                   </div>
                 </div>
 
                 <details>
-                  <summary>{{ t('oracle.sourceRuleEvidence') }}</summary>
-                  <blockquote>{{ rule.quote }}</blockquote>
+                  <summary>
+                    {{ rule.usageExcerpt
+                      ? t('oracle.sourceRuleUsage')
+                      : t('oracle.sourceRuleEvidence') }}
+                  </summary>
+                  <blockquote>{{ rule.usageExcerpt || rule.quote }}</blockquote>
                 </details>
 
                 <div v-if="rule.verificationQuestion" class="oracle-citation-rule__verification">
@@ -173,6 +183,11 @@ function displayLanguage(): OracleDisplayLanguage {
   return String(locale.value).startsWith('en') ? 'en' : 'vi'
 }
 
+function signedAdjustment(value: number | undefined): string {
+  const adjustment = Number(value) || 0
+  return adjustment > 0 ? `+${adjustment}` : String(adjustment)
+}
+
 async function refreshStatementTranslations(): Promise<void> {
   const run = ++translationRun
   const language = displayLanguage()
@@ -212,6 +227,8 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
         item.ruleId === update.ruleId || item.ruleCode === update.ruleId)
       if (!visibleRule) continue
       visibleRule.evidenceScore = update.score
+      visibleRule.userValidationAdjustment = update.validationAdjustment
+      visibleRule.sourceEvidenceScore = update.score - update.validationAdjustment
       const displayedDelta = update.voteDelta || update.scoreDelta
       if (displayedDelta) {
         scoreDeltas.value[update.ruleId] = displayedDelta
@@ -258,7 +275,7 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
 .oracle-citation-modal__section-help{margin:0 0 12px;color:var(--color-text-muted);font-size:11px;line-height:1.5}
 .oracle-citation-rule{display:grid;gap:14px;padding:16px;border:1px solid var(--color-border);border-radius:14px;background:color-mix(in srgb,var(--color-bg-elevated) 78%,var(--color-bg-surface))}
 .oracle-citation-rule+.oracle-citation-rule{margin-top:11px}.oracle-citation-rule__heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.oracle-citation-rule__heading>p{margin:2px 0 0;color:var(--color-text-primary);font-size:13px;font-weight:650;line-height:1.52}
-.oracle-score{position:relative;display:grid;grid-template-columns:auto auto;align-content:center;justify-content:center;min-width:78px;padding:10px 10px 8px;border:1px solid rgb(96 165 250 / 35%);border-radius:12px;background:rgb(59 130 246 / 10%);color:#93c5fd;text-align:center}.oracle-score strong{font-size:19px;line-height:1}.oracle-score>span{align-self:end;font-size:10px}.oracle-score small{grid-column:1/-1;margin-top:5px;color:var(--color-text-muted);font-size:9px;line-height:1.15}.oracle-score>b{position:absolute;top:-9px;right:-8px;display:grid;place-items:center;min-width:27px;height:20px;padding:0 5px;border:2px solid var(--color-bg-surface);border-radius:999px;font-size:10px;box-shadow:0 3px 9px rgb(0 0 0 / 22%)}.oracle-score>b.is-positive{background:#0f9f6e;color:white}.oracle-score>b.is-negative{background:#dc4c55;color:white}
+.oracle-score{position:relative;display:grid;grid-template-columns:auto auto;align-content:center;justify-content:center;min-width:128px;padding:10px 10px 8px;border:1px solid rgb(96 165 250 / 35%);border-radius:12px;background:rgb(59 130 246 / 10%);color:#93c5fd;text-align:center}.oracle-score strong{font-size:19px;line-height:1}.oracle-score>span{align-self:end;font-size:10px}.oracle-score small{grid-column:1/-1;margin-top:5px;color:var(--color-text-muted);font-size:9px;line-height:1.15}.oracle-score__breakdown{max-width:150px}.oracle-score>b{position:absolute;top:-9px;right:-8px;display:grid;place-items:center;min-width:27px;height:20px;padding:0 5px;border:2px solid var(--color-bg-surface);border-radius:999px;font-size:10px;box-shadow:0 3px 9px rgb(0 0 0 / 22%)}.oracle-score>b.is-positive{background:#0f9f6e;color:white}.oracle-score>b.is-negative{background:#dc4c55;color:white}
 .oracle-citation-rule details summary{cursor:pointer;color:var(--color-text-secondary);font-size:12px}.oracle-citation-rule details blockquote{margin-top:9px}
 .oracle-citation-rule__verification{padding-top:12px;border-top:1px solid var(--color-border)}.oracle-citation-rule__verification h4{margin:0 0 6px;font-size:12px}.oracle-citation-rule__verification p{margin:0;color:var(--color-text-secondary);font-size:13px;line-height:1.55}
 .oracle-citation-rule__verification :deep(.feedback-choice-group){margin-top:11px}.score-delta-enter-active,.score-delta-leave-active{transition:transform .18s ease,opacity .18s ease}.score-delta-enter-from,.score-delta-leave-to{transform:translateY(4px) scale(.8);opacity:0}.modal-fade-enter-active,.modal-fade-leave-active{transition:opacity .18s ease}.modal-fade-enter-active .oracle-citation-modal,.modal-fade-leave-active .oracle-citation-modal{transition:transform .18s ease,opacity .18s ease}.modal-fade-enter-from,.modal-fade-leave-to{opacity:0}.modal-fade-enter-from .oracle-citation-modal,.modal-fade-leave-to .oracle-citation-modal{transform:translateY(10px);opacity:0}

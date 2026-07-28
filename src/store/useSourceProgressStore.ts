@@ -156,6 +156,12 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     stopTimers()
   }
 
+  function clearTerminalDismissal() {
+    if (terminalTimer) clearTimeout(terminalTimer)
+    terminalTimer = null
+    persistedExpiresAt = null
+  }
+
   function applyPdfStage(stage: typeof pdfStage.value) {
     if (!stage || stage === pdfStage.value) return
     pdfStage.value = stage
@@ -213,6 +219,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
   }
 
   async function runPdfOnlyPipeline(id: string, title: string, targetType: 'contribution' | 'approved_source' = 'contribution', forceReplace = false, structuredFirst = false, promotedFromQueue = false) {
+    clearTerminalDismissal()
     contributionId.value = id
     sourceTitle.value = title
     isDialogVisible.value = !promotedFromQueue
@@ -310,6 +317,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
   }
 
   async function runPipeline(id: string, title: string, promotedFromQueue = false) {
+    clearTerminalDismissal()
     contributionId.value = id
     sourceTitle.value = title
     isDialogVisible.value = !promotedFromQueue
@@ -423,17 +431,25 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     await new Promise((resolve) => setTimeout(resolve, 800))
     progress.value = 95
 
-    // Complete (100%)
+    // Complete only when a readable document was actually persisted.
     progress.value = 100
-    status.value = 'success'
-    stepText.value = 'Hoàn tất xử lý nguồn.'
+    status.value = smartReaderResult.value === 'success' ? 'success' : 'failed'
+    if (status.value === 'success') {
+      stepText.value = 'Hoàn tất xử lý nguồn.'
+      stageDetail.value = 'Bản đọc thông minh đã sẵn sàng để xem trước và duyệt.'
+    } else if (smartReaderResult.value === 'ocr_needed') {
+      stageDetail.value = 'PDF cần được nhận dạng OCR trước khi có thể tạo Bản đọc thông minh.'
+    } else {
+      stageDetail.value = 'Chưa tạo được Bản đọc thông minh; nguồn vẫn được giữ để bạn thử lại hoặc tải PDF lên.'
+    }
     isDialogVisible.value = false
-    isPinnedVisible.value = true // Show completion notification
+    isPinnedVisible.value = true
     finishTimers()
     scheduleTerminalDismiss()
   }
 
   async function runStructuredReader(id: string, title: string, reimport = true, promotedFromQueue = false) {
+    clearTerminalDismissal()
     const startedAt = Date.now()
     contributionId.value = id
     sourceTitle.value = title

@@ -3869,6 +3869,7 @@ async function handleModerationApprove() {
     })
     if (res.success) {
       settingsStore.showToast(t('library.readerLocal.approveSuccess'), 'success')
+      extractionStore.trackApprovalResult(res, normalizedModerationTitle.value)
       router.push(props.backUrl)
     } else {
       settingsStore.showToast(res.message || t('library.readerLocal.approveFailed'), 'error')

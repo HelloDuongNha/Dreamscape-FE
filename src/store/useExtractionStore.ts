@@ -43,6 +43,40 @@ export const useExtractionStore = defineStore('extraction', () => {
   let etaExpectedTotalSeconds: number | null = null
   let plannedSecondsPerBatch = 12
 
+  function beginTracking(id: string, title: string, showDialog: boolean, secondsPerBatch = 12) {
+    stopTracking()
+    sourceId.value = id
+    sourceTitle.value = title
+    isDialogVisible.value = showDialog
+    isPinnedVisible.value = !showDialog
+    progress.value = 0
+    status.value = 'pending'
+    outcome.value = null
+    createdCount.value = 0
+    mergedCount.value = 0
+    rejectedCount.value = 0
+    verifiedCount.value = 0
+    errorMessage.value = ''
+    reasonCode.value = null
+    message.value = ''
+    stepText.value = 'Đang khởi tạo tài liệu…'
+    stageDetail.value = 'Đang đọc cấu trúc section, ngôn ngữ và loại hình nghiên cứu.'
+    estimatedRemainingSeconds.value = null
+    etaAnchorSeconds = null
+    etaExpectedTotalSeconds = null
+    plannedSecondsPerBatch = Number.isFinite(secondsPerBatch) && secondsPerBatch > 0
+      ? secondsPerBatch
+      : 12
+    processedLabel.value = ''
+    currentStage.value = 'initializing'
+    totalBatches.value = 0
+    processedBatches.value = 0
+    rawCandidateCount.value = 0
+    verifiedCandidateCount.value = 0
+    timingDeltaSeconds.value = null
+    startClock()
+  }
+
   function startClock(startedAt = Date.now()) {
     if (clockInterval) clearInterval(clockInterval)
     localStartedAt = startedAt
@@ -112,36 +146,7 @@ export const useExtractionStore = defineStore('extraction', () => {
   }
 
   async function runExtraction(id: string, title: string, promotedFromQueue = false, replaceExisting = false, secondsPerBatch = 12) {
-    stopTracking()
-
-    sourceId.value = id
-    sourceTitle.value = title
-    isDialogVisible.value = !promotedFromQueue
-    isPinnedVisible.value = promotedFromQueue
-    progress.value = 0
-    status.value = 'pending'
-    outcome.value = null
-    createdCount.value = 0
-    mergedCount.value = 0
-    rejectedCount.value = 0
-    verifiedCount.value = 0
-    errorMessage.value = ''
-    reasonCode.value = null
-    message.value = ''
-    stepText.value = 'Đang khởi tạo tài liệu…'
-    stageDetail.value = 'Đang đọc cấu trúc section, ngôn ngữ và loại hình nghiên cứu.'
-    estimatedRemainingSeconds.value = null
-    etaAnchorSeconds = null
-    etaExpectedTotalSeconds = null
-    plannedSecondsPerBatch = Number.isFinite(secondsPerBatch) && secondsPerBatch > 0 ? secondsPerBatch : 12
-    processedLabel.value = ''
-    currentStage.value = 'initializing'
-    totalBatches.value = 0
-    processedBatches.value = 0
-    rawCandidateCount.value = 0
-    verifiedCandidateCount.value = 0
-    timingDeltaSeconds.value = null
-    startClock()
+    beginTracking(id, title, !promotedFromQueue, secondsPerBatch)
 
     try {
       const started = await startRuleV3Extraction(id, replaceExisting)
@@ -168,6 +173,90 @@ export const useExtractionStore = defineStore('extraction', () => {
       title,
       kind: 'rules',
       run: ({ promotedFromQueue }) => runExtraction(id, title, promotedFromQueue, replaceExisting, secondsPerBatch),
+    })
+  }
+
+  function trackAutomaticExtraction(
+    id: string,
+    title: string,
+    started: { runId: string; status: 'pending' | 'success' },
+  ) {
+    return useAcademicJobQueueStore().enqueue({
+      sourceId: id,
+      title,
+      kind: 'rules',
+      run: async () => {
+        beginTracking(id, title, false)
+        try {
+          await observeAutomaticRun(id, started)
+        } catch (error: any) {
+          const backendData = error.response?.data
+          handleFailure(
+            backendData?.message || error.message || 'Lỗi khi phân tích Rule V3.',
+            backendData?.errorCode || 'failed_system_error',
+          )
+          throw error
+        }
+      },
+    })
+  }
+
+  async function observeAutomaticRun(
+    id: string,
+    started: { runId: string; status: 'pending' | 'success' },
+  ): Promise<void> {
+    try {
+      await observeStartedRun(started)
+    } catch (error: any) {
+      if (error.response?.status !== 404) throw error
+      const restarted = await startRuleV3Extraction(id, false)
+      await observeStartedRun(restarted.data)
+    }
+  }
+
+  async function observeStartedRun(
+    started: { runId: string; status: 'pending' | 'success' },
+  ): Promise<void> {
+    currentRunId.value = started.runId
+    persistTask()
+    if (started.status === 'success') {
+      const existing = await getRuleV3ExtractionProgress(started.runId)
+      completeFromRun(existing.data, true, false)
+      return
+    }
+    await pollRuleV3Run(started.runId, false)
+  }
+
+  function trackApprovalResult(
+    response: any,
+    fallbackTitle: string,
+  ): boolean {
+    const approvedSource = response?.data?.academicSource
+    const automaticRun = response?.data?.ruleExtraction
+    if (!approvedSource?._id || !automaticRun) return false
+    const title = approvedSource.title || fallbackTitle
+    const task = automaticRun.status === 'failed'
+      ? trackAutomaticFailure(approvedSource._id, title, automaticRun.errorCode)
+      : trackAutomaticExtraction(approvedSource._id, title, automaticRun)
+    void task.catch(() => undefined)
+    return true
+  }
+
+  function trackAutomaticFailure(id: string, title: string, errorCode: string) {
+    return useAcademicJobQueueStore().enqueue({
+      sourceId: id,
+      title,
+      kind: 'rules',
+      run: async () => {
+        beginTracking(id, title, false)
+        handleFailure(
+          errorCode === 'provider_unavailable'
+            ? 'Mô hình trích xuất hiện không khả dụng.'
+            : 'Không thể khởi động phân tích Rule V3.',
+          errorCode || 'automatic_start_failed',
+        )
+        throw new Error(errorCode || 'automatic_start_failed')
+      },
     })
   }
 
@@ -443,6 +532,8 @@ export const useExtractionStore = defineStore('extraction', () => {
     timingDeltaSeconds,
     isCancelling,
     startExtraction,
+    trackAutomaticExtraction,
+    trackApprovalResult,
     stopTracking,
     dismissPinned,
     minimizeDialog,

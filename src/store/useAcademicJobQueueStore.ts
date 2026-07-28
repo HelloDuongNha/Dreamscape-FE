@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 
 export type AcademicJobKind = 'submission' | 'structured' | 'pdf' | 'rules'
 export type AcademicJobState = 'queued' | 'running' | 'completed' | 'failed'
+const TERMINAL_PIN_VISIBLE_MS = 3_250
 
 export interface AcademicJobView {
   id: string
@@ -75,7 +76,7 @@ export const useAcademicJobQueueStore = defineStore('academicJobQueue', () => {
       window.setTimeout(() => {
         jobs.value = jobs.value.filter(job => job.id !== completedId)
       }, 12_000)
-      window.setTimeout(() => void drain(), 500)
+      window.setTimeout(() => void drain(), TERMINAL_PIN_VISIBLE_MS)
     }
   }
 

@@ -31,7 +31,7 @@
         v-if="extractionStore.isPinnedVisible && extractionStore.sourceId"
         key="rule-analysis-run"
         kind="rule-analysis"
-        :title="`Phân tích Rule: ${extractionTitle}`"
+        :title="`${t('rules.extraction.pin.prefix')}: ${extractionTitle}`"
         :message="extractionMessage"
         :progress="extractionStore.status === 'pending' ? extractionStore.progress : 100"
         :terminal="extractionStore.status !== 'pending'"
@@ -54,10 +54,9 @@
         v-for="(job, index) in academicQueue.queuedJobs"
         :key="job.id"
         kind="queue"
-        :title="`Đang chờ #${index + 1}`"
+        :title="t('rules.extraction.pin.waiting', { position: index + 1 })"
         :message="`${queueKindLabel(job.kind)} · ${job.title}`"
-        hint="Sẽ tự chạy khi tác vụ phía trước hoàn tất."
-        @open="openQueuedJob(job)"
+        :hint="t('rules.extraction.pin.waitingHint')"
       />
     </TransitionGroup>
 
@@ -299,18 +298,10 @@ async function openOracleChatRun() {
 }
 
 function queueKindLabel(kind: string) {
-  if (kind === 'pdf') return 'Dựng bản đọc từ PDF'
-  if (kind === 'structured') return 'Nhập lại từ DOI / HTML / XML'
-  if (kind === 'rules') return 'Phân tích luật'
-  return 'Xử lý nguồn'
-}
-
-function openQueuedJob(job: { sourceId: string; kind: string }) {
-  if (job.kind === 'rules') {
-    void router.push({ path: '/moderation/rule-candidates', query: { sourceId: job.sourceId } })
-    return
-  }
-  void router.push(`/library/sources/${job.sourceId}`)
+  if (kind === 'pdf') return t('rules.extraction.pin.queuePdf')
+  if (kind === 'structured') return t('rules.extraction.pin.queueStructured')
+  if (kind === 'rules') return t('rules.extraction.pin.queueRules')
+  return t('rules.extraction.pin.queueSource')
 }
 
 const sourceTitle = computed(() => {
@@ -525,51 +516,39 @@ function handleOraclePinnedClick(task: DreamAnalysisTask) {
 const extractionTitle = computed(() => {
   if (extractionStore.status === 'success') {
     if (extractionStore.outcome === 'success_with_existing_candidates') {
-      return 'Kết quả Rule V3 đã có sẵn'
+      return t('rules.extraction.pin.existing')
     }
-    if (extractionStore.outcome === 'success_no_verified_candidates') return 'Không có candidate đạt kiểm chứng'
-    return 'Phân tích hoàn thành'
+    if (extractionStore.outcome === 'success_no_verified_candidates') return t('rules.extraction.pin.noVerified')
+    return t('rules.extraction.pin.completed')
   }
   if (extractionStore.status === 'stopped') {
-    if (extractionStore.outcome === 'user_cancelled') return 'Đã hủy phân tích'
-    if (extractionStore.outcome === 'stopped_domain_irrelevant') return 'Tài liệu không phù hợp'
-    if (extractionStore.outcome === 'stopped_no_eligible_chunks') return 'Chưa có dữ liệu học thuật hợp lệ'
-    if (extractionStore.outcome === 'stopped_llm_returned_zero') return 'Chưa rút ra được luật rõ ràng'
-    if (extractionStore.outcome === 'stopped_all_weak_evidence') return 'Bằng chứng chưa đủ mạnh'
-    if (extractionStore.outcome === 'stopped_all_duplicate') return 'Không có luật mới'
-    return 'Tài liệu không phù hợp'
+    return t(`rules.extraction.pin.stoppedTitles.${extractionStore.outcome || 'default'}`)
   }
-  if (extractionStore.status === 'failed') return 'Thất bại'
-  return 'Đang chạy'
+  if (extractionStore.status === 'failed') return t('rules.extraction.pin.failed')
+  return t('rules.extraction.pin.running')
 })
 
 const extractionMessage = computed(() => {
   if (extractionStore.status === 'success') {
-    return extractionStore.message || 'Hoàn tất phân tích Rule V3.'
+    return t('rules.extraction.pin.completedMessage', {
+      created: extractionStore.createdCount,
+      merged: extractionStore.mergedCount,
+    })
   }
   if (extractionStore.status === 'stopped') {
-    if (extractionStore.outcome === 'user_cancelled') return 'Phần lập luận chưa hoàn tất không được lưu.'
-    if (extractionStore.outcome === 'stopped_domain_irrelevant') {
-      return 'Tài liệu này không thuộc phạm vi giấc mơ, giấc ngủ hoặc tâm lý học nên hệ thống không tạo luật từ tài liệu này.'
-    }
-    if (extractionStore.outcome === 'stopped_no_eligible_chunks') {
-      return 'Không tạo được luật vì chưa có chunk học thuật hợp lệ.'
-    }
-    if (extractionStore.outcome === 'stopped_llm_returned_zero') {
-      return 'LLM không rút ra được kết luận đủ rõ từ tài liệu này.'
-    }
-    if (extractionStore.outcome === 'stopped_all_weak_evidence') {
-      return 'Các kết luận bị loại vì không có đoạn bằng chứng đủ rõ.'
-    }
-    if (extractionStore.outcome === 'stopped_all_duplicate') {
-      return 'Các luật tương tự đã tồn tại, không tạo bản trùng.'
-    }
-    return extractionStore.message || 'Phân tích dừng lại.'
+    return t(`rules.extraction.pin.stoppedMessages.${extractionStore.outcome || 'default'}`)
   }
   if (extractionStore.status === 'failed') {
-    return extractionStore.errorMessage || 'Phân tích tài liệu thất bại.'
+    return extractionStore.errorMessage || t('rules.extraction.pin.failedMessage')
   }
-  return `${extractionStore.stepText} (${extractionStore.progress}%)`
+  const stageKey = extractionStore.currentStage === 'extracting_candidates'
+    ? 'extracting'
+    : extractionStore.currentStage === 'saving_candidates'
+      ? 'saving'
+      : extractionStore.currentStage === 'merging_candidates'
+        ? 'merging'
+        : 'preparing'
+  return `${t(`rules.extraction.pin.${stageKey}`)} (${extractionStore.progress}%)`
 })
 
 function handleExtractionPinnedClick() {

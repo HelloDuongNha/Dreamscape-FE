@@ -66,6 +66,9 @@ export interface OracleCitationRuleLinkDto {
   localizedStatement?: { vi: string; en: string }
   quote: string
   evidenceScore: number
+  sourceEvidenceScore?: number
+  userValidationAdjustment?: number
+  usageExcerpt?: string
   supportingSourceCount: number
   verificationKey?: string
   verificationQuestion?: string

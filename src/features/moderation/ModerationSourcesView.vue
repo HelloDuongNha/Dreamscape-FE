@@ -456,7 +456,11 @@
             </div>
 
             <div class="modal-body">
-              <p class="modal-confirm-text" v-html="reviewAction === 'approved' ? t('library.moderation.review.confirmApprove') : t('library.moderation.review.confirmReject')"></p>
+              <p class="modal-confirm-text">
+                {{ reviewAction === 'approved'
+                  ? t('library.moderation.review.confirmApprove')
+                  : t('library.moderation.review.confirmReject') }}
+              </p>
               <div class="selected-source-preview">
                 <strong>{{ selectedSource?.title || selectedSource?.metadata?.title || t('library.moderation.untitled') }}</strong>
                 <div v-if="selectedSource?.doi" class="mono text-xs">{{ selectedSource.doi }}</div>
@@ -536,6 +540,7 @@ import {
   type SourceContribution,
 } from '@/api/moderationApi'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
+import { useExtractionStore } from '@/store/useExtractionStore'
 import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
 import AppStatusBadge from '@/components/common/AppStatusBadge.vue'
@@ -549,6 +554,7 @@ import {
 
 const settingsStore = useSettingsStore()
 const sourceProgressStore = useSourceProgressStore()
+const extractionStore = useExtractionStore()
 const { t, locale } = useI18n()
 const router = useRouter()
 const route = useRoute()
@@ -785,6 +791,12 @@ async function submitReview() {
   try {
     const res = await reviewSource(id, payload)
     if (res.success) {
+      if (reviewAction.value === 'approved') {
+        extractionStore.trackApprovalResult(
+          res,
+          selectedSource.value.title || t('library.local.academicDocument'),
+        )
+      }
       let msg = res.message
       let toastType: 'success' | 'error' = 'success'
       
