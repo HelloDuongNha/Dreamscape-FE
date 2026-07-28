@@ -26,7 +26,7 @@ export const useExtractionStore = defineStore('extraction', () => {
   const elapsedSeconds = ref(0)
   const estimatedRemainingSeconds = ref<number | null>(null)
   const processedLabel = ref('')
-  const currentStage = ref<'initializing' | 'extracting_candidates' | 'saving_candidates' | 'completed'>('initializing')
+  const currentStage = ref<'initializing' | 'extracting_candidates' | 'saving_candidates' | 'merging_candidates' | 'completed'>('initializing')
   const totalBatches = ref(0)
   const processedBatches = ref(0)
   const rawCandidateCount = ref(0)
@@ -179,7 +179,8 @@ export const useExtractionStore = defineStore('extraction', () => {
       const run = response.data
       const total = Math.max(0, run.totalBatches || 0)
       const processed = Math.max(0, run.processedBatches || 0)
-      currentStage.value = run.currentStage === 'saving_candidates' ? 'saving_candidates'
+      currentStage.value = run.currentStage === 'merging_candidates' ? 'merging_candidates'
+        : run.currentStage === 'saving_candidates' ? 'saving_candidates'
         : run.currentStage === 'extracting_candidates' ? 'extracting_candidates' : 'initializing'
       totalBatches.value = total
       processedBatches.value = processed
@@ -208,14 +209,18 @@ export const useExtractionStore = defineStore('extraction', () => {
           ))
         }
       } else if (run.currentStage === 'saving_candidates') {
-        progress.value = 95
-        stepText.value = 'Đang gộp lập luận và lưu bằng chứng…'
+        progress.value = 94
+        stepText.value = 'Đang lưu lập luận và bằng chứng…'
         stageDetail.value = replaceExisting
           ? 'Bộ kết quả cũ chỉ được thay khi toàn bộ lập luận đã kiểm chứng lưu thành công.'
           : 'Lập luận không đáp ứng hợp đồng lưu trữ sẽ bị loại và ghi rõ lý do.'
         if (etaAnchorSeconds === null) {
           setEtaAnchor(Math.max(1, 8 - elapsedSeconds.value))
         }
+      } else if (run.currentStage === 'merging_candidates') {
+        progress.value = 98
+        stepText.value = 'Đang tự động gộp các lập luận tương thích…'
+        stageDetail.value = 'Mỗi mệnh đề và liên kết dẫn chứng được giữ nguyên trong lập luận tổng hợp.'
       }
 
       if (run.status === 'success') {

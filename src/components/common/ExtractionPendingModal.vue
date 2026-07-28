@@ -42,8 +42,9 @@ const stages = computed(() => [
   { key: 'initializing', label: t('rules.extraction.steps.prepare'), detail: t('rules.extraction.stepDetails.prepare') },
   { key: 'extracting_candidates', label: t('rules.extraction.steps.extract'), detail: t('rules.extraction.stepDetails.extract') },
   { key: 'saving_candidates', label: t('rules.extraction.steps.save'), detail: t('rules.extraction.stepDetails.save') },
+  { key: 'merging_candidates', label: t('rules.extraction.steps.merge'), detail: t('rules.extraction.stepDetails.merge') },
 ])
-const stageOrder = ['initializing', 'extracting_candidates', 'saving_candidates', 'completed'] as const
+const stageOrder = ['initializing', 'extracting_candidates', 'saving_candidates', 'merging_candidates', 'completed'] as const
 const currentStageIndex = computed(() => extractionStore.currentStage === 'completed'
   ? stages.value.length
   : Math.max(0, stageOrder.indexOf(extractionStore.currentStage)))
@@ -64,6 +65,7 @@ const localizedStepText = computed(() => {
     })
   }
   if (extractionStore.currentStage === 'saving_candidates') return t('rules.extraction.saving')
+  if (extractionStore.currentStage === 'merging_candidates') return t('rules.extraction.merging')
   if (extractionStore.currentStage === 'completed') return t('rules.extraction.completed')
   return t('rules.extraction.preparing')
 })
@@ -75,6 +77,7 @@ const localizedStageDetail = computed(() => {
     })
   }
   if (extractionStore.currentStage === 'saving_candidates') return t('rules.extraction.stepDetails.save')
+  if (extractionStore.currentStage === 'merging_candidates') return t('rules.extraction.stepDetails.merge')
   if (extractionStore.currentStage === 'completed') return t('rules.extraction.stepDetails.completed')
   return t('rules.extraction.stepDetails.prepare')
 })

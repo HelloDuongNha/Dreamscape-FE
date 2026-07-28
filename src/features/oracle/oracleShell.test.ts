@@ -180,7 +180,7 @@ test('14. Long-running task pins share one collapsible component', () => {
   }
 });
 
-test('15. Unsupported Oracle claims have a moderator research workflow', () => {
+test('15. Evidence gaps expose prompts only while unresolved', () => {
   const viewContent = fs.readFileSync(
     path.resolve(feRoot, 'src/features/moderation/ModerationSourcesView.vue'),
     'utf8',
@@ -191,8 +191,9 @@ test('15. Unsupported Oracle claims have a moderator research workflow', () => {
   );
 
   assert.ok(viewContent.includes("'evidence_gaps'"), 'source moderation must expose an evidence-gap tab');
-  assert.ok(viewContent.includes("t('oracle.evidenceCopyAll')"), 'moderators need a compact one-click research export');
-  assert.ok(!viewContent.includes('Cần tìm loại bằng chứng nào?'), 'repeated research criteria must stay inside the copied prompt');
+  assert.ok(viewContent.includes('evidenceResearchPrompt'), 'unresolved gaps must provide a generated source-search prompt');
+  assert.ok(!viewContent.includes('occurrence.surfaceType'), 'evidence-gap UI must not expose links to user chats or posts');
+  assert.ok(!viewContent.includes('deepResearchPrompt'), 'research prompts must not remain in the evidence-gap UI');
   assert.ok(!viewContent.includes("'candidate_found', label"), 'candidate matching must not create a third user-facing status');
   assert.ok(apiContent.includes("'/moderation/oracle-evidence-gaps'"), 'evidence gaps must load from the protected moderation API');
 });

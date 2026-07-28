@@ -138,19 +138,6 @@ export interface OracleEvidenceGapItem {
     vi: string
     en: string
   }
-  meaning: string
-  evidenceNeeded: string[]
-  expectedRule: {
-    subject: string
-    outcome: string
-    requiredFields: string[]
-  }
-  searchTerms: string[]
-  deepResearchPrompt: string
-  deepResearchPrompts: {
-    vi: string
-    en: string
-  }
   candidateRules: Array<{
     _id: string
     ruleCode: string
@@ -162,6 +149,18 @@ export interface OracleEvidenceGapItem {
     status: string
   }>
   resolvedRules: OracleEvidenceGapItem['candidateRules']
+  resolvedSources: Array<{
+    sourceId: string
+    title: string
+    year?: number | null
+    excerpt: string
+    ruleId: string
+  }>
+  usageExcerpts: Array<{
+    surfaceType: 'oracle' | 'dream_analysis'
+    citationIndex: number
+    excerpt: string
+  }>
   resolutionCitationIndex?: number | null
   occurrenceCount: number
   relatedClaims: string[]

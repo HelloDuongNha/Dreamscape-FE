@@ -656,12 +656,11 @@ async function handleOpenCitation(message: OracleShellMessage, index: number) {
   const citation = message.citations?.find((item) => item.index === index)
   if (!citation) return
   if (citation.sourceType === 'academic_source') {
-    selectedCitationMessageId.value = message.id
-    selectedCitation.value = citation
-    showCitationModal.value = true
     try {
-      const details = await getOracleCitationDetails(message.id, index)
+      const details = await getOracleCitationDetails(message.id, index, citation.sourceId)
+      selectedCitationMessageId.value = message.id
       selectedCitation.value = details
+      showCitationModal.value = true
       const stored = message.citations?.findIndex((item) => item.index === index) ?? -1
       if (stored >= 0 && message.citations) message.citations[stored] = details
     } catch {

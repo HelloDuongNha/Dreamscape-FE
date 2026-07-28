@@ -7,7 +7,7 @@
         role="dialog"
         aria-modal="true"
         :aria-label="t('library.wizard.aria')"
-        @click.self="close"
+        @click.self.prevent
       >
         <div class="academic-contribution-modal" tabindex="-1">
           <header class="academic-contribution-modal__header">

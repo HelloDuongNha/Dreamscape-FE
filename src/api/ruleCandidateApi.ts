@@ -55,12 +55,6 @@ export interface RuleCandidate {
   sourceYear?: number
   sourceTitle?: string
   sourceDoi?: string
-  mergeCluster?: {
-    clusterId: string
-    memberIds: string[]
-    memberCount: number
-    reasons: Array<'same_canonical_paragraph' | 'equivalent_subject_and_outcome' | 'same_meaningful_subject' | 'same_meaningful_outcome' | 'same_question_and_semantics'>
-  }
   isComposite?: boolean
   compositeComponents?: Array<{
     sourceRuleId: string
@@ -185,7 +179,7 @@ export interface CandidateDetailResponse {
     linkedAsCandidate: boolean
     resolvedByRule: boolean
     resolutionReady: boolean
-    blockers: Array<'approval' | 'score' | 'independent_sources' | 'similarity'>
+    blockers: Array<'similarity'>
   }>
   ruleRelationships?: Array<{
     ruleId: string
@@ -282,16 +276,6 @@ export const rejectRuleCandidate = async (
   return data
 }
 
-export const mergeRuleCandidateGroup = async (id: string): Promise<{
-  success: true
-  data: { primaryRuleId: string; retiredRuleIds: string[]; componentCount: number; requiresReview: boolean }
-}> => {
-  const { data } = await apiClient.post(`/moderation/rules-v3/candidates/${id}/merge`, {
-    confirmation: 'MERGE_COMPATIBLE_RULES',
-  })
-  return data
-}
-
 export type RuleV3BulkAction = 'approve_pending' | 'reject_pending' | 'restore_rejected' | 'delete_rejected'
 
 export const runRuleV3BulkAction = async (
@@ -306,7 +290,7 @@ export const runRuleV3BulkAction = async (
 export interface RuleV3ExtractionRun {
   _id: string
   status: 'pending' | 'success' | 'failed' | 'cancelled'
-  currentStage: 'initializing' | 'extracting_candidates' | 'saving_candidates' | 'completed' | 'failed' | 'cancelled'
+  currentStage: 'initializing' | 'extracting_candidates' | 'saving_candidates' | 'merging_candidates' | 'completed' | 'failed' | 'cancelled'
   totalBatches: number
   processedBatches: number
   rawCandidateCount: number

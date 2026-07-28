@@ -92,7 +92,7 @@
             <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
           </template>
           <button
-            v-for="source in answeredCitationSources"
+            v-for="source in coreCitationSources"
             :key="source.sourceId"
             type="button"
             class="source-citation-link oracle-inline-marker"
@@ -177,13 +177,13 @@
         <h3 class="oracle-section__title">Nguồn tham khảo</h3>
         <div class="oracle-sources__list">
           <button
-            v-for="(source, index) in referenceSources"
+            v-for="source in referenceSources"
             :key="source.key"
             type="button"
             class="oracle-source-card"
             @click="openCitation(source)"
           >
-            <span class="oracle-source-card__index">[{{ index + 1 }}]</span>
+            <span class="oracle-source-card__index">[{{ source.index }}]</span>
             <span class="oracle-source-card__content">
               <strong>{{ source.title || 'Tài liệu học thuật' }}</strong>
               <small>{{ source.year || '' }}<template v-if="source.doi"> · {{ source.doi }}</template></small>
@@ -529,9 +529,20 @@ function feedbackSegments(value: unknown, path: string): Array<{ text: string; c
 
 const referenceSources = computed(() => {
   const sources = new Map<string, any>()
+  const citationIndexes = new Map(
+    ((props.analysis as any)?.citations || []).map((citation: any) => [
+      String(citation.sourceId || '').trim(),
+      Number(citation.index) || 0,
+    ]),
+  )
+  const isAcademicSource = (source: any): boolean => (
+    source?.sourceType === 'academic_source'
+    || Boolean(source?.chunkIds?.length || source?.doi || source?.journal || source?.publisher)
+  )
   const hypotheses = props.analysis?.real_life_hypotheses || []
   for (const note of props.analysis?.scientific_context_notes || []) {
     for (const source of note.sources || []) {
+      if (!isAcademicSource(source)) continue
       const key = String(source.sourceId || source.doi || source.title || '').trim()
       if (!key) continue
       const quote = note.evidenceQuotes?.find((item: any) => item.sourceId === source.sourceId)?.quote || ''
@@ -562,6 +573,7 @@ const referenceSources = computed(() => {
   }
   for (const [hypothesisIndex, hypothesis] of hypotheses.entries()) {
     for (const source of hypothesis.sources || []) {
+      if (!isAcademicSource(source)) continue
       const key = String(source.sourceId || source.doi || source.title || '').trim()
       if (!key) continue
       const linkedRuleIds = [...new Set([
@@ -592,26 +604,22 @@ const referenceSources = computed(() => {
   }
   return [...sources.values()].map((source, index) => ({
     ...source,
-    index: index + 1,
+    index: citationIndexes.get(String(source.sourceId || '').trim()) || index + 1,
     key: String(source.sourceId || source.doi || source.title),
   }))
 })
 
-const answeredCitationSources = computed(() => {
-  const ids = new Set((props.analysis?.real_life_hypotheses || [])
-    .filter(item => ['yes', 'no'].includes(String(item.userFeedback || '')))
-    .flatMap(item => item.sources || [])
-    .map(source => String(source.sourceId || ''))
-    .filter(Boolean))
-  return referenceSources.value.filter(source => ids.has(String(source.sourceId || '')))
+const coreCitationSources = computed(() => {
+  const analysisText = String(props.analysis?.core_analysis || '')
+  return referenceSources.value.filter(source => !analysisText.includes(sourceMarker(source.sourceId)))
 })
 
 const selectedCitation = ref<OracleCitationDto | null>(null)
 const citationModalOpen = ref(false)
 
 function sourceMarker(sourceId: string): string {
-  const index = referenceSources.value.findIndex(source => source.sourceId === sourceId)
-  return index >= 0 ? `[${index + 1}]` : ''
+  const source = referenceSources.value.find(item => item.sourceId === sourceId)
+  return source ? `[${source.index}]` : ''
 }
 
 function scoreDelta(item: any): number {
@@ -621,7 +629,7 @@ function scoreDelta(item: any): number {
 function openCitation(source: any) {
   selectedCitation.value = {
     index: Number(source.index) || 1,
-    sourceType: 'academic_source',
+    sourceType: source.sourceType || 'academic_source',
     sourceId: String(source.sourceId || ''),
     title: String(source.title || 'Tài liệu học thuật'),
     year: source.year,

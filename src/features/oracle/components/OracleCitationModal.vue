@@ -102,6 +102,11 @@ import {
 } from '@/api/oracleApi'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import apiClient from '@/api/client'
+import {
+  inferOracleTextLanguage,
+  localizeOracleCitationStatement,
+  type OracleDisplayLanguage,
+} from '../services/oracleCitationLocalization.service'
 
 const props = defineProps<{
   modelValue: boolean
@@ -120,16 +125,25 @@ const settingsStore = useSettingsStore()
 const savingRuleId = ref('')
 const modalRef = ref<HTMLElement | null>(null)
 const scoreDeltas = ref<Record<string, number>>({})
+const translatedStatements = ref<Record<string, string>>({})
 const deltaTimers = new Map<string, ReturnType<typeof setTimeout>>()
+let translationRun = 0
 const interactiveRules = computed(() =>
   (props.citation?.ruleLinks || []).filter((rule) => Boolean(rule.verificationQuestion)),
 )
 
-watch(() => props.modelValue, async (open) => {
+watch([
+  () => props.modelValue,
+  () => locale.value,
+  () => (props.citation?.ruleLinks || [])
+    .map((rule) => `${rule.ruleId}:${rule.statement}`)
+    .join('|'),
+], async ([open]) => {
   if (!open) return
   await nextTick()
   modalRef.value?.focus()
-})
+  void refreshStatementTranslations()
+}, { immediate: true })
 
 onBeforeUnmount(() => {
   for (const timer of deltaTimers.values()) clearTimeout(timer)
@@ -141,13 +155,33 @@ function close() {
 }
 
 function localizedStatement(rule: OracleCitationRuleLinkDto): string {
-  const language = String(locale.value).startsWith('en') ? 'en' : 'vi'
-  return rule.localizedStatement?.[language] || rule.statement
+  const language = displayLanguage()
+  const translated = translatedStatements.value[rule.ruleId]
+  if (translated) return translated
+  const prepared = rule.localizedStatement?.[language]
+  return prepared && inferOracleTextLanguage(prepared) === language
+    ? prepared
+    : rule.statement
 }
 
 function localizedQuestion(rule: OracleCitationRuleLinkDto): string {
-  const language = String(locale.value).startsWith('en') ? 'en' : 'vi'
+  const language = displayLanguage()
   return rule.localizedVerificationQuestion?.[language] || rule.verificationQuestion || ''
+}
+
+function displayLanguage(): OracleDisplayLanguage {
+  return String(locale.value).startsWith('en') ? 'en' : 'vi'
+}
+
+async function refreshStatementTranslations(): Promise<void> {
+  const run = ++translationRun
+  const language = displayLanguage()
+  const entries = await Promise.all(interactiveRules.value.map(async (rule) => [
+    rule.ruleId,
+    await localizeOracleCitationStatement(rule.statement, rule.localizedStatement, language),
+  ] as const))
+  if (run !== translationRun) return
+  translatedStatements.value = Object.fromEntries(entries)
 }
 
 async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | null) {
@@ -163,14 +197,19 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
       : await submitOracleCitationFeedback({
         turnId: props.messageId,
         citationIndex: props.citation.index,
+        sourceId: props.citation.sourceId,
         ruleId: rule.ruleId,
         answer,
       })
     rule.currentUserAnswer = answer
+    if (Number.isFinite(Number(result.score))) {
+      rule.evidenceScore = Number(result.score)
+    }
     emit('feedback-updated', result)
     const scoreUpdates = result.scoreUpdates || result.ruleScoreUpdates || []
     for (const update of scoreUpdates) {
-      const visibleRule = props.citation.ruleLinks?.find((item) => item.ruleId === update.ruleId)
+      const visibleRule = props.citation.ruleLinks?.find((item) =>
+        item.ruleId === update.ruleId || item.ruleCode === update.ruleId)
       if (!visibleRule) continue
       visibleRule.evidenceScore = update.score
       const displayedDelta = update.voteDelta || update.scoreDelta
@@ -197,7 +236,10 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
           : t('oracle.sourceScoreUnchanged')
     settingsStore.showToast(message, 'success')
   } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || t('oracle.sourceVoteFailed'), 'error')
+    settingsStore.showToast(
+      error.response?.data?.reason || error.response?.data?.message || t('oracle.sourceVoteFailed'),
+      'error',
+    )
   } finally {
     savingRuleId.value = ''
   }

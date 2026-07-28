@@ -23,7 +23,7 @@ export function parseAcademicLookupInput(value: string): AcademicLookupResult {
     return { payload: { doi: input } }
   }
 
-  const url = parseHttpUrl(input)
+  const url = parseHttpUrl(input) || parseHttpUrl(`https://${input}`)
   if (!url) return { error: 'invalid' }
 
   if (/^(?:dx\.)?doi\.org$/i.test(url.hostname)) {
@@ -37,7 +37,7 @@ export function parseAcademicLookupInput(value: string): AcademicLookupResult {
 }
 
 function isDoi(value: string): boolean {
-  return /^10\.\d{4,9}\/\S+$/i.test(value)
+  return /^10\.\d{4,9}\/[A-Za-z0-9.\-_()/:;]+[A-Za-z0-9)]$/i.test(value)
 }
 
 function parseHttpUrl(value: string): URL | null {

@@ -60,27 +60,21 @@
             <section v-for="(items, sourceTitle) in groupedCandidates" :key="sourceTitle" class="source-group" :style="sourceGroupStyle(String(sourceTitle))">
               <h2><span translate="no">{{ sourceTitle }}</span><small>{{ t('rules.ruleCount', { count: items.length }) }}</small></h2>
               <div class="source-rule-list">
-                <div v-for="cluster in candidateSections(items)" :key="cluster.key" class="concept-cluster">
-                  <div v-if="cluster.mergeable" class="concept-cluster__heading">
-                    <span>{{ t('rules.mergeableCluster') }}</span>
-                    <small>{{ t('rules.claimCount', { count: cluster.items.length }) }} · {{ mergeReasonList(cluster.reasons) }}</small>
-                  </div>
-                  <button
-                    v-for="candidate in cluster.items"
-                    :key="candidate._id"
-                    type="button"
-                    :class="['candidate-card', { selected: selectedId === candidate._id }]"
-                    @click="selectCandidate(candidate._id)"
-                  >
-                    <span class="candidate-title">{{ ruleText(candidate, 'label', candidate.label) }}</span>
-                    <span class="candidate-card-meta">
-                      <span v-if="candidate.isComposite" class="composite-list-chip">{{ t('rules.compositeRule', { count: candidate.compositeComponents?.length || 0 }) }}</span>
-                      <span :class="['status-chip', `status-${candidate.status}`]">{{ statusLabel(candidate.status) }}</span>
-                      <span class="score-chip" :style="{ color: scoreColor(candidate.evidenceCredibilityScore) }">{{ candidate.evidenceCredibilityScore ?? 0 }}/100</span>
-                      <span>{{ t('rules.evidenceGroupCount', { count: candidate.exactCitationCount ?? 0 }) }}</span>
-                    </span>
-                  </button>
-                </div>
+                <button
+                  v-for="candidate in items"
+                  :key="candidate._id"
+                  type="button"
+                  :class="['candidate-card', { selected: selectedId === candidate._id }]"
+                  @click="selectCandidate(candidate._id)"
+                >
+                  <span class="candidate-title">{{ ruleText(candidate, 'label', candidate.label) }}</span>
+                  <span class="candidate-card-meta">
+                    <span v-if="candidate.isComposite" class="composite-list-chip">{{ t('rules.compositeRule', { count: candidate.compositeComponents?.length || 0 }) }}</span>
+                    <span :class="['status-chip', `status-${candidate.status}`]">{{ statusLabel(candidate.status) }}</span>
+                    <span class="score-chip" :style="{ color: scoreColor(candidate.evidenceCredibilityScore) }">{{ candidate.evidenceCredibilityScore ?? 0 }}/100</span>
+                    <span>{{ t('rules.evidenceGroupCount', { count: candidate.exactCitationCount ?? 0 }) }}</span>
+                  </span>
+                </button>
               </div>
             </section>
           </div>
@@ -178,11 +172,11 @@
                 <p class="score-conclusion">{{ evidenceScoreConclusion }}</p>
                 <p class="score-note">{{ t('rules.scoreNote') }}</p>
                 <dl v-if="selectedCandidate.validationStats" class="validation-stats">
-                  <div><dt>Đồng ý</dt><dd>{{ selectedCandidate.validationStats.supports }}</dd></div>
-                  <div><dt>Không đồng ý</dt><dd>{{ selectedCandidate.validationStats.weakens }}</dd></div>
-                  <div><dt>Chưa chắc</dt><dd>{{ selectedCandidate.validationStats.unsure }}</dd></div>
+                  <div><dt>{{ t('rules.validationSupports') }}</dt><dd>{{ selectedCandidate.validationStats.supports }}</dd></div>
+                  <div><dt>{{ t('rules.validationWeakens') }}</dt><dd>{{ selectedCandidate.validationStats.weakens }}</dd></div>
+                  <div><dt>{{ t('rules.validationUnsure') }}</dt><dd>{{ selectedCandidate.validationStats.unsure }}</dd></div>
                   <div>
-                    <dt>Điều chỉnh từ phản hồi</dt>
+                    <dt>{{ t('rules.validationAdjustment') }}</dt>
                     <dd :class="selectedCandidate.validationStats.netAdjustment >= 0 ? 'is-positive' : 'is-negative'">
                       {{ selectedCandidate.validationStats.netAdjustment > 0 ? '+' : '' }}{{ selectedCandidate.validationStats.netAdjustment }}
                     </dd>
@@ -213,20 +207,20 @@
 
             </section>
 
-            <section v-if="evidenceGapMatches.length" class="content-card evidence-gap-card">
+            <section v-if="resolvedEvidenceGapMatches.length" class="content-card evidence-gap-card">
               <div class="section-heading">
                 <div>
                   <h3>{{ t('rules.evidenceGapMatches') }}</h3>
                   <p class="section-description">{{ t('rules.evidenceGapMatchesDescription') }}</p>
                 </div>
-                <span class="evidence-gap-count">{{ evidenceGapMatches.length }}</span>
+                <span class="evidence-gap-count">{{ resolvedEvidenceGapMatches.length }}</span>
               </div>
               <div class="evidence-gap-list">
-                <article v-for="match in evidenceGapMatches" :key="match.gapId" class="evidence-gap-item">
+                <article v-for="match in resolvedEvidenceGapMatches" :key="match.gapId" class="evidence-gap-item">
                   <div class="evidence-gap-item__heading">
                     <span :class="['evidence-gap-state', {
                       'evidence-gap-state--resolved': match.resolvedByRule,
-                      'evidence-gap-state--ready': !match.resolvedByRule && match.blockers.length === 1 && match.blockers[0] === 'approval',
+                      'evidence-gap-state--ready': !match.resolvedByRule && match.blockers.length === 0,
                     }]">
                       {{ evidenceGapStateLabel(match) }}
                     </span>
@@ -244,34 +238,17 @@
               </div>
             </section>
 
-            <section v-if="ruleRelationships.length" class="content-card relationship-card">
+            <section v-if="visibleRelationships.length" class="content-card relationship-card">
               <div class="section-heading">
                 <div>
                   <h3>{{ t('rules.relationships') }}</h3>
                   <p class="section-description">{{ t('rules.relationshipsDescription') }}</p>
                 </div>
-                <AppButton
-                  v-if="canMergeSelectedRule"
-                  variant="secondary"
-                  :loading="isMerging"
-                  @click="showMergeModal = true"
-                >
-                  {{ t('rules.mergeCompatible') }}
-                </AppButton>
               </div>
-              <div v-if="mergeableRelationships.length" class="relationship-group relationship-group--mergeable">
-                <strong class="relationship-group__title">{{ t('rules.canMergeSection') }}</strong>
-                <p>{{ t('rules.canMergeSectionDescription') }}</p>
-                <button v-for="item in mergeableRelationships" :key="item.ruleId" type="button" class="related-rule" @click="selectCandidate(item.ruleId)">
-                  <span class="relation-kind relation-kind--equivalent">{{ relationshipBadge(item) }}</span>
-                  <span class="related-rule__content"><strong>{{ relatedRuleText(item) }}</strong><small>{{ relationshipWhyShown(item) }}</small><small>{{ ruleText(selectedCandidate, `related:${item.ruleId}:flow`, `${item.subject} → ${item.outcome}`) }}</small></span>
-                  <small>{{ item.evidenceScore }}/100</small>
-                </button>
-              </div>
-              <div v-if="nonMergeableRelationships.length" class="relationship-group">
+              <div class="relationship-group">
                 <strong class="relationship-group__title">{{ t('rules.keepSeparateSection') }}</strong>
                 <p>{{ t('rules.keepSeparateSectionDescription') }}</p>
-                <button v-for="item in nonMergeableRelationships" :key="item.ruleId" type="button" class="related-rule" @click="selectCandidate(item.ruleId)">
+                <button v-for="item in visibleRelationships" :key="item.ruleId" type="button" class="related-rule" @click="selectCandidate(item.ruleId)">
                   <span :class="['relation-kind', `relation-kind--${item.relationship}`]">{{ relationshipBadge(item) }}</span>
                   <span class="related-rule__content"><strong>{{ relatedRuleText(item) }}</strong><small>{{ relationshipWhyShown(item) }}</small><small>{{ ruleText(selectedCandidate, `related:${item.ruleId}:flow`, `${item.subject} → ${item.outcome}`) }}</small></span>
                   <small>{{ item.evidenceScore }}/100</small>
@@ -377,29 +354,6 @@
 
     <Teleport to="body">
       <Transition name="modal-fade">
-        <div v-if="showMergeModal" class="modal-overlay" role="dialog" aria-modal="true" @click.self="showMergeModal = false">
-          <div class="modal-container">
-            <div class="modal-header"><h3>{{ t('rules.mergeModalTitle') }}</h3><button @click="showMergeModal = false">×</button></div>
-            <div class="modal-body">
-              <p>{{ t('rules.mergeModalMessage', { count: mergeableRelationships.length + 1 }) }}</p>
-              <ul class="merge-preview-list">
-                <li v-if="selectedCandidate">{{ ruleText(selectedCandidate, 'label', selectedCandidate.label) }}</li>
-                <li v-for="item in mergeableRelationships" :key="item.ruleId">{{ relatedRuleText(item) }}</li>
-              </ul>
-              <p>{{ t('rules.mergeAuditNote') }}</p>
-              <p v-if="selectedCandidate?.status === 'approved'" class="merge-review-warning">{{ t('rules.approvedMergeReviewWarning') }}</p>
-            </div>
-            <div class="modal-footer">
-              <AppButton variant="secondary" :disabled="isMerging" @click="showMergeModal = false">{{ t('rules.cancel') }}</AppButton>
-              <AppButton variant="smart" :loading="isMerging" @click="confirmMerge">{{ t('rules.mergeCompatible') }}</AppButton>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
-    <Teleport to="body">
-      <Transition name="modal-fade">
         <div v-if="bulkAction" class="modal-overlay" role="dialog" aria-modal="true" @click.self="bulkAction = null">
           <div class="modal-container">
             <div class="modal-header"><h3>{{ bulkActionCopy.title }}</h3><button @click="bulkAction = null">×</button></div>
@@ -446,7 +400,6 @@ import {
   approveRuleCandidate,
   getRuleCandidateDetail,
   getRuleCandidates,
-  mergeRuleCandidateGroup,
   rejectRuleCandidate,
   runRuleV3BulkAction,
   type RuleV3BulkAction,
@@ -483,28 +436,22 @@ type RuleRelationshipRow = NonNullable<CandidateDetailResponse['ruleRelationship
 type EvidenceGapMatchRow = NonNullable<CandidateDetailResponse['evidenceGapMatches']>[number]
 const ruleRelationships = ref<RuleRelationshipRow[]>([])
 const evidenceGapMatches = ref<EvidenceGapMatchRow[]>([])
+const resolvedEvidenceGapMatches = computed(() =>
+  evidenceGapMatches.value.filter((match) => match.resolvedByRule),
+)
 const visibleContexts = ref<Record<string, boolean>>({})
 const isLoadingList = ref(false)
 const isLoadingDetail = ref(false)
 const isApproving = ref(false)
 const isRejecting = ref(false)
-const isMerging = ref(false)
 const showApproveModal = ref(false)
 const showRejectModal = ref(false)
-const showMergeModal = ref(false)
 const openCriterionKey = ref<string | null>(null)
 const bulkAction = ref<RuleV3BulkAction | null>(null)
 const isBulkRunning = ref(false)
 
 const activeTabLabel = computed(() => statusTabs.value.find(tab => tab.value === activeStatus.value)?.label || '')
-const mergeableRelationships = computed(() => ruleRelationships.value.filter(item => item.mergeEligibility?.canMerge))
-const nonMergeableRelationships = computed(() => ruleRelationships.value.filter(item => !item.mergeEligibility?.canMerge))
-const canMergeSelectedRule = computed(() => Boolean(
-  selectedCandidate.value
-  && !selectedCandidate.value.isComposite
-  && ['pending', 'approved'].includes(selectedCandidate.value.status)
-  && mergeableRelationships.value.length > 0,
-))
+const visibleRelationships = computed(() => ruleRelationships.value.filter(item => !item.mergeEligibility?.canMerge))
 const bulkActionCopy = computed(() => ({
   approve_pending: { title: t('rules.bulk.approveTitle'), message: t('rules.bulk.approveMessage'), confirm: t('rules.approveAll'), danger: false },
   reject_pending: { title: t('rules.bulk.rejectTitle'), message: t('rules.bulk.rejectMessage'), confirm: t('rules.rejectAll'), danger: true },
@@ -520,34 +467,6 @@ const groupedCandidates = computed(() => {
   }
   return groups
 })
-
-function candidateSections(items: RuleCandidate[]) {
-  const groups = new Map<string, RuleCandidate[]>()
-  for (const candidate of items) {
-    const key = candidate.mergeCluster?.clusterId || `single:${candidate._id}`
-    const members = groups.get(key) || []
-    members.push(candidate)
-    groups.set(key, members)
-  }
-  return [...groups.entries()].map(([key, clusterItems]) => ({
-    key,
-    items: clusterItems,
-    mergeable: Boolean(clusterItems[0]?.mergeCluster && clusterItems.length > 1),
-    reasons: clusterItems[0]?.mergeCluster?.reasons || [],
-  })).sort((left, right) => Number(left.mergeable) - Number(right.mergeable)
-    || left.items[0].label.localeCompare(right.items[0].label))
-}
-
-function mergeReasonList(reasons: string[] = []) {
-  const labels: Record<string, string> = {
-    same_canonical_paragraph: t('rules.mergeReasons.same_canonical_paragraph'),
-    equivalent_subject_and_outcome: t('rules.mergeReasons.equivalent_subject_and_outcome'),
-    same_meaningful_subject: t('rules.mergeReasons.same_meaningful_subject'),
-    same_meaningful_outcome: t('rules.mergeReasons.same_meaningful_outcome'),
-    same_question_and_semantics: t('rules.mergeReasons.same_question_and_semantics'),
-  }
-  return reasons.map(reason => labels[reason] || reason).join(', ')
-}
 
 function relationshipSignalList(item: RuleRelationshipRow) {
   const labels: Record<string, string> = {
@@ -579,7 +498,6 @@ function relationshipWhyShown(item: RuleRelationshipRow) {
   const similarity = signals.length
     ? t('rules.relatedBecause', { signals: signals.join(', ') })
     : t('rules.relatedBecauseFallback')
-  if (item.mergeEligibility?.canMerge) return similarity
   const differences: Record<string, string> = {
     equivalent: t('rules.relationshipDifferences.equivalent'),
     overlapping: t('rules.relationshipDifferences.overlapping'),
@@ -909,23 +827,6 @@ async function confirmRejection() {
   }
 }
 
-async function confirmMerge() {
-  if (!selectedCandidate.value || !canMergeSelectedRule.value) return
-  isMerging.value = true
-  try {
-    const result = await mergeRuleCandidateGroup(selectedCandidate.value._id)
-    showMergeModal.value = false
-    settingsStore.showToast(t('rules.toasts.merged', { count: result.data.componentCount }), 'success')
-    if (result.data.requiresReview) activeStatus.value = 'pending'
-    await fetchCandidates()
-    if (candidates.value.some(item => item._id === result.data.primaryRuleId)) await selectCandidate(result.data.primaryRuleId)
-  } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.mergeFailed'), 'error')
-  } finally {
-    isMerging.value = false
-  }
-}
-
 function chunkPreview(chunkId: string) {
   return evidenceChunks.value.find(item => item.chunkId === chunkId)?.chunkPreview || ''
 }
@@ -1016,21 +917,18 @@ function localizedEvidenceGapClaim(match: EvidenceGapMatchRow) {
 
 function evidenceGapStateLabel(match: EvidenceGapMatchRow) {
   if (match.resolvedByRule) return t('rules.evidenceGapResolved')
-  if (match.blockers.length === 1 && match.blockers[0] === 'approval') return t('rules.evidenceGapReady')
+  if (match.blockers.length === 0) return t('rules.evidenceGapReady')
   return t('rules.evidenceGapCandidate')
 }
 
 function evidenceGapExplanation(match: EvidenceGapMatchRow) {
   if (match.resolvedByRule) return t('rules.evidenceGapResolvedDescription')
-  if (match.blockers.length === 1 && match.blockers[0] === 'approval') return t('rules.evidenceGapReadyDescription')
+  if (match.blockers.length === 0) return t('rules.evidenceGapReadyDescription')
   return t('rules.evidenceGapCandidateDescription')
 }
 
 function evidenceGapBlockerLabel(blocker: EvidenceGapMatchRow['blockers'][number]) {
   const labels = {
-    approval: t('rules.evidenceGapBlockers.approval'),
-    score: t('rules.evidenceGapBlockers.score'),
-    independent_sources: t('rules.evidenceGapBlockers.independent_sources'),
     similarity: t('rules.evidenceGapBlockers.similarity'),
   }
   return labels[blocker]
@@ -1066,15 +964,12 @@ function scoreColor(score?: number) {
 .source-group h2 { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin: 2px 3px 9px; color: var(--color-text-secondary); font-size: .72rem; line-height: 1.4; letter-spacing: .035em; }
 .source-group h2 span { min-width: 0; }.source-group h2 small { flex: 0 0 auto; color: var(--color-text-muted); font-size: .66rem; font-weight: 600; white-space: nowrap; }
 .source-rule-list { display: flex; flex-direction: column; gap: 6px; }
-.concept-cluster { display: flex; flex-direction: column; gap: 6px; }.concept-cluster + .concept-cluster { margin-top: 5px; }
-.concept-cluster__heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; border-left: 2px solid hsl(var(--source-group-hue) 55% 64% / .7); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: hsl(var(--source-group-hue) 45% 55% / .07); color: var(--color-text-secondary); font-size: .67rem; font-weight: 700; }.concept-cluster__heading small { color: var(--color-text-muted); font-size: .63rem; font-weight: 600; }
 .candidate-card { width: 100%; display: flex; flex-direction: column; gap: 9px; padding: 12px; margin: 0; text-align: left; border: 1px solid transparent; border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-bg-base) 98%, hsl(var(--source-group-hue) 45% 55%)); color: inherit; cursor: pointer; }
 .candidate-card:hover { border-color: var(--color-border); background: var(--color-bg-hover); }.candidate-card.selected { border-color: var(--accent); background: rgba(59,130,246,.07); }
 .candidate-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; font-size: .9rem; font-weight: 650; line-height: 1.4; color: var(--color-text-primary); }
 .candidate-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: var(--color-text-muted); font-size: .7rem; }
-.composite-badge { display: inline-flex; width: fit-content; margin-top: 8px; padding: 4px 8px; border-radius: 999px; background: rgba(99,102,241,.12); color: #a5b4fc; font-size: .68rem; font-weight: 700; }.composite-claims { display: grid; gap: 12px; margin-top: 16px; }.composite-claim { padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.composite-claim__header { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: var(--color-text-secondary); font-size: .7rem; }.composite-claim__header span { color: var(--color-text-muted); }.composite-claim .relationship-flow { margin-top: 0; }.composite-claim .rule-explanation { margin-top: 10px; }.merge-preview-list { display: grid; gap: 8px; margin: 12px 0; padding-left: 20px; }.merge-preview-list li { color: var(--color-text-secondary); line-height: 1.45; }
+.composite-badge { display: inline-flex; width: fit-content; margin-top: 8px; padding: 4px 8px; border-radius: 999px; background: rgba(99,102,241,.12); color: #a5b4fc; font-size: .68rem; font-weight: 700; }.composite-claims { display: grid; gap: 12px; margin-top: 16px; }.composite-claim { padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.composite-claim__header { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: var(--color-text-secondary); font-size: .7rem; }.composite-claim__header span { color: var(--color-text-muted); }.composite-claim .relationship-flow { margin-top: 0; }.composite-claim .rule-explanation { margin-top: 10px; }
 .score-aggregation-note { margin: 10px 0 0; padding: 10px 12px; border: 1px solid rgba(245,158,11,.25); border-radius: var(--radius-sm); background: rgba(245,158,11,.06); color: var(--color-text-secondary); font-size: .74rem; line-height: 1.5; }.score-aggregation-note strong { color: #fbbf24; }
-.merge-review-warning { margin-top: 12px !important; padding: 10px 12px; border-radius: var(--radius-sm); background: rgba(245,158,11,.08); color: #fbbf24; font-size: .75rem; }
 .score-chip { color: #93c5fd; font-weight: 700; }.status-chip { display: inline-flex; width: fit-content; padding: 3px 8px; border-radius: 999px; font-size: .68rem; font-weight: 700; }
 .composite-list-chip { color: #a5b4fc; font-weight: 700; }
 .status-pending { color: #fbbf24; background: rgba(245,158,11,.12); }.status-approved { color: #34d399; background: rgba(16,185,129,.12); }.status-rejected { color: #f87171; background: rgba(239,68,68,.12); }

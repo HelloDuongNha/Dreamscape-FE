@@ -110,6 +110,7 @@ export interface OracleRunStatusDto {
 export async function submitOracleCitationFeedback(input: {
   turnId: string
   citationIndex: number
+  sourceId?: string
   ruleId: string
   answer: 'yes' | 'no' | 'unsure' | null
 }): Promise<{
@@ -130,16 +131,18 @@ export async function submitOracleCitationFeedback(input: {
   }>>(`/oracle/turns/${input.turnId}/citations/${input.citationIndex}/feedback`, {
     ruleId: input.ruleId,
     answer: input.answer,
-  })
+  }, { params: input.sourceId ? { sourceId: input.sourceId } : undefined })
   return data.data
 }
 
 export async function getOracleCitationDetails(
   turnId: string,
-  citationIndex: number
+  citationIndex: number,
+  sourceId?: string,
 ): Promise<OracleCitationDto> {
   const { data } = await apiClient.get<OracleResponse<OracleCitationDto>>(
-    `/oracle/turns/${turnId}/citations/${citationIndex}`
+    `/oracle/turns/${turnId}/citations/${citationIndex}`,
+    { params: sourceId ? { sourceId } : undefined },
   )
   return data.data
 }
