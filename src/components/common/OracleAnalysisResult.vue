@@ -324,50 +324,55 @@
         </div>
       </footer>
 
-      <section v-if="analysis.creative_continuation" class="oracle-continuation">
+      <section v-if="analysis.creative_continuation || continuationPending" class="oracle-continuation">
         <header class="oracle-continuation__header">
           <span>{{ t('oracle.dreamContinuationTitle') }}</span>
           <small>{{ t('oracle.dreamContinuationSubtitle') }}</small>
         </header>
         <div class="oracle-continuation__body">
-          <div v-if="continuationLoading" class="oracle-continuation__progress-state">
+          <div v-if="continuationPending" class="oracle-continuation__progress-state">
             <div class="oracle-continuation__progress" :aria-label="t('oracle.continuationProgressLabel')">
               <span :style="{ width: `${continuationProgress}%` }"></span>
             </div>
             <span>{{ continuationProgress }}%</span>
+            <p v-if="!displayedContinuation" class="oracle-continuation__status">
+              {{ continuationStatusMessage }}
+            </p>
           </div>
-          <h3>{{ displayedContinuation.title }}</h3>
-          <div
-            class="oracle-continuation__story-wrap"
-            :class="{ 'oracle-continuation__story-wrap--collapsed': continuationCanCollapse && !continuationExpanded }"
-          >
-            <p class="oracle-continuation__story" translate="no">{{ displayedContinuation.continuation }}</p>
-          </div>
-          <button
-            v-if="continuationCanCollapse"
-            type="button"
-            class="oracle-continuation__expand"
-            @click="continuationExpanded = !continuationExpanded"
-          >
-            <span>{{ t(continuationExpanded ? 'oracle.continuationCollapse' : 'oracle.continuationExpand') }}</span>
-            <span class="oracle-continuation__expand-icon" aria-hidden="true">
-              {{ continuationExpanded ? '⌃' : '⌄' }}
-            </span>
-          </button>
-          <p class="oracle-continuation__connection"><strong>{{ t('oracle.dreamContinuationConnection') }}</strong> {{ displayedContinuation.connectionToCurrentDream }}</p>
-          <div v-if="displayedContinuation.inspirations?.length" class="oracle-continuation__inspirations">
-            <strong>{{ t('oracle.dreamContinuationInspirations') }}</strong>
-            <button
-              v-for="item in displayedContinuation.inspirations"
-              :key="item.dreamId"
-              type="button"
-              @click="openSimilarDream(item.dreamId)"
+          <template v-if="displayedContinuation">
+            <h3>{{ displayedContinuation.title }}</h3>
+            <div
+              class="oracle-continuation__story-wrap"
+              :class="{ 'oracle-continuation__story-wrap--collapsed': continuationCanCollapse && !continuationExpanded }"
             >
-              {{ item.title }} · {{ item.similarity }}%
+              <p class="oracle-continuation__story" translate="no">{{ displayedContinuation.continuation }}</p>
+            </div>
+            <button
+              v-if="continuationCanCollapse"
+              type="button"
+              class="oracle-continuation__expand"
+              @click="continuationExpanded = !continuationExpanded"
+            >
+              <span>{{ t(continuationExpanded ? 'oracle.continuationCollapse' : 'oracle.continuationExpand') }}</span>
+              <span class="oracle-continuation__expand-icon" aria-hidden="true">
+                {{ continuationExpanded ? '⌃' : '⌄' }}
+              </span>
             </button>
-          </div>
-          <small>{{ displayedContinuation.disclaimer }}</small>
-          <div v-if="canManageContinuation" class="oracle-continuation__controls">
+            <p class="oracle-continuation__connection"><strong>{{ t('oracle.dreamContinuationConnection') }}</strong> {{ displayedContinuation.connectionToCurrentDream }}</p>
+            <div v-if="displayedContinuation.inspirations?.length" class="oracle-continuation__inspirations">
+              <strong>{{ t('oracle.dreamContinuationInspirations') }}</strong>
+              <button
+                v-for="item in displayedContinuation.inspirations"
+                :key="item.dreamId"
+                type="button"
+                @click="openSimilarDream(item.dreamId)"
+              >
+                {{ item.title }} · {{ item.similarity }}%
+              </button>
+            </div>
+            <small>{{ displayedContinuation.disclaimer }}</small>
+          </template>
+          <div v-if="canManageContinuation && displayedContinuation" class="oracle-continuation__controls">
             <nav :aria-label="t('oracle.dreamContinuationHistory')">
               <button type="button" :disabled="continuationIndex === 0" @click="continuationIndex--">‹</button>
               <span>{{ continuationIndex + 1 }} / {{ continuationVersions.length }}</span>
@@ -673,6 +678,14 @@ function applyDreamAnalysisUpdate(refreshedAnalysis: AiDreamAnalysisResult) {
 }
 const continuationLoading = computed(() => continuationTask.value?.status === 'pending')
 const continuationProgress = computed(() => continuationTask.value?.progress || 0)
+const continuationPending = computed(() =>
+  continuationLoading.value
+  || ['queued', 'running'].includes(String(props.analysis?.continuationMetadata?.status || '')),
+)
+const continuationStatusMessage = computed(() =>
+  continuationTask.value?.statusMessage
+  || String(props.analysis?.continuationMetadata?.statusMessage || t('oracle.continuationReturning')),
+)
 const continuationIndex = ref(0)
 const continuationExpanded = ref(false)
 const continuationVersions = computed(() => {
@@ -702,6 +715,19 @@ watch(() => continuationTask.value?.dream, dream => {
   if (!dream?.ai_result || !props.analysis) return
   Object.assign(props.analysis, dream.ai_result)
 }, { deep: false })
+
+watch(
+  () => props.analysis?.continuationMetadata,
+  metadata => {
+    if (!props.dreamId || !metadata || !['queued', 'running'].includes(String(metadata.status))) return
+    continuationStore.track({
+      _id: props.dreamId,
+      ai_result: props.analysis,
+      continuationMetadata: metadata,
+    } as any, 'dialog')
+  },
+  { immediate: true, deep: true },
+)
 
 watch(() => continuationTask.value?.status, (status, previous) => {
   if (status === 'completed' && previous === 'pending') {
