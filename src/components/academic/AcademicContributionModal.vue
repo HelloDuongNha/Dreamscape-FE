@@ -82,7 +82,18 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
-import { previewSource, contributeSource, contributePdfSource } from '@/api/sourceApi'
+import {
+  previewSource,
+  contributeSource,
+  contributePdfSource,
+  type AcademicSourcePreview,
+  type SourceContributionResult,
+} from '@/api/sourceApi'
+import {
+  getApiErrorDataString,
+  getApiErrorMessage,
+  getApiErrorStatus,
+} from '@/utils/apiError'
 import { parseAcademicLookupInput, type AcademicLookupError } from '@/features/library/utils/academicContributionLookup'
 import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
@@ -101,7 +112,7 @@ const lookupAttempted = ref(false)
 const lookupRequestError = ref('')
 const selectedFile = ref<File | null>(null)
 const pdfFileError = ref('')
-const previewData = ref<any>(null)
+const previewData = ref<AcademicSourcePreview | null>(null)
 const isFetchingPreview = ref(false)
 const isSubmitting = ref(false)
 const uploadProgress = ref(0)
@@ -183,7 +194,14 @@ async function previewPdf(): Promise<void> {
   step.value = 2
 }
 
-async function loadPreview(mode: 'lookup' | 'pdf', loader: () => Promise<any>): Promise<void> {
+async function loadPreview(
+  mode: 'lookup' | 'pdf',
+  loader: () => Promise<{
+    success: boolean
+    message?: string
+    data?: AcademicSourcePreview
+  }>,
+): Promise<void> {
   isFetchingPreview.value = true
   lookupMode.value = mode
   try {
@@ -192,8 +210,8 @@ async function loadPreview(mode: 'lookup' | 'pdf', loader: () => Promise<any>): 
       previewData.value = result.data
       step.value = 2
     }
-  } catch (error: any) {
-    const message = error.response?.data?.message || t('library.local.noMetadata')
+  } catch (error: unknown) {
+    const message = getApiErrorMessage(error, t('library.local.noMetadata'))
     lookupRequestError.value = message
     settingsStore.showToast(message, 'error')
   } finally {
@@ -205,7 +223,7 @@ async function submitContribution(): Promise<void> {
   if (!previewData.value) return
   isSubmitting.value = true
   try {
-    const result = lookupMode.value === 'pdf' && selectedFile.value
+    const result: SourceContributionResult = lookupMode.value === 'pdf' && selectedFile.value
       ? await contributePdfSource(selectedFile.value, { title: previewData.value.title, authors: previewData.value.authors || undefined }, event => {
           if (event.total) uploadProgress.value = Math.round(event.loaded * 100 / event.total)
         })
@@ -220,13 +238,16 @@ async function submitContribution(): Promise<void> {
       emit('submitted')
       close()
     }
-  } catch (error: any) {
-    const data = error.response?.data
-    if (error.response?.status === 409 && data?.existingSourceId) {
-      duplicateSourceId.value = data.existingSourceId
-      duplicateSourceError.value = data.message || t('library.local.duplicate')
+  } catch (error: unknown) {
+    const existingSourceId = getApiErrorDataString(error, 'existingSourceId')
+    if (getApiErrorStatus(error) === 409 && existingSourceId) {
+      duplicateSourceId.value = existingSourceId
+      duplicateSourceError.value = getApiErrorMessage(error, t('library.local.duplicate'))
     }
-    settingsStore.showToast(data?.message || t('library.local.contributionError'), 'error')
+    settingsStore.showToast(
+      getApiErrorMessage(error, t('library.local.contributionError')),
+      'error',
+    )
   } finally {
     isSubmitting.value = false
   }

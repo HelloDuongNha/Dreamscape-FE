@@ -411,7 +411,12 @@
 import { ref, watch, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import type { AiDreamAnalysisResult } from '@/api/types'
+import type {
+  AiDreamAnalysisResult,
+  AiRealLifeHypothesis,
+  AiSymbolicNote,
+  ApiDream,
+} from '@/api/types'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { usePostStore } from '@/store/usePostStore'
 import { useDreamStore } from '@/store/useDreamStore'
@@ -419,12 +424,18 @@ import apiClient from '@/api/client'
 import AppFeedbackChoiceGroup, { type FeedbackChoice } from '@/components/common/AppFeedbackChoiceGroup.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import OracleCitationModal from '@/features/oracle/components/OracleCitationModal.vue'
-import type { OracleCitationDto } from '@/api/oracleApi'
+import type {
+  DreamHypothesisFeedbackResponse,
+  OracleCitationDto,
+  OracleRuleScoreUpdateDto,
+} from '@/api/oracleApi'
+import { getApiErrorMessage } from '@/utils/apiError'
 import { useDreamContinuationStore } from '@/store/useDreamContinuationStore'
 import { splitOracleInlineParts } from '@/features/oracle/services/oracleInlineContent.service'
 import {
   buildDreamCitationSources,
   selectDreamVerificationQuestions,
+  type DreamCitationSource,
 } from '@/features/oracle/services/dreamCitationPresentation.service'
 
 const props = withDefaults(defineProps<{
@@ -454,6 +465,12 @@ const activeMode = computed(() => {
 const router = useRouter()
 const { t, locale } = useI18n({ useScope: 'global' })
 
+interface CitationDisplaySource {
+  authors?: string[] | string
+  title?: string
+  year?: number
+}
+
 function localizedText(
   localized: { vi?: string; en?: string } | undefined,
   fallback?: string,
@@ -462,7 +479,7 @@ function localizedText(
   return String(localized?.[language] || fallback || '')
 }
 
-function formatCitationText(src: any): string {
+function formatCitationText(src: CitationDisplaySource | null | undefined): string {
   if (!src) return t('oracle.academicSource')
   let citation = ''
   const authors = src.authors
@@ -502,21 +519,16 @@ function formatCitationText(src: any): string {
   return citation
 }
 
-function formatInlineCitation(src: any): string {
+function formatInlineCitation(src: CitationDisplaySource): string {
   return formatCitationText(src).replace(/^"|"$/g, '')
 }
 
 function navigateToSource(sourceId: string) {
   if (!sourceId) return
-  try {
-    if (router) {
-      router.push(`/library/sources/${sourceId}`).catch(err => {
-        console.error('Failed to navigate to library source:', err)
-      })
-    }
-  } catch (err) {
-    console.error('Failed to navigate to library source:', err)
-  }
+  if (!router) return
+  router.push(`/library/sources/${sourceId}`).catch(() => {
+    settingsStore.showToast(t('oracle.sourceDetailsLoadFailed'), 'error')
+  })
 }
 
 async function openSimilarDream(dreamId: string) {
@@ -524,7 +536,7 @@ async function openSimilarDream(dreamId: string) {
   await postStore.openPost(dreamId)
 }
 
-function formatQuestionType(item: any): string {
+function formatQuestionType(item: AiRealLifeHypothesis): string {
   if (item?.questionBasis === 'sleep_context') return t('oracle.dreamQuestionSleepContext')
   const type = item?.questionType as 'past' | 'present' | 'future'
   if (type === 'past') return t('oracle.dreamQuestionPast')
@@ -547,7 +559,7 @@ watch(() => props.mode, (newMode) => {
   isExpanded.value = newMode === 'full'
 })
 
-function questionKey(item: any, idx: number): string {
+function questionKey(item: AiRealLifeHypothesis | undefined, idx: number): string {
   return String(item?.verificationKey || `question-${idx}`)
 }
 
@@ -600,11 +612,11 @@ function sourceMarker(sourceId: string): string {
   return source ? `[${source.index}]` : ''
 }
 
-function scoreDelta(item: any): number {
+function scoreDelta(item: AiRealLifeHypothesis): number {
   return Number(item?.ruleVoteDelta ?? item?.ruleScoreDelta) || 0
 }
 
-function openCitation(source: any) {
+function openCitation(source: DreamCitationSource) {
   selectedCitation.value = {
     index: Number(source.index) || 1,
     sourceType: source.sourceType || 'academic_source',
@@ -627,11 +639,11 @@ function openCitationByIndex(index: number) {
   if (source) openCitation(source)
 }
 
-function applyCitationFeedback(payload: any) {
+function applyCitationFeedback(payload: { analysis?: AiDreamAnalysisResult }) {
   if (payload?.analysis) applyDreamAnalysisUpdate(payload.analysis)
 }
 
-function hasMotifHistory(note: any): boolean {
+function hasMotifHistory(note: AiSymbolicNote): boolean {
   const stats = note?.motifStats
   return Boolean(stats && (
     stats.previousPersonalDreamCount
@@ -671,7 +683,7 @@ function applyDreamAnalysisUpdate(refreshedAnalysis: AiDreamAnalysisResult) {
     postStore.focusedDream.ai_result = refreshedAnalysis
     postStore.focusedDream.aiAnalysis = refreshedAnalysis
   }
-  const storedDream = dreamStore.dreams.find((dream: any) => dream._id === targetDreamId)
+  const storedDream = dreamStore.dreams.find(dream => dream._id === targetDreamId)
   if (storedDream) {
     storedDream.ai_result = refreshedAnalysis
     storedDream.aiAnalysis = refreshedAnalysis
@@ -725,7 +737,7 @@ watch(
       _id: props.dreamId,
       ai_result: props.analysis,
       continuationMetadata: metadata,
-    } as any, 'dialog')
+    } as ApiDream, 'dialog')
   },
   { immediate: true, deep: true },
 )
@@ -745,7 +757,7 @@ onUnmounted(() => {
 async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null) {
   const targetDreamId = props.dreamId || postStore.focusedDream?._id
   if (!targetDreamId) {
-    console.error('Cannot save hypothesis feedback: dreamId is missing')
+    settingsStore.showToast(t('oracle.dreamFeedbackSaveFailed'), 'error')
     return
   }
 
@@ -755,12 +767,15 @@ async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null)
   const submittedAnswer = val
 
   try {
-    const response = await apiClient.post(`/dreams/${targetDreamId}/hypothesis-feedback`, {
+    const response = await apiClient.post<DreamHypothesisFeedbackResponse>(
+      `/dreams/${targetDreamId}/hypothesis-feedback`,
+      {
       hypothesisIndex: hypothesisIdx,
       verificationKey: hypothesisItem?.verificationKey,
       answer: submittedAnswer,
       questionText
-    })
+      },
+    )
 
     if (response.data.success) {
       if (submittedAnswer === null) delete feedbackSelections.value[feedbackKey]
@@ -776,8 +791,8 @@ async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null)
         ? response.data.data.ruleScoreUpdates
         : []
       const directDelta = scoreUpdates
-        .filter((item: any) => item?.relation === 'direct')
-        .reduce((total: number, item: any) => total + (Number(item?.voteDelta ?? item?.scoreDelta) || 0), 0)
+        .filter((item: OracleRuleScoreUpdateDto) => item.relation === 'direct')
+        .reduce((total, item) => total + (Number(item.voteDelta ?? item.scoreDelta) || 0), 0)
       const scoreMessage = directDelta > 0
         ? t('oracle.dreamFeedbackScoreAdded', { score: directDelta })
         : directDelta < 0
@@ -788,9 +803,11 @@ async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null)
       settingsStore.showToast(scoreMessage, 'success')
 
     }
-  } catch (err: any) {
-    console.error('Failed to submit hypothesis feedback:', err)
-    settingsStore.showToast(err.response?.data?.message || t('oracle.dreamFeedbackSaveFailed'), 'error')
+  } catch (error: unknown) {
+    settingsStore.showToast(
+      getApiErrorMessage(error, t('oracle.dreamFeedbackSaveFailed')),
+      'error',
+    )
   }
 }
 
@@ -815,7 +832,7 @@ function getContextToneLabel(tone?: string): string {
   return t('oracle.dreamToneUnclear')
 }
 
-function motifOriginLabel(note: any): string {
+function motifOriginLabel(note: AiSymbolicNote): string {
   if (note.origin === 'dictionary') {
     return note.dictionarySymbol
       ? t('oracle.dreamMotifDictionaryNamed', { symbol: note.dictionarySymbol })

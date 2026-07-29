@@ -34,12 +34,36 @@
     <template v-else-if="name === 'chevron-down'">
       <path d="m6 9 6 6 6-6" />
     </template>
+    <template v-else-if="name === 'check'">
+      <path d="m5 12 4 4L19 6" />
+    </template>
+    <template v-else-if="name === 'close'">
+      <path d="m6 6 12 12M18 6 6 18" />
+    </template>
+    <template v-else-if="name === 'question'">
+      <path d="M9.1 9a3 3 0 1 1 4.8 2.4c-1.2.8-1.9 1.3-1.9 2.6" />
+      <path d="M12 18h.01" />
+    </template>
+    <template v-else-if="name === 'crown'">
+      <path d="m3 7 4 4 5-6 5 6 4-4-2 11H5L3 7Z" />
+      <path d="M5 21h14" />
+    </template>
   </svg>
 </template>
 
 <script setup lang="ts">
 withDefaults(defineProps<{
-  name: 'warning' | 'lock' | 'folder' | 'document' | 'external-link' | 'chevron-down'
+  name:
+    | 'warning'
+    | 'lock'
+    | 'folder'
+    | 'document'
+    | 'external-link'
+    | 'chevron-down'
+    | 'check'
+    | 'close'
+    | 'question'
+    | 'crown'
   size?: number | string
 }>(), {
   size: 20,

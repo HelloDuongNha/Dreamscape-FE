@@ -13,7 +13,9 @@
       :disabled="disabled"
       @click="$emit('update:modelValue', modelValue === option.value ? null : option.value)"
     >
-      <span aria-hidden="true">{{ option.icon }}</span>
+      <span aria-hidden="true">
+        <AppIcon :name="option.icon" :size="11" />
+      </span>
       {{ option.label }}
     </button>
   </div>
@@ -21,6 +23,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import AppIcon from '@/components/common/AppIcon.vue'
 
 export type FeedbackChoice = 'yes' | 'no' | 'unsure'
 
@@ -45,9 +48,9 @@ defineEmits<{
 }>()
 
 const options = computed(() => [
-  { value: 'yes' as const, icon: '✓', label: props.yesLabel },
-  { value: 'no' as const, icon: '×', label: props.noLabel },
-  { value: 'unsure' as const, icon: '?', label: props.unsureLabel },
+  { value: 'yes' as const, icon: 'check' as const, label: props.yesLabel },
+  { value: 'no' as const, icon: 'close' as const, label: props.noLabel },
+  { value: 'unsure' as const, icon: 'question' as const, label: props.unsureLabel },
 ])
 </script>
 

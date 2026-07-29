@@ -4,14 +4,16 @@ import type { OracleShellMessage } from '../oracleShell.types'
 export function applyOracleStreamEvent(input: {
   event: OracleStreamEvent
   target: OracleShellMessage
+  enqueueText: (text: string) => void
+  releaseText: () => void
+  clearText: (flush: boolean) => void
   responseUnavailable: string
   responseCancelled: string
 }): void {
   const { event, target } = input
   if (event.type === 'token') {
     target.firstTokenAt ||= Date.now()
-    target.runState = 'responding'
-    target.content += String(event.payload.text || '')
+    input.enqueueText(String(event.payload.text || ''))
     return
   }
   if (event.type === 'tool_progress' && event.payload.stage === 'preparing_answer') {
@@ -27,7 +29,8 @@ export function applyOracleStreamEvent(input: {
     return
   }
   if (event.type === 'done') {
-    target.runState = 'completed'
+    target.runState = 'responding'
+    input.releaseText()
     target.completedAt = eventTime(event.payload, 'completedAt')
     target.suggestedPrompts = Array.isArray(event.payload.suggestedPrompts)
       ? event.payload.suggestedPrompts.map(String)
@@ -38,6 +41,7 @@ export function applyOracleStreamEvent(input: {
     return
   }
   if (event.type !== 'error' && event.type !== 'cancelled') return
+  input.clearText(true)
   target.runState = event.type === 'error' ? 'failed' : 'cancelled'
   target.completedAt = Date.now()
   target.content ||= event.type === 'error'

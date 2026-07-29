@@ -352,7 +352,9 @@
                         class="modal-comment__owner-crown"
                         :title="t('home.postOwnerComment')"
                         aria-label="post owner"
-                      >♛</span>
+                      >
+                        <AppIcon name="crown" :size="15" />
+                      </span>
                     </span>
                     <div class="modal-comment__body">
                       <div class="modal-comment__meta">
@@ -550,6 +552,7 @@ import apiClient         from '@/api/client'
 import { getInitials, getAvatarBg } from '@/utils/avatar'
 import { timeAgo }       from '@/utils/timeAgo'
 import { formatUsername } from '@/utils/username'
+import { getApiErrorDataCode } from '@/utils/apiError'
 import OracleAnalysisResult  from '@/components/common/OracleAnalysisResult.vue'
 import DreamMoodTag from '@/components/common/DreamMoodTag.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
@@ -927,8 +930,8 @@ async function retryAnalysis(dreamId: string) {
       
       oracleStore.startTracking(postStore.focusedDream || data.data)
     }
-  } catch (err) {
-    console.error('Failed to retry analysis:', err)
+  } catch {
+    settingsStore.showToast(t('home.oracleFailed'), 'error')
   } finally {
     isRetryingAnalysis.value = false
   }
@@ -1128,18 +1131,18 @@ async function submitComment(): Promise<void> {
     )
     commentText.value = ''
     cancelReply()
-    cancelReply()
     nextTick(() => {
       if (!created) return
       containerRef.value
         ?.querySelector<HTMLElement>(`[data-comment-id="${created._id}"]`)
         ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
-  } catch (error: any) {
-    if (error?.response?.data?.code === 'comments_disabled') {
+  } catch (error: unknown) {
+    const code = getApiErrorDataCode(error)
+    if (code === 'comments_disabled') {
       if (postStore.focusedDream) postStore.focusedDream.comments_enabled = false
       settingsStore.showToastKey('home.commentsDisabledStaleError', undefined, 'error')
-    } else if (error?.response?.data?.code === 'reply_not_found') {
+    } else if (code === 'reply_not_found') {
       cancelReply()
       settingsStore.showToastKey('home.replyUnavailable', undefined, 'error')
     } else {

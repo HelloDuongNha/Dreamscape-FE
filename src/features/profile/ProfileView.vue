@@ -132,7 +132,7 @@
                 <DreamCard
                   v-for="dream in likedDreams"
                   :key="dream._id"
-                  :dream="dream as any"
+              :dream="dream"
                   :user="getDreamAuthor(dream)"
                 />
               </div>
@@ -207,8 +207,11 @@ const followersModalTab = ref<'followers' | 'following' | 'pending'>('followers'
 const reviewingRequestId = ref<string | null>(null)
 
 // Contribution profile & achievements system states (Correction 8)
-const contributionStats = ref<any>(null)
-const contributionAchievements = ref<any[]>([])
+interface ContributionStats {
+  approvedSourceCount: number
+}
+
+const contributionStats = ref<ContributionStats | null>(null)
 
 const openFollowersModal = (tab: 'followers' | 'following' | 'pending') => {
   followersModalTab.value = tab
@@ -349,12 +352,10 @@ async function loadProfile() {
       if (data.success) {
         targetUser.value = data.user
         contributionStats.value = data.contributionStats || null
-        contributionAchievements.value = data.contributionAchievements || []
       }
     } catch (err) {
       targetUser.value = null
       contributionStats.value = null
-      contributionAchievements.value = []
     }
 
     // 2. Fetch dreams feed if allowed
@@ -427,11 +428,13 @@ watch(activeTab, async (tab) => {
 })
 
 // ── Edit support & Follow update handler ──────────────────────────────────────────
-function handleProfileUpdate(updatedUser: any) {
+function handleProfileUpdate(updatedUser: Partial<ApiUser>) {
   if (isMe.value) {
-    authStore.updateCurrentUser(updatedUser)
-  } else {
-    targetUser.value = updatedUser
+    if (authStore.myUser) {
+      authStore.updateCurrentUser({ ...authStore.myUser, ...updatedUser })
+    }
+  } else if (targetUser.value) {
+    targetUser.value = { ...targetUser.value, ...updatedUser }
   }
   // Re-fetch everything to sync state (including visibility transitions)
   loadProfile()
@@ -493,7 +496,6 @@ watch(() => route.params.id, async () => {
   hasMore.value    = true
   targetUser.value = null
   contributionStats.value = null
-  contributionAchievements.value = []
   await loadProfile()
 })
 </script>

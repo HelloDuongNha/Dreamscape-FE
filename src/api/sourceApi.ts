@@ -2,13 +2,38 @@ import apiClient from './client'
 import type { TranslateReaderRequest, TranslateReaderResponse } from '../features/library/services/smartReaderTranslation.types'
 import type { PdfImportProgressResponse } from './moderationApi'
 import type { PdfProcessingResponse } from './academicSourceProcessing.types'
+import type { AxiosProgressEvent } from 'axios'
+
+export interface AcademicSourcePreview {
+  title: string
+  authors?: string[]
+  year?: number
+  journal?: string
+  publisher?: string
+  doi?: string
+  pmcid?: string
+  url?: string
+  fileName?: string
+  fileSize?: number
+  sourceProvider?: string
+  fullTextAvailable?: boolean
+}
+
+export interface SourceContributionResult {
+  success: boolean
+  message?: string
+  data?: {
+    _id?: string
+    data?: { _id?: string }
+  }
+}
 
 export interface ContributeSourcePayload {
   doi?: string
   pmcid?: string
   url?: string
   submittedNote?: string
-  metadata?: any
+  metadata?: AcademicSourcePreview
 }
 
 export interface PreviewSourcePayload {
@@ -20,8 +45,16 @@ export interface PreviewSourcePayload {
 /**
  * Fetches preview metadata for a DOI or URL without saving.
  */
-export const previewSource = async (payload: PreviewSourcePayload) => {
-  const { data } = await apiClient.post<{ success: boolean; message?: string; data?: any }>(
+export const previewSource = async (payload: PreviewSourcePayload): Promise<{
+  success: boolean
+  message?: string
+  data?: AcademicSourcePreview
+}> => {
+  const { data } = await apiClient.post<{
+    success: boolean
+    message?: string
+    data?: AcademicSourcePreview
+  }>(
     '/sources/preview',
     payload
   )
@@ -31,8 +64,10 @@ export const previewSource = async (payload: PreviewSourcePayload) => {
 /**
  * Submits a DOI or URL as a new academic source contribution.
  */
-export const contributeSource = async (payload: ContributeSourcePayload) => {
-  const { data } = await apiClient.post<{ success: boolean; message?: string; data?: any }>(
+export const contributeSource = async (
+  payload: ContributeSourcePayload,
+): Promise<SourceContributionResult> => {
+  const { data } = await apiClient.post<SourceContributionResult>(
     '/sources/contribute',
     payload
   )
@@ -55,8 +90,8 @@ export const contributePdfSource = async (
     publisher?: string
     submittedNote?: string
   },
-  onUploadProgress?: (progressEvent: any) => void
-) => {
+  onUploadProgress?: (progressEvent: AxiosProgressEvent) => void
+): Promise<SourceContributionResult> => {
   const formData = new FormData()
   formData.append('pdfFile', file)
   if (payload.doi) formData.append('doi', payload.doi)
@@ -70,7 +105,7 @@ export const contributePdfSource = async (
   if (payload.publisher) formData.append('publisher', payload.publisher)
   if (payload.submittedNote) formData.append('submittedNote', payload.submittedNote)
 
-  const { data } = await apiClient.post<{ success: boolean; message?: string; data?: any }>(
+  const { data } = await apiClient.post<SourceContributionResult>(
     '/sources/contribute-pdf',
     formData,
     {

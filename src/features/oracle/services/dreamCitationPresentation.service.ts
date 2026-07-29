@@ -1,16 +1,25 @@
-import type { AiDreamAnalysisResult } from '@/api/types'
+import type {
+  AiDreamAnalysisResult,
+  AiRealLifeHypothesis,
+  AiScientificContextNote,
+} from '@/api/types'
 import type { OracleCitationDto, OracleCitationRuleLinkDto } from '@/api/oracleApi'
 
 export interface DreamVerificationQuestionEntry {
-  item: any
+  item: AiRealLifeHypothesis
   hypothesisIndex: number
 }
 
-interface DreamCitationSource extends OracleCitationDto {
+export interface DreamCitationSource extends OracleCitationDto {
   doi?: string
+  authors?: string[] | string
   quote: string
   key: string
+  ruleLinks: OracleCitationRuleLinkDto[]
 }
+
+type AcademicSource = NonNullable<AiRealLifeHypothesis['sources']>[number]
+type EvidenceQuote = NonNullable<AiScientificContextNote['evidenceQuotes']>[number]
 
 // Selects questions backed by a current citation or resolved prose claim.
 export function selectDreamVerificationQuestions(
@@ -48,7 +57,7 @@ export function buildDreamCitationSources(
 ): DreamCitationSource[] {
   if (!analysis) return []
   const bindings = resolvedBindings(analysis)
-  const sources = new Map<string, any>()
+  const sources = new Map<string, DreamCitationSource>()
   const citations = (analysis.citations || []).filter(citation =>
     Boolean(sourceKey(citation)))
 
@@ -58,12 +67,14 @@ export function buildDreamCitationSources(
     sources.set(key, {
       sourceType: citation.sourceType || 'academic_source',
       sourceId: String(citation.sourceId || ''),
-      doi: String((citation as any).doi || ''),
+      doi: String(citation.doi || ''),
       title: String(citation.title || fallbackTitle),
       year: Number(citation.year) || undefined,
+      excerpt: String(citation.excerpt || ''),
       quote: String(citation.excerpt || ''),
       index: Number(citation.index),
       ruleLinks: [],
+      key,
     })
   }
 
@@ -75,7 +86,7 @@ export function buildDreamCitationSources(
         .map((item, index) => ({ item, index }))
         .filter(({ item }) => item.ruleId === note.ruleId || item.ruleIds?.includes(note.ruleId))
       const quote = note.evidenceQuotes
-        ?.find((item: any) => sameSource(item, source))?.quote || ''
+        ?.find((item: EvidenceQuote) => sameSource(item, source))?.quote || ''
       mergeSource(sources, source, fallbackTitle, [{
         ruleId: note.ruleId,
         ruleCode: note.ruleCode || '',
@@ -95,7 +106,6 @@ export function buildDreamCitationSources(
   }
 
   for (const [hypothesisIndex, hypothesis] of hypotheses.entries()) {
-    const storedHypothesis = hypothesis as any
     for (const source of hypothesis.sources || []) {
       if (!isAcademicSource(source) || !isActiveSource(source, bindings, analysis)) continue
       const linkedRuleIds = [...new Set([
@@ -106,7 +116,7 @@ export function buildDreamCitationSources(
         ruleId,
         ruleCode: hypothesis.ruleCode || '',
         statement: hypothesis.ruleStatement || hypothesis.hypothesis,
-        localizedStatement: completeLocalized(storedHypothesis.localizedHypothesis),
+        localizedStatement: completeLocalized(hypothesis.localizedHypothesis),
         quote: hypothesis.validationExactQuote || '',
         evidenceScore: hypothesis.ruleScore || 0,
         supportingSourceCount: hypothesis.sources?.length || 1,
@@ -138,13 +148,15 @@ function hasCitationLedger(analysis: AiDreamAnalysisResult | null | undefined): 
   return Array.isArray(analysis?.claim_bindings)
 }
 
-function resolvedBindings(analysis: AiDreamAnalysisResult | null | undefined) {
+function resolvedBindings(
+  analysis: AiDreamAnalysisResult | null | undefined,
+): NonNullable<AiDreamAnalysisResult['claim_bindings']> {
   return (analysis?.claim_bindings || []).filter(binding =>
     binding.status === 'resolved' && binding.source && binding.citationIndex)
 }
 
-function questionSources(question: any): SourceIdentity[] {
-  const sources = (question?.sources || []).map((source: any) => ({
+function questionSources(question: AiRealLifeHypothesis): SourceIdentity[] {
+  const sources: SourceIdentity[] = (question.sources || []).map(source => ({
     sourceId: String(source?.sourceId || ''),
     doi: String(source?.doi || ''),
   }))
@@ -163,14 +175,14 @@ function isActiveSource(
     || bindings.some(binding => sameSource(source, binding.source || {}))
 }
 
-function isAcademicSource(source: any): boolean {
+function isAcademicSource(source: AcademicSource): boolean {
   return source?.sourceType === 'academic_source'
     || Boolean(source?.chunkIds?.length || source?.doi || source?.journal || source?.publisher)
 }
 
 function mergeSource(
-  sources: Map<string, any>,
-  source: any,
+  sources: Map<string, DreamCitationSource>,
+  source: AcademicSource,
   fallbackTitle: string,
   ruleLinks: OracleCitationRuleLinkDto[],
 ): void {
@@ -184,11 +196,15 @@ function mergeSource(
     sourceId: String(source.sourceId || existing?.sourceId || ''),
     doi: String(source.doi || existing?.doi || ''),
     title: String(source.title || existing?.title || fallbackTitle),
+    authors: source.authors || existing?.authors || [],
+    year: source.year || existing?.year,
+    excerpt: String(existing?.excerpt || ruleLinks[0]?.quote || ''),
     quote: String(existing?.quote || ruleLinks[0]?.quote || ''),
     index: Number(existing?.index) || 0,
     ruleLinks: [...(existing?.ruleLinks || []), ...ruleLinks]
       .filter((rule, index, rows) =>
         rows.findIndex(item => item.ruleId === rule.ruleId) === index),
+    key,
   })
 }
 

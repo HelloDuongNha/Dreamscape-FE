@@ -228,6 +228,11 @@ import { getInitials, getAvatarBg } from '@/utils/avatar'
 import { getStreakColor } from '@/utils/streak'
 import { useAuthStore }  from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import {
+  getApiErrorDataString,
+  getApiErrorMessage,
+  getApiErrorStatus,
+} from '@/utils/apiError'
 import { useChatStore } from '@/store/useChatStore'
 import AvatarEditor from './AvatarEditor.vue'
 import { useLocaleStore }   from '@/store/useLocaleStore'
@@ -430,23 +435,21 @@ async function saveEdit() {
       editing.value = false
       settingsStore.showToastKey('toasts.profileSavedSuccess', undefined, 'success')
     }
-  } catch (err: any) {
-    const response = err.response
-    if (response) {
-      const status = response.status
-      const msg = response.data?.message || 'Failed to update profile.'
-      const field = response.data?.field
-
+  } catch (error: unknown) {
+    const status = getApiErrorStatus(error)
+    if (status) {
+      const message = getApiErrorMessage(error, 'Failed to update profile.')
+      const field = getApiErrorDataString(error, 'field')
       if (status === 409 || status === 400) {
         if (field === 'username') {
-          backendUsernameError.value = msg
+          backendUsernameError.value = message
         } else if (field === 'display_name') {
-          backendNameError.value = msg
+          backendNameError.value = message
         } else {
-          backendUsernameError.value = msg
+          backendUsernameError.value = message
         }
       } else {
-        backendUsernameError.value = msg
+        backendUsernameError.value = message
       }
     } else {
       usernameError.value = { key: 'errors.networkError' }

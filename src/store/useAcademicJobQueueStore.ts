@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { getApiErrorMessage } from '@/utils/apiError'
 
 export type AcademicJobKind = 'submission' | 'structured' | 'pdf' | 'rules'
 export type AcademicJobState = 'queued' | 'running' | 'completed' | 'failed'
@@ -64,10 +65,10 @@ export const useAcademicJobQueueStore = defineStore('academicJobQueue', () => {
       active.completedAt = Date.now()
       sync(active)
       active.resolve(value)
-    } catch (error: any) {
+    } catch (error: unknown) {
       active.state = 'failed'
       active.completedAt = Date.now()
-      active.error = error?.message || 'Tác vụ thất bại.'
+      active.error = getApiErrorMessage(error, 'Tác vụ thất bại.')
       sync(active)
       active.reject(error)
     } finally {

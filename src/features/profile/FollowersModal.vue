@@ -41,7 +41,7 @@
           :aria-label="t('profile.closeModal')"
           @click="emit('close')"
         >
-          ✕
+          <AppIcon name="close" :size="18" />
         </button>
       </div>
 
@@ -185,6 +185,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ApiUser } from '@/api/types'
+import AppIcon from '@/components/common/AppIcon.vue'
 import { getInitials, getAvatarBg } from '@/utils/avatar'
 
 const { t } = useI18n()

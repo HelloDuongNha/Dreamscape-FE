@@ -69,7 +69,7 @@
         </div>
 
         <div v-if="evidenceGaps.length === 0" class="moderation-empty">
-          <div class="moderation-empty__icon" aria-hidden="true">✓</div>
+          <AppIcon class="moderation-empty__icon" name="check" :size="28" />
           <h3 class="moderation-empty__title">{{ t('oracle.evidenceEmptyTitle') }}</h3>
           <p class="moderation-empty__desc">{{ t('oracle.evidenceEmptyDescription') }}</p>
         </div>

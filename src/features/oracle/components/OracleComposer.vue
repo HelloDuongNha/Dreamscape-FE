@@ -16,29 +16,11 @@
       />
 
       <div class="oracle-composer__actions">
-        <div class="oracle-composer__left-actions">
-          <button
-            type="button"
-            class="oracle-composer__attach-btn"
-            disabled
-            :aria-label="`${t('oracle.attachDream')} (${t('oracle.backendUnavailable')})`"
-            :title="`${t('oracle.attachDream')} — ${t('oracle.backendUnavailable')}`"
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="m21.4 11.6-8.9 8.9a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 1 1-2.8-2.8l8.5-8.5" />
-            </svg>
-          </button>
-
-          <span class="oracle-composer__automatic">{{ t('oracle.automaticMode') }}</span>
-        </div>
-
-        <div class="oracle-composer__right-actions">
-          <div
-            v-if="contextUsage"
-            class="oracle-composer__context"
-            :title="t('oracle.contextUsageHelp', { used: contextUsage.usedTokens, max: contextUsage.maxTokens })"
-          >
-            <span class="oracle-composer__context-label">{{ t('oracle.contextLabel') }}</span>
+        <div
+          v-if="contextUsage"
+          class="oracle-composer__context"
+          :title="t('oracle.contextUsageHelp', { used: contextUsage.usedTokens, max: contextUsage.maxTokens })"
+        >
             <span class="oracle-composer__context-ring">
               <svg viewBox="0 0 36 36" aria-hidden="true">
                 <circle cx="18" cy="18" r="15.5" />
@@ -52,6 +34,7 @@
               </svg>
               <span>{{ contextUsage.percent }}%</span>
             </span>
+            <span class="oracle-composer__context-label">{{ t('oracle.contextLabel') }}</span>
             <span class="oracle-composer__context-popover" role="tooltip">
               <strong>{{ t('oracle.contextDetails') }}</strong>
               <span>{{ t('oracle.contextModel') }}: {{ contextUsage.modelName || t('oracle.contextEstimating') }}</span>
@@ -61,7 +44,8 @@
               <span>{{ t('oracle.contextRemaining') }}: {{ Math.max(0, contextUsage.maxTokens - contextUsage.usedTokens).toLocaleString() }} token</span>
               <span>{{ t('oracle.contextCapacity') }}: {{ contextUsage.maxTokens.toLocaleString() }} token</span>
             </span>
-          </div>
+        </div>
+        <div class="oracle-composer__right-actions">
           <AppButton
             variant="smart"
             size="sm"
@@ -216,34 +200,6 @@ defineExpose({ focus, setContent, clear })
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-}
-
-.oracle-composer__left-actions {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.oracle-composer__attach-btn {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-full);
-  color: var(--color-text-muted);
-  cursor: not-allowed;
-  opacity: 0.72;
-}
-
-.oracle-composer__automatic {
-  color: var(--color-text-muted);
-  font-size: 11px;
-  white-space: nowrap;
 }
 
 .oracle-composer__send-btn {

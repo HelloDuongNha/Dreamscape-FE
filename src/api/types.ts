@@ -114,6 +114,7 @@ export interface AiRealLifeHypothesis {
   ruleCode?: string
   ruleStatement?: string
   hypothesis:            string
+  localizedHypothesis?:  { vi?: string; en?: string }
   evidenceFromDream:     string[]
   confidence:            number
   needsUserConfirmation: boolean
@@ -143,6 +144,8 @@ export interface AiRealLifeHypothesis {
     journal?: string
     doi?: string
     chunkIds?: string[]
+    sourceType?: 'academic_source'
+    publisher?: string
   }[]
   userFeedback?:         'yes' | 'no' | 'unsure' | null
   ruleScore?:             number
@@ -259,6 +262,7 @@ export interface AiDreamAnalysisResult {
     year?: number
     excerpt: string
     detail?: string
+    doi?: string
   }>
   claim_bindings?: Array<{
     claimId: string

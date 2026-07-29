@@ -68,6 +68,7 @@ import OracleModelConnections from './components/OracleModelConnections.vue'
 import OracleCitationModal from './components/OracleCitationModal.vue'
 import { useOracleChatStore } from '@/store/useOracleChatStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { isAbortError } from '@/utils/apiError'
 import { usePostStore } from '@/store/usePostStore'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -203,8 +204,8 @@ async function handleSelectThread(id: string, updateRoute = true) {
         thread?.activeRunStageStartedAt || tracked?.stageStartedAt,
       )
     }
-  } catch (error: any) {
-    if (!isLeavingView && error?.name !== 'AbortError') {
+  } catch (error: unknown) {
+    if (!isLeavingView && !isAbortError(error)) {
       settingsStore.showToastKey('oracle.loadError', undefined, 'error')
     }
   }
@@ -310,12 +311,12 @@ async function handleSend(content: string) {
     oracleStore.completeRun(threadId)
     await oracleStore.loadThreads()
     await loadThreadMessages(threadId, run.assistantTurnId)
-  } catch (error: any) {
-    if (createdForThisMessage && !runPersisted && error?.name !== 'AbortError' && threadId) {
+  } catch (error: unknown) {
+    if (createdForThisMessage && !runPersisted && !isAbortError(error) && threadId) {
       await oracleStore.removeThread(threadId).catch(() => undefined)
       activeMessages.value = []
     }
-    if (error?.name !== 'AbortError') {
+    if (!isAbortError(error)) {
       settingsStore.showToastKey('oracle.sendError', undefined, 'error')
     }
   } finally {
@@ -377,8 +378,8 @@ async function handleEditMessage(message: OracleShellMessage, content: string) {
     oracleStore.completeRun(threadId)
     await oracleStore.loadThreads()
     await loadThreadMessages(threadId, run.assistantTurnId)
-  } catch (error: any) {
-    if (error?.name !== 'AbortError') settingsStore.showToastKey('oracle.sendError', undefined, 'error')
+  } catch (error: unknown) {
+    if (!isAbortError(error)) settingsStore.showToastKey('oracle.sendError', undefined, 'error')
     await loadThreadMessages(threadId).catch(() => undefined)
   } finally {
     currentRunId = null
@@ -553,8 +554,8 @@ onMounted(async () => {
         )
       }
     }
-  } catch (error: any) {
-    if (!isLeavingView && error?.name !== 'AbortError') {
+  } catch (error: unknown) {
+    if (!isLeavingView && !isAbortError(error)) {
       settingsStore.showToastKey('oracle.loadError', undefined, 'error')
     }
   } finally {

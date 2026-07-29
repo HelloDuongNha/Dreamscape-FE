@@ -66,6 +66,7 @@ import apiClient from '@/api/client'
 import { getAvatarBg, getInitials } from '@/utils/avatar'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { getApiErrorDataCode } from '@/utils/apiError'
 import AvatarCropModal from './AvatarCropModal.vue'
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024
@@ -144,9 +145,9 @@ async function uploadCroppedAvatar(file: File): Promise<void> {
     cropOpen.value = false
     releaseCropSource()
     settingsStore.showToastKey('settings.avatarUpdated', undefined, 'success')
-  } catch (error: any) {
+  } catch (error: unknown) {
     releasePreview()
-    const code = error.response?.data?.code
+    const code = getApiErrorDataCode(error)
     const key = code === 'avatar_size_invalid'
       ? 'settings.avatarSizeError'
       : code === 'avatar_type_invalid' || code === 'avatar_content_invalid'

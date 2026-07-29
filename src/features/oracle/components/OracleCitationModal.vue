@@ -113,14 +113,17 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppFeedbackChoiceGroup, { type FeedbackChoice } from '@/components/common/AppFeedbackChoiceGroup.vue'
 import {
   submitOracleCitationFeedback,
+  type DreamHypothesisFeedbackResponse,
   type OracleCitationDto,
   type OracleCitationRuleLinkDto,
+  type OracleRuleScoreUpdateDto,
 } from '@/api/oracleApi'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useRouter } from 'vue-router'
 import { isAdminUser } from '@/utils/adminAccess'
 import apiClient from '@/api/client'
+import { getApiErrorDataString, getApiErrorMessage } from '@/utils/apiError'
 import {
   inferOracleTextLanguage,
   localizeOracleCitationStatement,
@@ -137,8 +140,18 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
   (event: 'open-source', sourceId: string): void
-  (event: 'feedback-updated', payload: any): void
+  (event: 'feedback-updated', payload: CitationFeedbackResult): void
 }>()
+
+interface CitationFeedbackResult {
+  ruleId?: string
+  answer?: FeedbackChoice | null
+  score?: number
+  scoreDelta?: number
+  scoreUpdates?: OracleRuleScoreUpdateDto[]
+  ruleScoreUpdates?: OracleRuleScoreUpdateDto[]
+  analysis?: DreamHypothesisFeedbackResponse['data']['analysis']
+}
 const { t, locale } = useI18n()
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
@@ -224,12 +237,15 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
   if (!props.citation || savingRuleId.value) return
   savingRuleId.value = rule.ruleId
   try {
-    const result = props.feedbackOrigin === 'dream' && props.dreamId
-      ? (await apiClient.post(`/dreams/${props.dreamId}/hypothesis-feedback`, {
+    const result: CitationFeedbackResult = props.feedbackOrigin === 'dream' && props.dreamId
+      ? (await apiClient.post<DreamHypothesisFeedbackResponse>(
+        `/dreams/${props.dreamId}/hypothesis-feedback`,
+        {
         hypothesisIndex: rule.dreamHypothesisIndex,
         verificationKey: rule.dreamVerificationKey,
         answer,
-      })).data.data
+        },
+      )).data.data
       : await submitOracleCitationFeedback({
         turnId: props.messageId,
         citationIndex: props.citation.index,
@@ -263,8 +279,8 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
     }
     const delta = result.scoreDelta
       ?? scoreUpdates
-        .filter((item: any) => item.relation === 'direct')
-        .reduce((sum: number, item: any) => sum + (Number(item.scoreDelta) || 0), 0)
+        .filter(item => item.relation === 'direct')
+        .reduce((sum, item) => sum + (Number(item.scoreDelta) || 0), 0)
     const message = delta > 0
       ? t('oracle.sourceScoreIncreased', { points: delta })
       : delta < 0
@@ -273,9 +289,10 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
           ? t('oracle.sourceVoteRemoved')
           : t('oracle.sourceScoreUnchanged')
     settingsStore.showToast(message, 'success')
-  } catch (error: any) {
+  } catch (error: unknown) {
     settingsStore.showToast(
-      error.response?.data?.reason || error.response?.data?.message || t('oracle.sourceVoteFailed'),
+      getApiErrorDataString(error, 'reason')
+        || getApiErrorMessage(error, t('oracle.sourceVoteFailed')),
       'error',
     )
   } finally {

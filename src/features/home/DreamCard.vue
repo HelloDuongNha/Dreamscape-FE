@@ -229,6 +229,7 @@ import { useDreamStore }     from '@/store/useDreamStore'
 import { useAuthStore }      from '@/store/useAuthStore'
 import { useOracleStore }    from '@/store/useOracleStore'
 import { useLocaleStore }    from '@/store/useLocaleStore'
+import { useSettingsStore }  from '@/store/useSettingsStore'
 import apiClient             from '@/api/client'
 import AppDropdown           from '@/components/common/AppDropdown.vue'
 import AppConfirm            from '@/components/common/AppConfirm.vue'
@@ -236,7 +237,7 @@ import AppIcon               from '@/components/common/AppIcon.vue'
 import OracleAnalysisResult  from '@/components/common/OracleAnalysisResult.vue'
 import DreamMoodTag          from '@/components/common/DreamMoodTag.vue'
 import UserAvatar            from '@/components/common/UserAvatar.vue'
-import type { DropdownOption } from '@/components/common/AppDropdown.vue'
+import type { DropdownItem, DropdownOption } from '@/components/common/AppDropdown.vue'
 import type {
   ApiDream,
   ApiUser,
@@ -247,6 +248,7 @@ import { createHighlightedExcerpt } from '@/utils/highlightText'
 
 const oracleStore = useOracleStore()
 const localeStore = useLocaleStore()
+const settingsStore = useSettingsStore()
 const { t } = useI18n({ useScope: 'global' })
 
 async function retryAnalysis(dreamId: string) {
@@ -262,8 +264,8 @@ async function retryAnalysis(dreamId: string) {
       
       oracleStore.startTracking(data.data)
     }
-  } catch (err) {
-    console.error('Failed to retry analysis:', err)
+  } catch {
+    settingsStore.showToast(t('home.oracleFailed'), 'error')
   }
 }
 
@@ -354,8 +356,8 @@ const moodLabel = computed(() =>
 
 // ── 3-dot menu ───────────────────────────────────────────────────────────────
 
-const menuOptions = computed((): DropdownOption[] => {
-  const options: DropdownOption[] = [{
+const menuOptions = computed<DropdownItem[]>(() => {
+  const options: DropdownItem[] = [{
     label: t('home.editPost'),
     value: 'edit',
     disabled: props.dream.ai_status === 'pending',
@@ -387,7 +389,7 @@ const menuOptions = computed((): DropdownOption[] => {
   }
 
   options.push(
-    { divider: true } as any,
+    { divider: true },
   {
     label:  t('home.delete'),
     value:  'delete',

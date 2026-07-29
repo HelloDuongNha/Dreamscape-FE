@@ -12,9 +12,18 @@ import {
   useOracleRunStore,
   type BackgroundOracleRun,
 } from '@/store/useOracleRunStore'
+import { getApiErrorDataCode } from '@/utils/apiError'
 
 const ACTIVE_THREAD_STORAGE_KEY = 'oracle_active_thread_id'
+const PROMPT_QUEUE_STORAGE_KEY = 'oracle_prompt_queue_v1'
 const AUTH_USER_STORAGE_KEY = 'ds_user'
+
+export interface QueuedOraclePrompt {
+  id: string
+  threadId: string | null
+  content: string
+  createdAt: number
+}
 
 function accountStorageKey(key: string, userId: string | null): string {
   return userId ? `${key}:${userId}` : key
@@ -25,6 +34,23 @@ function storedAccountId(): string | null {
     return JSON.parse(localStorage.getItem(AUTH_USER_STORAGE_KEY) || 'null')?._id || null
   } catch {
     return null
+  }
+}
+
+function restorePromptQueue(userId: string | null): QueuedOraclePrompt[] {
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(accountStorageKey(PROMPT_QUEUE_STORAGE_KEY, userId)) || '[]',
+    )
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is QueuedOraclePrompt =>
+      typeof item?.id === 'string'
+      && (typeof item?.threadId === 'string' || item?.threadId === null)
+      && typeof item?.content === 'string'
+      && item.content.trim().length > 0
+      && Number.isFinite(item?.createdAt))
+  } catch {
+    return []
   }
 }
 
@@ -53,6 +79,7 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
   const { backgroundRun, completedRun } = storeToRefs(runStore)
   const sessionUserId = ref<string | null>(storedAccountId())
   const threads = ref<OracleThreadItem[]>([])
+  const promptQueue = ref<QueuedOraclePrompt[]>(restorePromptQueue(sessionUserId.value))
   const activeThreadId = ref<string | null>(
     localStorage.getItem(accountStorageKey(ACTIVE_THREAD_STORAGE_KEY, sessionUserId.value)),
   )
@@ -69,6 +96,53 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
     () => threads.value.find((thread) => thread.id === activeThreadId.value) ?? null,
   )
 
+  function persistPromptQueue() {
+    const key = accountStorageKey(PROMPT_QUEUE_STORAGE_KEY, sessionUserId.value)
+    if (promptQueue.value.length) localStorage.setItem(key, JSON.stringify(promptQueue.value))
+    else localStorage.removeItem(key)
+  }
+
+  function enqueuePrompt(threadId: string | null, content: string): QueuedOraclePrompt | null {
+    const normalized = content.trim()
+    if (!normalized) return null
+    const prompt = {
+      id: crypto.randomUUID(),
+      threadId,
+      content: normalized,
+      createdAt: Date.now(),
+    }
+    promptQueue.value.push(prompt)
+    persistPromptQueue()
+    return prompt
+  }
+
+  function updateQueuedPrompt(id: string, content: string) {
+    const prompt = promptQueue.value.find((item) => item.id === id)
+    const normalized = content.trim()
+    if (!prompt || !normalized) return
+    prompt.content = normalized
+    persistPromptQueue()
+  }
+
+  function removeQueuedPrompt(id: string) {
+    promptQueue.value = promptQueue.value.filter((item) => item.id !== id)
+    persistPromptQueue()
+  }
+
+  function assignUnscopedPrompts(threadId: string) {
+    let changed = false
+    promptQueue.value.forEach((item) => {
+      if (item.threadId !== null) return
+      item.threadId = threadId
+      changed = true
+    })
+    if (changed) persistPromptQueue()
+  }
+
+  function promptsForThread(threadId: string | null): QueuedOraclePrompt[] {
+    return promptQueue.value.filter((item) => item.threadId === threadId)
+  }
+
   function replaceThread(dto: OracleThreadDto) {
     const item = toThreadItem(dto)
     const index = threads.value.findIndex((thread) => thread.id === item.id)
@@ -80,8 +154,8 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
     })
   }
 
-  function captureError(error: any): never {
-    errorCode.value = error?.response?.data?.code || 'oracle_internal_error'
+  function captureError(error: unknown): never {
+    errorCode.value = getApiErrorDataCode(error) || 'oracle_internal_error'
     throw error
   }
 
@@ -162,6 +236,8 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
     try {
       await deleteOracleThread(threadId)
       threads.value = threads.value.filter((thread) => thread.id !== threadId)
+      promptQueue.value = promptQueue.value.filter((prompt) => prompt.threadId !== threadId)
+      persistPromptQueue()
       if (activeThreadId.value === threadId) selectThread(null)
     } catch (error) {
       captureError(error)
@@ -209,6 +285,7 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
     isLoading.value = false
     isMutating.value = false
     citationChange.value = null
+    promptQueue.value = []
   }
 
   function notifyCitationStateChanged(payload: {
@@ -225,6 +302,7 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
   function startAccountSession(userId: string): void {
     resetAccountState()
     sessionUserId.value = userId
+    promptQueue.value = restorePromptQueue(userId)
     activeThreadId.value = localStorage.getItem(accountStorageKey(ACTIVE_THREAD_STORAGE_KEY, userId))
     runStore.startAccountSession(userId)
   }
@@ -243,6 +321,7 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
     isMutating,
     errorCode,
     citationChange,
+    promptQueue,
     backgroundRun,
     completedRun,
     loadThreads,
@@ -253,6 +332,11 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
     selectThread,
     trackRun,
     completeRun,
+    enqueuePrompt,
+    updateQueuedPrompt,
+    removeQueuedPrompt,
+    assignUnscopedPrompts,
+    promptsForThread,
     notifyCitationStateChanged,
     startAccountSession,
     endAccountSession,

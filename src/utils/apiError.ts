@@ -18,6 +18,22 @@ export function getApiErrorCode(error: unknown): string {
   return typeof code === 'string' ? code : ''
 }
 
+export function getApiErrorDataCode(error: unknown): string {
+  return getApiErrorDataString(error, 'code')
+}
+
+export function getApiErrorDataString(error: unknown, property: string): string {
+  const response = readObjectProperty(error, 'response')
+  const data = readObjectProperty(response, 'data')
+  const value = readObjectProperty(data, property)
+  return typeof value === 'string' ? value : ''
+}
+
+export function isAbortError(error: unknown): boolean {
+  const name = readObjectProperty(error, 'name')
+  return name === 'AbortError' || getApiErrorCode(error) === 'ERR_CANCELED'
+}
+
 function readResponseMessage(error: unknown): string {
   const response = readObjectProperty(error, 'response')
   const data = readObjectProperty(response, 'data')

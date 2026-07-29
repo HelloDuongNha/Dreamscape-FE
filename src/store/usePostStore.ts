@@ -2,6 +2,7 @@ import { defineStore }   from 'pinia'
 import { ref, computed }  from 'vue'
 import apiClient          from '@/api/client'
 import { useDreamStore }  from '@/store/useDreamStore'
+import { useSettingsStore } from '@/store/useSettingsStore'
 import type { ApiComment, CommentListResponse, ApiDream } from '@/api/types'
 
 export const usePostStore = defineStore('post', () => {
@@ -63,6 +64,7 @@ export const usePostStore = defineStore('post', () => {
       mergeDreamSnapshot(dreamRes.data.data, existingDream)
     } catch (err) {
       console.error('Failed to open post:', err)
+      useSettingsStore().showToastKey('home.postLoadError', undefined, 'error')
     } finally {
       isLoadingComments.value = false
     }
