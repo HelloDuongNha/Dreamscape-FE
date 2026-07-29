@@ -38,6 +38,8 @@ export interface OracleTurnDto {
     percent: number
     provider?: string
     modelName?: string
+    includedMessages?: number
+    omittedMessages?: number
   }
   runTiming?: {
     startedAt: string

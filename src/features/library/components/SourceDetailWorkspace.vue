@@ -3765,7 +3765,14 @@ async function handleModerationApprove() {
     if (res.success) {
       settingsStore.showToast(t('library.readerLocal.approveSuccess'), 'success')
       extractionStore.trackApprovalResult(res, normalizedModerationTitle.value)
-      router.push(props.backUrl)
+      const approvedSourceId = String(
+        res.data?.academicSource?._id || res.data?.academicSource?.id || '',
+      ).trim()
+      if (!approvedSourceId) {
+        settingsStore.showToast(t('library.readerLocal.approveFailed'), 'error')
+        return
+      }
+      await router.replace(`/library/sources/${approvedSourceId}`)
     } else {
       settingsStore.showToast(res.message || t('library.readerLocal.approveFailed'), 'error')
     }

@@ -25,6 +25,7 @@
       :suggested-prompts="latestSuggestions"
       :context-usage="latestContextUsage"
       :context-message-count="activeMessages.length"
+      :queued-prompts="activeQueuedPrompts"
       :run-estimate="activeThread ? {
         expectedMinMs: activeThread.activeRunExpectedMinMs,
         expectedMaxMs: activeThread.activeRunExpectedMaxMs,
@@ -35,6 +36,9 @@
       @open-citation="handleOpenCitation"
       @edit-message="handleEditMessage"
       @select-branch="handleSelectBranch"
+      @edit-queued-prompt="handleEditQueuedPrompt"
+      @remove-queued-prompt="handleRemoveQueuedPrompt"
+      @queue-editing-change="handleQueueEditingChange"
     />
 
     <OracleCitationModal
@@ -84,6 +88,7 @@ import {
 import type { OracleMode, OracleShellMessage } from './oracleShell.types'
 import { materializeOracleBranch } from './services/oracleBranchPresentation.service'
 import { applyOracleStreamEvent } from './services/oracleStreamPresentation.service'
+import { createOracleSmoothPresenter } from './services/oracleSmoothPresenter.service'
 
 const { t } = useI18n()
 const oracleStore = useOracleChatStore()
@@ -99,6 +104,7 @@ const {
   isMutating,
   backgroundRun,
   citationChange,
+  promptQueue,
 } = storeToRefs(oracleStore)
 const isSidebarOpen = ref(false)
 const chatShell = ref<InstanceType<typeof OracleChatShell> | null>(null)
@@ -113,10 +119,18 @@ const selectedCitation = ref<OracleCitationDto | null>(null)
 const selectedCitationMessageId = ref('')
 const pendingDeleteThreadId = ref<string | null>(null)
 const isSending = ref(false)
+const isQueueEditorOpen = ref(false)
+const dispatchingQueueId = ref<string | null>(null)
 let streamController: AbortController | null = null
 let currentRunId: string | null = null
 let isLeavingView = false
 let routeSyncReady = false
+const smoothPresenter = createOracleSmoothPresenter((targetId) =>
+  activeMessages.value.find((message) => message.id === targetId))
+
+const activeQueuedPrompts = computed(() =>
+  promptQueue.value.filter((prompt) =>
+    prompt.threadId === activeThreadId.value && prompt.id !== dispatchingQueueId.value))
 
 const latestSuggestions = computed(() => {
   const assistant = [...activeMessages.value].reverse().find((message) => message.role === 'assistant')
@@ -136,8 +150,21 @@ const latestContextUsage = computed(() => (
   }
 ))
 
+function presentStreamEvent(event: Parameters<typeof applyOracleStreamEvent>[0]['event'], target: OracleShellMessage) {
+  applyOracleStreamEvent({
+    event,
+    target,
+    enqueueText: (text) => smoothPresenter.enqueue(target.id, text),
+    releaseText: smoothPresenter.release,
+    clearText: smoothPresenter.clear,
+    responseUnavailable: t('oracle.responseUnavailable'),
+    responseCancelled: t('oracle.responseCancelled'),
+  })
+}
+
 async function handleNewThread() {
   streamController?.abort()
+  smoothPresenter.clear()
   activeMode.value = 'chat'
   oracleStore.selectThread(null)
   await router.replace({ path: '/oracle', query: {} })
@@ -183,6 +210,7 @@ async function loadThreadMessages(id: string, preferredLeafId?: string) {
 
 async function handleSelectThread(id: string, updateRoute = true) {
   streamController?.abort()
+  smoothPresenter.clear()
   oracleStore.selectThread(id)
   if (updateRoute) await router.replace({ path: '/oracle', query: { thread: id } })
   selectedBranchLeafId.value = null
@@ -203,6 +231,8 @@ async function handleSelectThread(id: string, updateRoute = true) {
         thread?.activeRunStage || tracked?.stage,
         thread?.activeRunStageStartedAt || tracked?.stageStartedAt,
       )
+    } else {
+      scheduleQueuedPrompt(id)
     }
   } catch (error: unknown) {
     if (!isLeavingView && !isAbortError(error)) {
@@ -249,9 +279,18 @@ async function confirmDeleteThread() {
   }
 }
 
-async function handleSend(content: string) {
+function handleSend(content: string) {
+  if (isSending.value) {
+    oracleStore.enqueuePrompt(activeThreadId.value, content)
+    return
+  }
+  void sendOracleContent(content)
+}
+
+async function sendOracleContent(content: string, queuedPromptId?: string) {
   if (isSending.value) return
   isSending.value = true
+  dispatchingQueueId.value = queuedPromptId || null
   let threadId = activeThreadId.value
   let createdForThisMessage = false
   let runPersisted = false
@@ -260,6 +299,7 @@ async function handleSend(content: string) {
       threadId = await oracleStore.addThread(t('oracle.untitledConversation'), activeMode.value)
       if (!threadId) throw new Error('oracle_thread_create_failed')
       createdForThisMessage = true
+      oracleStore.assignUnscopedPrompts(threadId)
     }
     // Resolve the real persisted parent before adding the optimistic assistant.
     // A local placeholder ID must never be sent as a backend turn ID.
@@ -286,6 +326,7 @@ async function handleSend(content: string) {
     const clientRequestId = `oracle_${crypto.randomUUID()}`
     const run = await postOracleTurn(threadId, content, clientRequestId, parentTurnId)
     runPersisted = true
+    if (queuedPromptId) oracleStore.removeQueuedPrompt(queuedPromptId)
     currentRunId = run.runId
     oracleStore.trackRun(threadId, run.runId, { assistantTurnId: run.assistantTurnId })
     await oracleStore.loadThreads()
@@ -299,13 +340,9 @@ async function handleSend(content: string) {
     await streamOracleRun(run.runId, (event) => {
       const target = activeMessages.value.find((message) => message.id === run.assistantTurnId)
       if (!target) return
-      applyOracleStreamEvent({
-        event,
-        target,
-        responseUnavailable: t('oracle.responseUnavailable'),
-        responseCancelled: t('oracle.responseCancelled'),
-      })
+      presentStreamEvent(event, target)
     }, streamController.signal)
+    await smoothPresenter.waitForDrain()
     const completedTarget = activeMessages.value.find((message) => message.id === run.assistantTurnId)
     if (completedTarget?.runState === 'responding') completedTarget.runState = 'completed'
     oracleStore.completeRun(threadId)
@@ -322,7 +359,35 @@ async function handleSend(content: string) {
   } finally {
     currentRunId = null
     isSending.value = false
+    dispatchingQueueId.value = null
+    scheduleQueuedPrompt(threadId)
   }
+}
+
+function scheduleQueuedPrompt(threadId: string | null) {
+  window.setTimeout(() => {
+    if (
+      isSending.value
+      || isQueueEditorOpen.value
+      || !threadId
+      || activeThreadId.value !== threadId
+    ) return
+    const nextPrompt = oracleStore.promptsForThread(threadId)[0]
+    if (nextPrompt) void sendOracleContent(nextPrompt.content, nextPrompt.id)
+  }, 0)
+}
+
+function handleEditQueuedPrompt(id: string, content: string) {
+  oracleStore.updateQueuedPrompt(id, content)
+}
+
+function handleRemoveQueuedPrompt(id: string) {
+  oracleStore.removeQueuedPrompt(id)
+}
+
+function handleQueueEditingChange(editing: boolean) {
+  isQueueEditorOpen.value = editing
+  if (!editing) scheduleQueuedPrompt(activeThreadId.value)
 }
 
 async function handleEditMessage(message: OracleShellMessage, content: string) {
@@ -366,13 +431,9 @@ async function handleEditMessage(message: OracleShellMessage, content: string) {
     await streamOracleRun(run.runId, (event) => {
       const target = activeMessages.value.find((item) => item.id === run.assistantTurnId)
       if (!target) return
-      applyOracleStreamEvent({
-        event,
-        target,
-        responseUnavailable: t('oracle.responseUnavailable'),
-        responseCancelled: t('oracle.responseCancelled'),
-      })
+      presentStreamEvent(event, target)
     }, streamController.signal)
+    await smoothPresenter.waitForDrain()
     const completed = activeMessages.value.find((item) => item.id === run.assistantTurnId)
     if (completed?.runState === 'responding') completed.runState = 'completed'
     oracleStore.completeRun(threadId)
@@ -384,6 +445,7 @@ async function handleEditMessage(message: OracleShellMessage, content: string) {
   } finally {
     currentRunId = null
     isSending.value = false
+    scheduleQueuedPrompt(threadId)
   }
 }
 
@@ -434,19 +496,16 @@ async function resumeActiveRun(
   streamController = new AbortController()
   try {
     await streamOracleRun(runId, (event) => {
-      applyOracleStreamEvent({
-        event,
-        target,
-        responseUnavailable: t('oracle.responseUnavailable'),
-        responseCancelled: t('oracle.responseCancelled'),
-      })
+      presentStreamEvent(event, target)
     }, streamController.signal)
+    await smoothPresenter.waitForDrain()
     if (target.runState === 'responding') target.runState = 'completed'
     oracleStore.completeRun(threadId)
     await Promise.all([oracleStore.loadThreads(), loadThreadMessages(threadId)])
   } finally {
     isSending.value = false
     currentRunId = null
+    scheduleQueuedPrompt(threadId)
   }
 }
 
@@ -478,6 +537,7 @@ async function handleCancel() {
   if (!currentRunId) return
   const runId = currentRunId
   streamController?.abort()
+  smoothPresenter.clear(true)
   const pending = [...activeMessages.value].reverse().find(
     (message) => message.role === 'assistant'
       && ['thinking', 'preparing', 'responding'].includes(message.runState || ''),
@@ -501,6 +561,18 @@ watch(activeThread, (thread) => {
   if (thread) activeMode.value = thread.mode
 })
 
+watch(
+  [
+    isSending,
+    activeThreadId,
+    isQueueEditorOpen,
+    () => activeQueuedPrompts.value.length,
+  ],
+  ([sending, threadId, editing, queueLength]) => {
+    if (!sending && !editing && threadId && queueLength) scheduleQueuedPrompt(threadId)
+  },
+)
+
 watch(() => citationChange.value?.revision, async () => {
   const threadId = activeThreadId.value
   const change = citationChange.value
@@ -518,6 +590,7 @@ watch(
     if (threadId === activeThreadId.value) return
     if (!threadId) {
       streamController?.abort()
+      smoothPresenter.clear()
       oracleStore.selectThread(null)
       activeMessages.value = []
       allThreadTurns.value = []
@@ -552,6 +625,8 @@ onMounted(async () => {
           thread?.activeRunStage || tracked?.stage,
           thread?.activeRunStageStartedAt || tracked?.stageStartedAt,
         )
+      } else {
+        scheduleQueuedPrompt(requestedThreadId)
       }
     }
   } catch (error: unknown) {
@@ -566,6 +641,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   isLeavingView = true
   streamController?.abort()
+  smoothPresenter.clear()
 })
 </script>
 

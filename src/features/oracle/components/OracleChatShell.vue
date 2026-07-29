@@ -141,6 +141,12 @@
           ×
         </button>
       </div>
+      <OraclePromptQueue
+        :items="queuedPrompts"
+        @edit="(id, content) => $emit('edit-queued-prompt', id, content)"
+        @remove="(id) => $emit('remove-queued-prompt', id)"
+        @editing-change="(editing) => $emit('queue-editing-change', editing)"
+      />
       <OracleComposer
         ref="composer"
         :is-sending="isSending"
@@ -157,10 +163,12 @@
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import OracleComposer from './OracleComposer.vue'
+import OraclePromptQueue from './OraclePromptQueue.vue'
 import OracleMessageContent from './OracleMessageContent.vue'
 import AppCopyButton from '@/components/common/AppCopyButton.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import type { OracleShellMessage } from '../oracleShell.types'
+import type { QueuedOraclePrompt } from '@/store/useOracleChatStore'
 
 const props = withDefaults(
   defineProps<{
@@ -172,6 +180,7 @@ const props = withDefaults(
     contextUsage?: OracleShellMessage['contextUsage']
     contextMessageCount?: number
     runEstimate?: { expectedMinMs?: number | null; expectedMaxMs?: number | null }
+    queuedPrompts?: QueuedOraclePrompt[]
   }>(),
   {
     messages: () => [],
@@ -182,6 +191,7 @@ const props = withDefaults(
     contextUsage: undefined,
     contextMessageCount: 0,
     runEstimate: undefined,
+    queuedPrompts: () => [],
   }
 )
 
@@ -192,6 +202,9 @@ const emit = defineEmits<{
   (e: 'open-citation', message: OracleShellMessage, index: number): void
   (e: 'edit-message', message: OracleShellMessage, content: string): void
   (e: 'select-branch', leafId: string): void
+  (e: 'edit-queued-prompt', id: string, content: string): void
+  (e: 'remove-queued-prompt', id: string): void
+  (e: 'queue-editing-change', editing: boolean): void
 }>()
 
 const { t } = useI18n()

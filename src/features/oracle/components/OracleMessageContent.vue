@@ -6,6 +6,7 @@
           <button v-if="part.citationIndex" class="oracle-content__citation" @click="$emit('open-citation', part.citationIndex)">[{{ part.citationIndex }}]</button>
           <span v-else-if="part.unsupported" class="oracle-content__unsupported" :title="t('oracle.unsupportedClaimHelp')">[?]</span>
           <strong v-else-if="part.strong">{{ part.text }}</strong>
+          <em v-else-if="part.emphasis">{{ part.text }}</em>
           <template v-else>{{ part.text }}</template>
         </template>
       </h3>
@@ -15,6 +16,7 @@
             <button v-if="part.citationIndex" class="oracle-content__citation" @click="$emit('open-citation', part.citationIndex)">[{{ part.citationIndex }}]</button>
             <span v-else-if="part.unsupported" class="oracle-content__unsupported" :title="t('oracle.unsupportedClaimHelp')">[?]</span>
             <strong v-else-if="part.strong">{{ part.text }}</strong>
+            <em v-else-if="part.emphasis">{{ part.text }}</em>
             <template v-else>{{ part.text }}</template>
           </template>
         </li>
@@ -25,6 +27,7 @@
             <button v-if="part.citationIndex" class="oracle-content__citation" @click="$emit('open-citation', part.citationIndex)">[{{ part.citationIndex }}]</button>
             <span v-else-if="part.unsupported" class="oracle-content__unsupported" :title="t('oracle.unsupportedClaimHelp')">[?]</span>
             <strong v-else-if="part.strong">{{ part.text }}</strong>
+            <em v-else-if="part.emphasis">{{ part.text }}</em>
             <template v-else>{{ part.text }}</template>
           </template>
         </li>
@@ -35,6 +38,7 @@
           <button v-if="part.citationIndex" class="oracle-content__citation" @click="$emit('open-citation', part.citationIndex)">[{{ part.citationIndex }}]</button>
           <span v-else-if="part.unsupported" class="oracle-content__unsupported" :title="t('oracle.unsupportedClaimHelp')">[?]</span>
           <strong v-else-if="part.strong">{{ part.text }}</strong>
+          <em v-else-if="part.emphasis">{{ part.text }}</em>
           <template v-else>{{ part.text }}</template>
         </template>
       </p>

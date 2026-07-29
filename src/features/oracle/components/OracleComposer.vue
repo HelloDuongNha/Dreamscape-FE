@@ -9,7 +9,6 @@
         :placeholder="t('oracle.composerPlaceholder')"
         :aria-label="t('oracle.composerPlaceholder')"
         rows="1"
-        :disabled="isSending"
         @compositionstart="isComposing = true"
         @compositionend="isComposing = false"
         @keydown.enter.exact="handleEnter"
@@ -39,7 +38,10 @@
               <strong>{{ t('oracle.contextDetails') }}</strong>
               <span>{{ t('oracle.contextModel') }}: {{ contextUsage.modelName || t('oracle.contextEstimating') }}</span>
               <span>{{ t('oracle.contextProvider') }}: {{ contextUsage.provider || t('oracle.contextEstimating') }}</span>
-              <span>{{ t('oracle.contextMessages') }}: {{ contextMessageCount }}</span>
+              <span>{{ t('oracle.contextMessages') }}: {{ contextUsage.includedMessages ?? contextMessageCount }}</span>
+              <span v-if="contextUsage.omittedMessages">
+                {{ t('oracle.contextCompacted', { count: contextUsage.omittedMessages }) }}
+              </span>
               <span>{{ t('oracle.contextUsed') }}: {{ contextUsage.usedTokens.toLocaleString() }} token</span>
               <span>{{ t('oracle.contextRemaining') }}: {{ Math.max(0, contextUsage.maxTokens - contextUsage.usedTokens).toLocaleString() }} token</span>
               <span>{{ t('oracle.contextCapacity') }}: {{ contextUsage.maxTokens.toLocaleString() }} token</span>
@@ -51,11 +53,11 @@
             size="sm"
             :disabled="!inputContent.trim() && !isSending"
             class="oracle-composer__send-btn"
-            :aria-label="isSending ? t('oracle.stop') : t('oracle.send')"
-            :title="isSending ? t('oracle.stop') : t('oracle.send')"
-            @click="isSending ? $emit('cancel') : submit()"
+            :aria-label="shouldStop ? t('oracle.stop') : isSending ? t('oracle.addToQueue') : t('oracle.send')"
+            :title="shouldStop ? t('oracle.stop') : isSending ? t('oracle.addToQueue') : t('oracle.send')"
+            @click="shouldStop ? $emit('cancel') : submit()"
           >
-            <svg v-if="!isSending" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg v-if="!shouldStop" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 19V5m-6 6 6-6 6 6" />
             </svg>
             <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -69,7 +71,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/common/AppButton.vue'
 
@@ -82,6 +84,8 @@ const props = withDefaults(
       percent: number
       provider?: string
       modelName?: string
+      includedMessages?: number
+      omittedMessages?: number
     }
     contextMessageCount?: number
   }>(),
@@ -101,11 +105,12 @@ const { t } = useI18n()
 const inputContent = ref('')
 const textarea = ref<HTMLTextAreaElement | null>(null)
 const isComposing = ref(false)
+const shouldStop = computed(() => props.isSending && !inputContent.value.trim())
 
 async function submit() {
   await nextTick()
   const content = inputContent.value.trim()
-  if (!content || props.isSending) return
+  if (!content) return
   emit('send', content)
   inputContent.value = ''
 }

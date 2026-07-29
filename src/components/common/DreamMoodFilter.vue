@@ -60,8 +60,10 @@ const { t } = useI18n({ useScope: 'global' })
 <style scoped>
 .mood-filter {
   display: flex;
+  width: 100%;
   min-height: 38px;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-3);
   padding: 0 0 var(--space-3);
   color: var(--color-text-muted);
@@ -125,7 +127,10 @@ const { t } = useI18n({ useScope: 'global' })
     flex-wrap: wrap;
     gap: 8px;
   }
-  .mood-filter__label { width: 100%; }
+  .mood-filter__label {
+    width: 100%;
+    text-align: right;
+  }
   .mood-filter__swatches { gap: 10px; }
   .mood-filter__swatch {
     width: 32px;

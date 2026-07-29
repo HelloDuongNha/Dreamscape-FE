@@ -62,6 +62,8 @@ export interface OracleShellMessage {
     percent: number;
     provider?: string;
     modelName?: string;
+    includedMessages?: number;
+    omittedMessages?: number;
   };
   parentTurnId?: string;
   branchRootTurnId?: string;
