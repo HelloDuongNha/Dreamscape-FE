@@ -298,5 +298,50 @@ watch(lookupValue, () => {
 .progress-bar-fill { height: 100%; background: var(--color-primary); border-radius: inherit; }
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity .18s ease; }
 .modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
-@media (max-width: 600px) { .academic-contribution-modal { width: 100%; } .preview-row { grid-template-columns: 1fr; gap: 2px; } }
+@media (max-width: 600px) {
+  .academic-contribution-overlay {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .academic-contribution-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    padding-top: var(--safe-area-top);
+    padding-bottom: var(--safe-area-bottom);
+  }
+
+  .academic-contribution-modal__header {
+    min-height: 58px;
+    padding: 10px 14px;
+  }
+
+  .academic-contribution-modal__body {
+    max-height: calc(100dvh - 58px - var(--safe-area-top) - var(--safe-area-bottom));
+    padding: 16px 14px;
+  }
+
+  .modal-back-btn,
+  .modal-close-btn {
+    min-width: 42px;
+    min-height: 42px;
+  }
+
+  .file-dropzone {
+    min-height: 150px;
+    padding: 24px 14px;
+  }
+
+  .preview-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .wizard-actions--split {
+    flex-wrap: wrap;
+  }
+}
 </style>

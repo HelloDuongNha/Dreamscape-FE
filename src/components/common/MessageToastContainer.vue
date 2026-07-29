@@ -1,5 +1,9 @@
 <template>
-  <div class="message-toast-container" role="log" aria-live="polite">
+  <div
+    :class="['message-toast-container', { 'message-toast-container--home': isHomeRoute }]"
+    role="log"
+    aria-live="polite"
+  >
     <TransitionGroup
       name="pinned-task-list"
       tag="div"
@@ -116,6 +120,7 @@ const continuationStore = useDreamContinuationStore()
 const notificationStore = useNotificationStore()
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
+const isHomeRoute = computed(() => router.currentRoute.value.path === '/')
 const oracleClock = ref(Date.now())
 let oracleClockTimer: ReturnType<typeof setInterval> | null = null
 
@@ -755,5 +760,28 @@ async function handleToastClick(conversationId: string) {
 .card-pile-leave-to {
   opacity: 0;
   transform: translate3d(calc(100% + 12px), 0, 0) !important;
+}
+
+@media (max-width: 767px) {
+  .message-toast-container {
+    top: calc(var(--header-height) + 8px);
+    right: max(8px, var(--safe-area-right));
+    left: max(8px, var(--safe-area-left));
+    width: auto;
+    max-height: calc(100dvh - var(--header-height) - var(--mobile-nav-height) - 16px);
+  }
+
+  .message-toast-container--home {
+    top: calc(var(--header-height) + 56px);
+    max-height: calc(100dvh - var(--header-height) - var(--mobile-nav-height) - 64px);
+  }
+
+  .pinned-task-lane {
+    margin-top: 0;
+  }
+
+  .stack-list-wrapper {
+    gap: 12px;
+  }
 }
 </style>

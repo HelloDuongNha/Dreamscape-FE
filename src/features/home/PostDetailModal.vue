@@ -1999,6 +1999,8 @@ onBeforeUnmount(() => {
     height: 100dvh;
     max-height: 100dvh;
     border-radius: 0;
+    padding-top: var(--safe-area-top);
+    padding-bottom: var(--safe-area-bottom);
   }
   .modal-header,
   .modal-content-block,
@@ -2012,6 +2014,30 @@ onBeforeUnmount(() => {
   }
   .modal-comment__menu {
     margin-left: auto;
+  }
+
+  .modal-header {
+    min-height: 58px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .modal-content-block,
+  .modal-comments-section {
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .modal-input-bar {
+    gap: 8px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .modal-close-btn,
+  .modal-menu-btn {
+    width: 40px;
+    height: 40px;
   }
 }
 

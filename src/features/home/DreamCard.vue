@@ -753,4 +753,63 @@ async function confirmDelete() {
 /* Liked state — solid red, no blur/gradient */
 .dream-card__action--liked       { color: #EF4444; }
 .dream-card__action--liked:hover { background: rgba(239, 68, 68, 0.08); color: #EF4444; }
+
+@media (max-width: 600px) {
+  .dream-card {
+    border-radius: 14px;
+  }
+
+  .dream-card__header {
+    gap: 10px;
+    padding: 13px 13px 0;
+  }
+
+  .dream-card__body {
+    padding: 11px 13px;
+  }
+
+  .dream-card__search-comments,
+  .dream-card__oracle-wrap {
+    margin-right: 13px;
+    margin-left: 13px;
+  }
+
+  .dream-card__name-row {
+    gap: 5px 8px;
+  }
+
+  .dream-card__name {
+    max-width: min(44vw, 180px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dream-card__badges {
+    gap: 5px;
+  }
+
+  .dream-card__footer {
+    justify-content: space-around;
+    padding: 7px 8px 9px;
+  }
+
+  .dream-card__action {
+    min-width: 44px;
+    min-height: 40px;
+    justify-content: center;
+    padding: 7px 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .dream-card__username {
+    display: none;
+  }
+
+  .dream-card__action {
+    gap: 5px;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+}
 </style>

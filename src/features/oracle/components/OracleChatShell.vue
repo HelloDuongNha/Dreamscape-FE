@@ -801,5 +801,40 @@ defineExpose({ focusComposer })
   .oracle-chat-shell__sidebar-toggle {
     display: flex;
   }
+
+  .oracle-chat-shell__thread-header {
+    min-height: 48px;
+    padding: 0 54px;
+  }
+
+  .oracle-chat-shell__thread-title {
+    max-width: 100%;
+  }
+
+  .oracle-chat-shell__body {
+    padding: 18px 12px 16px;
+  }
+
+  .oracle-timeline {
+    gap: 14px;
+  }
+
+  .oracle-msg__bubble {
+    max-width: 92%;
+    padding: 10px 12px;
+    font-size: 15px;
+  }
+
+  .oracle-chat-shell__footer {
+    padding: 0 10px 10px;
+  }
+
+  .oracle-welcome__title {
+    font-size: 24px;
+  }
+
+  .oracle-welcome__desc {
+    font-size: var(--font-size-base);
+  }
 }
 </style>

@@ -6,7 +6,7 @@
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
       </svg>
     </span>
-    <p class="chat-empty__text">Select a conversation to start chatting</p>
+    <p class="chat-empty__text">{{ t('messages.selectConversation') }}</p>
   </div>
 
   <!-- Active chat window -->
@@ -14,6 +14,16 @@
 
     <!-- ── Header ── -->
     <header class="chat-header">
+      <button
+        type="button"
+        class="chat-header__back"
+        :aria-label="t('messages.backToConversations')"
+        @click="$emit('back')"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m15 18-6-6 6-6"/>
+        </svg>
+      </button>
       <div
         class="chat-header__avatar"
         :style="{ background: partnerAvatarBg }"
@@ -32,7 +42,7 @@
       </div>
 
       <!-- Loading indicator for messages -->
-      <div v-if="chatStore.isLoadingMsgs" class="chat-header__loading" aria-label="Loading messages">
+      <div v-if="chatStore.isLoadingMsgs" class="chat-header__loading" :aria-label="t('messages.loadingMessages')">
         <span class="chat-header__dot" />
         <span class="chat-header__dot" />
         <span class="chat-header__dot" />
@@ -53,12 +63,12 @@
       ref="messageListRef"
       class="chat-messages"
       role="log"
-      aria-label="Message history"
+      :aria-label="t('messages.messageHistory')"
       aria-live="polite"
     >
       <!-- Empty conversation -->
       <div v-if="!chatStore.isLoadingMsgs && !chatStore.activeMessages.length" class="chat-messages__empty">
-        <p>No messages yet. Say hello!</p>
+        <p>{{ t('messages.sayHello') }}</p>
       </div>
 
       <div
@@ -109,13 +119,13 @@
 
     <!-- ── Input area ── -->
     <div class="chat-input-area">
-      <label :for="inputId" class="sr-only">Type a message</label>
+      <label :for="inputId" class="sr-only">{{ t('messages.typeMessage') }}</label>
       <input
         :id="inputId"
         v-model="newMessage"
         type="text"
         class="chat-input"
-        placeholder="Message..."
+        :placeholder="t('messages.messagePlaceholder')"
         autocomplete="off"
         maxlength="2000"
         @compositionstart="isComposing = true"
@@ -126,7 +136,7 @@
         :id="`send-btn-${chatStore.activeConversationId}`"
         class="chat-send-btn"
         :disabled="!newMessage.trim()"
-        aria-label="Send message"
+        :aria-label="t('messages.sendMessage')"
         @click="handleSend"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -147,6 +157,8 @@ import { timeAgo }                 from '@/utils/timeAgo'
 import { useLocaleStore }          from '@/store/useLocaleStore'
 import type { ApiMessage }         from '@/api/types'
 import ConversationActionsMenu     from './ConversationActionsMenu.vue'
+
+defineEmits<{ back: [] }>()
 
 const chatStore     = useChatStore()
 const localeStore   = useLocaleStore()
@@ -324,6 +336,9 @@ function handleToggleMute() {
 .chat-header__info   { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
 .chat-header__name   { font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); }
 .chat-header__presence { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.chat-header__back {
+  display: none;
+}
 
 /* Loading dots in header */
 .chat-header__loading {
@@ -496,5 +511,53 @@ function handleToggleMute() {
   background: var(--color-bg-elevated);
   color: var(--color-text-muted);
   cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .chat-header {
+    min-height: 58px;
+    gap: 9px;
+    padding: 9px 10px;
+  }
+
+  .chat-header__back {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--color-text-primary);
+  }
+
+  .chat-header__back:active {
+    background: var(--color-bg-hover);
+  }
+
+  .chat-messages {
+    gap: 10px;
+    padding: 14px 12px;
+  }
+
+  .chat-bubble-wrap {
+    max-width: 86%;
+  }
+
+  .chat-bubble {
+    padding: 8px 12px;
+    font-size: 15px;
+  }
+
+  .chat-input-area {
+    padding: 9px 10px;
+  }
+
+  .chat-input {
+    min-width: 0;
+    font-size: 16px;
+  }
 }
 </style>

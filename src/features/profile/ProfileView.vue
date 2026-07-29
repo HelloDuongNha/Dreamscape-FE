@@ -616,4 +616,26 @@ watch(() => route.params.id, async () => {
   color: var(--color-text-muted);
   padding: var(--space-4) 0 var(--space-2);
 }
+
+@media (max-width: 640px) {
+  .profile-view {
+    max-width: none;
+    padding-bottom: var(--space-8);
+  }
+
+  .profile-content {
+    padding-top: 10px;
+  }
+
+  .profile-feed {
+    gap: var(--space-3);
+  }
+
+  .profile-private-lock,
+  .profile-empty,
+  .profile-placeholder,
+  .profile-404 {
+    padding: var(--space-10) var(--space-4);
+  }
+}
 </style>

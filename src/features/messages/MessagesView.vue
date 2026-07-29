@@ -12,12 +12,16 @@
 
     <template v-else>
       <ConversationList
+        :class="{ 'messages-view__pane--hidden-mobile': chatStore.activeConversationId }"
         :conversations="chatStore.conversationsWithPartner"
         :active-id="chatStore.activeConversationId"
-        @select="chatStore.openConversation"
-        @open-user="chatStore.openConversationWithUser"
+        @select="handleConversationSelect"
+        @open-user="handleUserSelect"
       />
-      <ChatWindow />
+      <ChatWindow
+        :class="{ 'messages-view__pane--hidden-mobile': !chatStore.activeConversationId }"
+        @back="chatStore.clearActiveConversation"
+      />
     </template>
   </div>
 </template>
@@ -45,6 +49,14 @@ import { useChatStore }   from '@/store/useChatStore'
 
 const route     = useRoute()
 const chatStore = useChatStore()
+
+async function handleConversationSelect(conversationId: string) {
+  await chatStore.openConversation(conversationId)
+}
+
+async function handleUserSelect(userId: string) {
+  await chatStore.openConversationWithUser(userId)
+}
 
 // Support: ?userId=<id> query param (from Profile → Message button)
 // Opens or creates a conversation with that user automatically.
@@ -84,8 +96,26 @@ watch(
 }
 
 @media (max-width: 640px) {
-  .messages-view { flex-direction: column; }
-  .skeleton-conversations { width: 100%; border-right: none; }
+  .messages-view {
+    height: 100%;
+  }
+
+  .messages-view > :deep(.conv-list),
+  .messages-view > :deep(.chat-window),
+  .messages-view > :deep(.chat-empty) {
+    width: 100%;
+    height: 100%;
+    flex: 1 1 100%;
+  }
+
+  .messages-view > :deep(.messages-view__pane--hidden-mobile) {
+    display: none;
+  }
+
+  .skeleton-conversations {
+    width: 100%;
+    border-right: none;
+  }
   .skeleton-chat { display: none; }
 }
 </style>

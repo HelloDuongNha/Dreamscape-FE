@@ -122,4 +122,21 @@
   --header-height:      60px;
   --content-max-width:  620px;    /* Threads-style narrow content column */
   --content-max-wide:   1080px;   /* for wider layouts */
+
+  /* ── Mobile shell geometry ───────────────────────────────────── */
+  --safe-area-top:    env(safe-area-inset-top, 0px);
+  --safe-area-right:  env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left:   env(safe-area-inset-left, 0px);
+  --mobile-header-height:      56px;
+  --mobile-nav-content-height: 58px;
+  --mobile-nav-height: calc(var(--mobile-nav-content-height) + var(--safe-area-bottom));
+  --mobile-page-padding: clamp(12px, 4vw, 18px);
+  --touch-target-size: 48px;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --header-height: var(--mobile-header-height);
+  }
 }

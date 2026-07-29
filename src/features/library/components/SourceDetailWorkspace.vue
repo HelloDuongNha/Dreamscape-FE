@@ -25,7 +25,7 @@
 
         <!-- Font size controls in left rail -->
         <div v-if="source && source.readableInApp && activeTab === 'smart'" class="left-rail-size-controls">
-          <button class="size-btn" @click="decreaseFontSize" :disabled="fontSize <= 14" :title="t('library.reader.decreaseFont')">A-</button>
+          <button class="size-btn" @click="decreaseFontSize" :disabled="fontSize <= MIN_READER_FONT_SIZE" :title="t('library.reader.decreaseFont')">A-</button>
           <span class="size-val">{{ fontSize }}px</span>
           <button class="size-btn" @click="increaseFontSize" :disabled="fontSize >= 22" :title="t('library.reader.increaseFont')">A+</button>
         </div>
@@ -3143,7 +3143,9 @@ const readerPages = ref<any[]>([])
 const readerIdentity = ref<any>(null)
 const currentPageIndex = ref(0)
 const totalPages = ref(1)
-const fontSize = ref(17)
+const MIN_READER_FONT_SIZE = 10
+const MAX_READER_FONT_SIZE = 22
+const fontSize = ref(getDefaultReaderFontSize())
 const isOcrRepairActive = ref(false)
 const extractionQuality = ref<'high' | 'medium' | 'low'>('low')
 const smartReaderSourceType = ref('')
@@ -3153,11 +3155,16 @@ const layoutQuality = ref('')
 const extractionEngine = ref('')
 
 function increaseFontSize() {
-  if (fontSize.value < 22) fontSize.value += 1
+  if (fontSize.value < MAX_READER_FONT_SIZE) fontSize.value += 1
 }
 
 function decreaseFontSize() {
-  if (fontSize.value > 14) fontSize.value -= 1
+  if (fontSize.value > MIN_READER_FONT_SIZE) fontSize.value -= 1
+}
+
+function getDefaultReaderFontSize(): number {
+  if (typeof window === 'undefined') return 17
+  return window.matchMedia('(max-width: 600px)').matches ? 14 : 17
 }
 
 function extractListMarker(text: string) {
@@ -5010,7 +5017,7 @@ onUnmounted(() => {
 @media (max-width: 992px) {
   .left-rail-size-controls {
     position: fixed;
-    bottom: 24px;
+    bottom: calc(var(--mobile-nav-height) + 12px);
     right: 24px;
     z-index: 100;
   }
@@ -5367,6 +5374,92 @@ onUnmounted(() => {
   .original-loading {
     min-height: 600px;
     height: 650px;
+  }
+}
+
+@media (max-width: 600px) {
+  .source-detail-container {
+    padding: 12px;
+  }
+
+  .source-detail-workspace {
+    gap: 12px;
+  }
+
+  .workspace-left {
+    gap: 8px;
+  }
+
+  .back-link-compact {
+    min-height: 44px;
+    padding: 8px 10px;
+  }
+
+  .left-rail-size-controls {
+    right: max(12px, var(--safe-area-right));
+  }
+
+  .reader-content-card {
+    min-height: 360px;
+  }
+
+  .reader-pagination {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 4px;
+    max-width: 100%;
+  }
+
+  .pagination-btn-placeholder {
+    display: flex;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .pagination-btn-placeholder.text-right {
+    justify-content: flex-start;
+  }
+
+  .pagination-btn-placeholder :deep(.app-btn) {
+    min-height: 32px;
+    max-width: 78px;
+    padding: 5px 8px;
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+
+  .page-selector-container {
+    width: 96px;
+  }
+
+  .page-select-dropdown {
+    min-height: 32px;
+    padding: 5px 24px 5px 8px;
+    font-size: 12px;
+  }
+
+  .page-select-arrow {
+    right: 8px;
+  }
+
+  .attributes-card {
+    padding: 14px;
+  }
+
+  .state-notice {
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .state-actions-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .original-pdf-viewer-shell,
+  .original-loading {
+    min-height: 420px;
+    height: min(620px, calc(100dvh - var(--header-height) - var(--mobile-nav-height) - 40px));
   }
 }
 

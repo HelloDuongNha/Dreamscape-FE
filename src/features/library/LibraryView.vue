@@ -776,7 +776,7 @@ const showModal = ref(false)
 /* Catalog Card list grid */
 .catalog-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: var(--space-5);
   margin-bottom: var(--space-8);
 }
@@ -999,6 +999,46 @@ const showModal = ref(false)
   .library-header-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .library-header-right {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 600px) {
+  .catalog-grid {
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .catalog-card {
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .library-tabs {
+    margin-bottom: 16px;
+    scrollbar-width: none;
+  }
+
+  .library-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .library-tab {
+    min-height: 44px;
+    flex: 0 0 auto;
+  }
+
+  .catalog-pagination {
+    gap: 10px;
+  }
+
+  .catalog-pagination .pagination-btn {
+    min-height: 42px;
+    padding-right: 12px;
+    padding-left: 12px;
   }
 }
 

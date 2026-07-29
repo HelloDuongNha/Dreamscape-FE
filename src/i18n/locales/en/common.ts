@@ -11,6 +11,11 @@ export default {
   searchLabel: 'Search dreams',
   searchPlaceholder: 'Search dreams...',
   clearSearch: 'Clear search',
+  pullToRefresh: {
+    pull: 'Pull down to refresh',
+    release: 'Release to refresh',
+    refreshing: 'Refreshing',
+  },
   pinnedTaskCollapse: 'Tuck notification into the screen edge',
   pinnedTaskExpand: 'Show notification',
   pinnedTaskView: 'View',

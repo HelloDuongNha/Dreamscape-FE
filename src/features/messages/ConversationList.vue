@@ -1,13 +1,8 @@
 <template>
   <aside class="conv-list">
-    <!-- Header -->
-    <div class="conv-list__header">
-      <h2 class="conv-list__title">Messages</h2>
-    </div>
-
     <!-- @username Search -->
     <div class="conv-list__search-wrap">
-      <label :for="searchId" class="sr-only">Search by @username</label>
+      <label :for="searchId" class="sr-only">{{ t('messages.searchByUsername') }}</label>
       <div class="conv-list__search">
         <svg class="conv-list__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -16,7 +11,7 @@
           :id="searchId"
           v-model="searchQuery"
           type="search"
-          placeholder="Search @username..."
+          :placeholder="t('messages.searchUsernamePlaceholder')"
           autocomplete="off"
           spellcheck="false"
           class="conv-list__search-input"
@@ -24,7 +19,7 @@
         <button
           v-if="searchQuery"
           class="conv-list__search-clear"
-          aria-label="Clear search"
+          :aria-label="t('messages.clearSearch')"
           @click="clearSearch"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
@@ -35,7 +30,7 @@
     </div>
 
     <template v-if="searchQuery">
-      <div class="conv-list__search-tabs" role="tablist" aria-label="Message search">
+      <div class="conv-list__search-tabs" role="tablist" :aria-label="t('messages.messageSearch')">
         <button
           class="conv-list__search-tab"
           :class="{ 'conv-list__search-tab--active': activeSearchTab === 'conversations' }"
@@ -43,7 +38,7 @@
           :aria-selected="activeSearchTab === 'conversations'"
           @click="activeSearchTab = 'conversations'"
         >
-          Conversations
+          {{ t('messages.conversations') }}
           <span>{{ searchResults.conversations.length }}</span>
         </button>
         <button
@@ -53,7 +48,7 @@
           :aria-selected="activeSearchTab === 'messages'"
           @click="activeSearchTab = 'messages'"
         >
-          Messages
+          {{ t('messages.messages') }}
           <span>{{ searchResults.messages.length }}</span>
         </button>
       </div>
@@ -68,7 +63,7 @@
         v-else-if="activeSearchTab === 'conversations' && searchResults.conversations.length"
         class="conv-list__search-results"
         role="listbox"
-        aria-label="Conversation search results"
+        :aria-label="t('messages.conversationSearchResults')"
       >
         <li
           v-for="item in searchResults.conversations"
@@ -90,7 +85,7 @@
             <span class="conv-list__user-name">{{ item.user.display_name }}</span>
             <span class="conv-list__user-handle">{{ item.user.username }}</span>
             <span class="conv-list__search-snippet">
-              {{ item.last_message || 'Following · Start a conversation' }}
+              {{ item.last_message || t('messages.followingStartConversation') }}
             </span>
           </div>
         </li>
@@ -100,7 +95,7 @@
         v-else-if="activeSearchTab === 'messages' && searchResults.messages.length"
         class="conv-list__search-results"
         role="listbox"
-        aria-label="Message search results"
+        :aria-label="t('messages.messageSearchResults')"
       >
         <li
           v-for="item in searchResults.messages"
@@ -122,7 +117,7 @@
       </ul>
 
       <p v-else-if="!isSearching" class="conv-list__no-results">
-        No {{ activeSearchTab }} found for "{{ searchQuery }}"
+        {{ t('messages.noSearchResults', { tab: activeSearchTab === 'conversations' ? t('messages.conversations') : t('messages.messages'), query: searchQuery }) }}
       </p>
     </template>
 
@@ -207,7 +202,7 @@
     <!-- Empty state -->
     <div v-if="!searchQuery && !conversations.length" class="conv-list__empty">
       <span aria-hidden="true">◈</span>
-      <p>No conversations yet.<br>Search for someone to start chatting.</p>
+      <p>{{ t('messages.noConversations') }}<br>{{ t('messages.searchToStart') }}</p>
     </div>
 
     <AppConfirm
@@ -372,18 +367,6 @@ async function confirmDelete(): Promise<void> {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-/* Header */
-.conv-list__header {
-  padding: var(--space-4) var(--space-4) 0;
-  flex-shrink: 0;
-}
-.conv-list__title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  letter-spacing: var(--letter-spacing-tight);
 }
 
 /* Search */
@@ -702,5 +685,44 @@ async function confirmDelete(): Promise<void> {
 .conv-list__empty span {
   font-size: 1.5rem;
   opacity: 0.4;
+}
+
+@media (max-width: 640px) {
+  .conv-list {
+    width: 100%;
+    border-right: 0;
+  }
+
+  .conv-list__search-wrap {
+    padding: 10px 12px;
+  }
+
+  .conv-list__search-input {
+    height: 42px;
+    font-size: 16px;
+  }
+
+  .conv-list__item,
+  .conv-list__user-result,
+  .conv-list__message-result {
+    min-height: 68px;
+    padding: 11px 14px;
+  }
+
+  .conv-list__avatar {
+    width: 44px;
+    height: 44px;
+  }
+
+  .conv-list__item-snippet {
+    max-width: min(64vw, 280px);
+  }
+
+  .conv-list__item :deep(.conversation-actions--list) {
+    width: 28px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
 }
 </style>

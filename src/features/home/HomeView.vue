@@ -5,7 +5,6 @@
          ① POST COMPOSER
     ═══════════════════════════════════════════ -->
     <DreamComposer
-      v-if="!isSearchMode"
       v-model:text="composerText"
       v-model:public="isPublic"
       v-model:ai-analysis="aiAnalysisEnabled"
@@ -20,38 +19,48 @@
     <!-- ══════════════════════════════════════════
          ② SEARCH RESULT LABEL
     ═══════════════════════════════════════════ -->
-    <div v-if="isSearchMode" class="search-results-label" aria-live="polite">
-      <span class="search-results-label__count">
-        {{ t('home.resultsCount', searchTab === 'users' ? userSearchResults.length : displayedItems.length) }}
-      </span>
-      <span v-if="dreamStore.searchQuery.trim()" class="search-results-label__query">
-        {{ t('home.resultsFor') }} <span translate="no">“{{ dreamStore.searchQuery }}”</span>
-      </span>
-      <span v-if="dreamStore.searchMood" class="search-results-label__query">
-        · {{ t(`home.moodScale.label.${dreamStore.searchMood}`) }}
-      </span>
+    <div
+      v-if="!isSearchMode || searchTab === 'posts'"
+      class="home-mood-row"
+    >
+      <DreamMoodFilter v-model="dreamStore.searchMood" />
     </div>
 
-    <div v-if="isSearchMode" class="search-tabs" role="tablist" :aria-label="t('home.searchTabsAria')">
-      <button
-        type="button"
-        class="search-tabs__tab"
-        :class="{ 'search-tabs__tab--active': searchTab === 'posts' }"
-        role="tab"
-        :aria-selected="searchTab === 'posts'"
-        @click="searchTab = 'posts'"
-      >{{ t('home.searchPostsTab') }}</button>
-      <button
-        type="button"
-        class="search-tabs__tab"
-        :class="{ 'search-tabs__tab--active': searchTab === 'users' }"
-        role="tab"
-        :aria-selected="searchTab === 'users'"
-        @click="searchTab = 'users'"
-      >{{ t('home.searchUsersTab') }}</button>
-    </div>
+    <div
+      v-if="isSearchMode"
+      class="search-context"
+    >
+      <div class="search-results-label" aria-live="polite">
+        <span class="search-results-label__count">
+          {{ t('home.resultsCount', searchTab === 'users' ? userSearchResults.length : displayedItems.length) }}
+        </span>
+        <span v-if="dreamStore.searchQuery.trim()" class="search-results-label__query">
+          {{ t('home.resultsFor') }} <span translate="no">“{{ dreamStore.searchQuery }}”</span>
+        </span>
+        <span v-if="dreamStore.searchMood" class="search-results-label__query">
+          · {{ t(`home.moodScale.label.${dreamStore.searchMood}`) }}
+        </span>
+      </div>
 
-    <DreamMoodFilter v-if="!isSearchMode || searchTab === 'posts'" v-model="dreamStore.searchMood" />
+      <div class="search-tabs" role="tablist" :aria-label="t('home.searchTabsAria')">
+        <button
+          type="button"
+          class="search-tabs__tab"
+          :class="{ 'search-tabs__tab--active': searchTab === 'posts' }"
+          role="tab"
+          :aria-selected="searchTab === 'posts'"
+          @click="searchTab = 'posts'"
+        >{{ t('home.searchPostsTab') }}</button>
+        <button
+          type="button"
+          class="search-tabs__tab"
+          :class="{ 'search-tabs__tab--active': searchTab === 'users' }"
+          role="tab"
+          :aria-selected="searchTab === 'users'"
+          @click="searchTab = 'users'"
+        >{{ t('home.searchUsersTab') }}</button>
+      </div>
+    </div>
 
     <section
       v-if="isSearchMode && searchTab === 'users'"
@@ -357,6 +366,7 @@ watch(
     }
   }
 )
+
 </script>
 
 <style scoped>
@@ -368,6 +378,10 @@ watch(
   max-width: 680px;
   margin: 0 auto;
   width: 100%;
+}
+
+.search-context {
+  display: block;
 }
 
 /* ══════════════════════════════════════════
@@ -529,6 +543,37 @@ watch(
 
 /* Responsive */
 @media (max-width: 600px) {
-  .home-view { max-width: 100%; }
+  .home-view {
+    max-width: 100%;
+  }
+
+  .home-divider {
+    margin-bottom: 12px;
+  }
+
+  .search-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .search-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .search-tabs__tab {
+    min-height: 44px;
+    flex: 1 0 auto;
+    padding: 10px 16px;
+  }
+
+  .user-search-row {
+    min-height: 64px;
+    padding: 10px 12px;
+  }
+
+  .dream-feed {
+    gap: 12px;
+    padding-bottom: 24px;
+  }
 }
 </style>

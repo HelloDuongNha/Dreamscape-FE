@@ -11,6 +11,11 @@ export default {
   searchLabel: 'Tìm kiếm giấc mơ',
   searchPlaceholder: 'Tìm kiếm giấc mơ...',
   clearSearch: 'Xóa tìm kiếm',
+  pullToRefresh: {
+    pull: 'Kéo xuống để làm mới',
+    release: 'Thả để làm mới',
+    refreshing: 'Đang làm mới',
+  },
   pinnedTaskCollapse: 'Thu thông báo vào cạnh màn hình',
   pinnedTaskExpand: 'Mở lại thông báo',
   pinnedTaskView: 'Xem',

@@ -11,6 +11,9 @@ export default {
   profile: 'Trang cá nhân',
   settings: 'Cài đặt',
   logout: 'Đăng xuất',
+  more: 'Thêm',
+  mobileNav: 'Điều hướng trên điện thoại',
+  adminTools: 'Công cụ quản trị',
   // Sidebar controls
   expandSidebar: 'Mở rộng thanh bên',
   collapseSidebar: 'Thu gọn thanh bên',

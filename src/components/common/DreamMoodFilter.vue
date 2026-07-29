@@ -2,41 +2,47 @@
   <div class="mood-filter" role="group" :aria-label="t('home.searchMoodFilter')">
     <span class="mood-filter__label">{{ t('home.searchMoodFilter') }}</span>
     <div class="mood-filter__swatches">
-      <button
+      <div
         v-for="level in DREAM_MOOD_LEVELS"
         :key="level"
-        type="button"
-        class="mood-filter__swatch"
-        :class="{ 'mood-filter__swatch--selected': modelValue === level }"
-        :style="dreamMoodCssVariables(level)"
-        :aria-label="t(`home.moodScale.label.${level}`)"
-        :aria-pressed="modelValue === level"
-        :title="t(`home.moodScale.label.${level}`)"
-        @click="$emit('update:modelValue', modelValue === level ? null : level)"
+        class="mood-filter__option"
       >
-        <svg
-          v-if="modelValue === level"
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="3"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
+        <button
+          type="button"
+          class="mood-filter__swatch"
+          :class="{ 'mood-filter__swatch--selected': modelValue === level }"
+          :style="dreamMoodCssVariables(level)"
+          :aria-label="t(`home.moodScale.label.${level}`)"
+          :aria-pressed="modelValue === level"
+          :title="t(`home.moodScale.label.${level}`)"
+          @click="$emit('update:modelValue', modelValue === level ? null : level)"
         >
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      </button>
+          <svg
+            v-if="modelValue === level"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </button>
+        <span v-if="modelValue === level" class="mood-filter__selection">
+          {{ t(`home.moodScale.label.${level}`) }}
+        </span>
+      </div>
     </div>
-    <span v-if="modelValue" class="mood-filter__selection">
-      {{ t(`home.moodScale.label.${modelValue}`) }}
-    </span>
     <button
-      v-if="modelValue"
       type="button"
       class="mood-filter__clear"
+      :class="{ 'mood-filter__clear--hidden': !modelValue }"
+      :disabled="!modelValue"
+      :aria-hidden="!modelValue"
       @click="$emit('update:modelValue', null)"
     >
       {{ t('home.clearMoodFilter') }}
@@ -59,25 +65,38 @@ const { t } = useI18n({ useScope: 'global' })
 
 <style scoped>
 .mood-filter {
+  position: relative;
+  box-sizing: border-box;
   display: flex;
+  flex-direction: column;
   width: 100%;
-  min-height: 38px;
-  align-items: center;
+  min-height: 68px;
+  align-items: flex-start;
   justify-content: flex-end;
-  gap: var(--space-3);
+  gap: 4px;
   padding: 0 0 var(--space-3);
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }
 .mood-filter__label {
+  width: 100%;
   flex-shrink: 0;
+  padding-top: 0;
   color: var(--color-text-secondary);
   font-weight: var(--font-weight-medium);
+  text-align: right;
 }
 .mood-filter__swatches {
   display: flex;
-  align-items: center;
+  align-self: flex-end;
+  align-items: flex-start;
   gap: 8px;
+}
+.mood-filter__option {
+  position: relative;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 48px;
 }
 .mood-filter__swatch {
   display: grid;
@@ -102,15 +121,23 @@ const { t } = useI18n({ useScope: 'global' })
   outline-offset: 2px;
 }
 .mood-filter__selection {
-  min-width: 0;
+  position: absolute;
+  z-index: 1;
+  top: 34px;
+  left: 50%;
+  max-width: 110px;
   overflow: hidden;
+  transform: translateX(-50%);
   color: var(--color-text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .mood-filter__clear {
+  position: absolute;
+  top: 19px;
+  right: calc(-52px - var(--space-3));
+  min-width: 52px;
   min-height: 28px;
-  flex-shrink: 0;
   padding: 2px 6px;
   border: 0;
   background: transparent;
@@ -121,20 +148,34 @@ const { t } = useI18n({ useScope: 'global' })
   text-underline-offset: 3px;
 }
 .mood-filter__clear:hover { color: var(--color-text-primary); }
+.mood-filter__clear--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
 
 @media (max-width: 600px) {
   .mood-filter {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
   }
   .mood-filter__label {
     width: 100%;
+    padding-top: 0;
     text-align: right;
   }
   .mood-filter__swatches { gap: 10px; }
+  .mood-filter__option {
+    flex-basis: 32px;
+    width: 32px;
+    height: 52px;
+  }
   .mood-filter__swatch {
     width: 32px;
     height: 32px;
+  }
+  .mood-filter__selection { top: 38px; }
+  .mood-filter__clear {
+    top: 22px;
   }
 }
 </style>

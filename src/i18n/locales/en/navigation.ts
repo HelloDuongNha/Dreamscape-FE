@@ -12,6 +12,9 @@ export default {
   profile: 'Profile',
   settings: 'Settings',
   logout: 'Log out',
+  more: 'More',
+  mobileNav: 'Mobile navigation',
+  adminTools: 'Admin tools',
   // Sidebar controls
   expandSidebar: 'Expand sidebar',
   collapseSidebar: 'Collapse sidebar',

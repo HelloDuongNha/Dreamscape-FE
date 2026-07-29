@@ -1140,9 +1140,99 @@ function shiftMonth(delta: number): void {
     flex-direction: column;
     overflow-y: auto;
     height: auto;
+    gap: 16px;
+    padding-bottom: var(--space-6);
   }
   .calendar-left, .calendar-right {
     height: auto;
+  }
+
+  .calendar-grid-wrapper,
+  .achievements-list {
+    min-height: 0;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 520px) {
+  .calendar-view {
+    gap: 14px;
+  }
+
+  .calendar-left,
+  .calendar-right {
+    gap: 12px;
+  }
+
+  .calendar-left__title {
+    font-size: 20px;
+  }
+
+  .stats-row {
+    gap: 7px;
+  }
+
+  .stat-card {
+    min-width: 0;
+    padding: 12px 6px;
+  }
+
+  .stat-card__value {
+    font-size: clamp(20px, 7vw, 25px);
+  }
+
+  .stat-card__label {
+    font-size: 10px;
+    overflow-wrap: anywhere;
+  }
+
+  .month-nav {
+    justify-content: space-between;
+  }
+
+  .month-nav__btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .month-nav__label {
+    min-width: 0;
+    font-size: 14px;
+  }
+
+  .calendar-grid {
+    gap: 3px;
+  }
+
+  .calendar-grid__weekday {
+    font-size: 9px;
+  }
+
+  .rank-container,
+  .achievements-container {
+    padding: 14px;
+  }
+
+  .rank-rules-popover {
+    position: fixed;
+    inset: auto 12px calc(var(--mobile-nav-height) + var(--safe-area-bottom) + 12px);
+    width: auto;
+    max-height: min(420px, 60dvh);
+    overflow-y: auto;
+  }
+
+  .achievement-row {
+    padding: 11px;
+  }
+
+  .achievement-row__header {
+    flex-direction: column;
+  }
+
+  .achievement-row__status {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
   }
 }
 </style>

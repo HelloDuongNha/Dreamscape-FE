@@ -573,10 +573,10 @@ onUnmounted(() => {
 
   .oracle-sidebar {
     position: fixed;
-    top: 0;
+    top: var(--header-height);
     left: 0;
-    bottom: 0;
-    width: 280px;
+    bottom: var(--mobile-nav-height);
+    width: min(86vw, 320px);
     z-index: var(--z-modal, 101);
     transform: translateX(-100%);
     transition: transform 0.25s ease;

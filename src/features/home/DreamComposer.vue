@@ -178,4 +178,55 @@ const { t } = useI18n({ useScope: 'global' })
     margin-left: 0;
   }
 }
+
+@media (max-width: 600px) {
+  .composer {
+    gap: 10px;
+    padding-top: 12px;
+  }
+
+  .composer__avatar {
+    margin-top: 4px;
+    transform: scale(.9);
+    transform-origin: top left;
+  }
+
+  .composer__textarea {
+    min-height: 92px;
+    padding: 11px 12px;
+    border-radius: 12px;
+    font-size: 16px;
+  }
+
+  .composer__footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .composer__options {
+    gap: 8px;
+  }
+
+  .composer__visibility {
+    min-height: 32px;
+    padding: 4px 9px;
+    font-size: var(--font-size-xs);
+  }
+}
+
+@media (max-width: 360px) {
+  .composer {
+    gap: 8px;
+  }
+
+  .composer__footer {
+    grid-template-columns: 1fr;
+  }
+
+  .composer__footer :deep(.app-button) {
+    justify-self: end;
+  }
+}
 </style>

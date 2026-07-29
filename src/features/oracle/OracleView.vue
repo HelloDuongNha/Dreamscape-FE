@@ -654,4 +654,10 @@ onBeforeUnmount(() => {
   overflow: hidden;
   position: relative;
 }
+
+@media (max-width: 767px) {
+  .oracle-view {
+    height: 100%;
+  }
+}
 </style>

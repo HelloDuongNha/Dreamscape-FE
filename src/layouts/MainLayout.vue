@@ -255,6 +255,8 @@
       </RouterView>
 
     </div><!-- /main-layout__body -->
+    <MobilePullToRefresh />
+    <MobileNavigation />
     <PostDetailModal />
     <OraclePendingModal />
     <ExtractionPendingModal />
@@ -277,6 +279,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
+import MobilePullToRefresh from './MobilePullToRefresh.vue'
+import MobileNavigation from './MobileNavigation.vue'
 import PostDetailModal from '@/features/home/PostDetailModal.vue'
 import OraclePendingModal from '@/components/common/OraclePendingModal.vue'
 import ExtractionPendingModal from '@/components/common/ExtractionPendingModal.vue'
@@ -775,6 +779,69 @@ defineProps<{ title?: string }>()
 @media (max-width: 600px) {
   .main-layout__content-inner { padding: var(--space-3); }
 }
+
+@media (max-width: 767px) {
+  .main-layout {
+    overscroll-behavior-y: contain;
+  }
+
+  .main-layout__body,
+  .main-layout--collapsed .main-layout__body {
+    margin-left: 0;
+    padding-right: var(--safe-area-right);
+    padding-left: var(--safe-area-left);
+  }
+
+  .main-layout__burger {
+    display: none;
+  }
+
+  .main-layout__content {
+    padding-bottom: var(--mobile-nav-height);
+  }
+
+  .main-layout__content-inner {
+    max-width: 100%;
+    padding: var(--mobile-page-padding);
+  }
+
+  .main-layout__content-inner--full {
+    padding: 0;
+  }
+
+  .main-layout__header-inner {
+    padding-right: var(--mobile-page-padding);
+    padding-left: var(--mobile-page-padding);
+  }
+
+  .main-layout__header-right {
+    gap: 4px;
+  }
+
+  .main-layout__page-title {
+    font-size: var(--font-size-md);
+  }
+
+  .main-layout__icon-btn,
+  .main-layout__avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  .main-layout__avatar {
+    display: none;
+  }
+
+  .locale-switch {
+    height: 28px;
+    padding: 2px 4px;
+  }
+
+  .locale-switch__track span {
+    min-width: 23px;
+    padding: 4px 3px;
+  }
+}
 /* ── Header search bar (Home route only) ───────────────────────── */
 .header-search {
   display: flex;
@@ -853,7 +920,10 @@ defineProps<{ title?: string }>()
 }
 @media (max-width: 600px) {
   .main-layout__header--with-search {
-    height: calc(var(--header-height) + 48px);
+    height: calc(var(--header-height) + 52px);
+  }
+  .main-layout__header--with-search .main-layout__header-inner {
+    height: var(--header-height);
   }
   .header-search {
     position: absolute;
@@ -1077,6 +1147,10 @@ defineProps<{ title?: string }>()
     left: var(--space-2);
     width: auto;
     max-height: min(520px, calc(100dvh - 72px));
+  }
+
+  .main-layout__header--with-search .notifications-dropdown {
+    top: calc(var(--header-height) + 48px);
   }
 
   .notifications-dropdown__item {

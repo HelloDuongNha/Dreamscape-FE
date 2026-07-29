@@ -440,4 +440,78 @@ const activeTab = ref<'followers' | 'following' | 'pending'>(props.initialTab)
   color: var(--color-text-muted, #737373);
   font-size: var(--font-size-sm, 14px);
 }
+
+@media (max-width: 640px) {
+  .followers-modal-overlay {
+    align-items: stretch;
+  }
+
+  .followers-modal {
+    width: 100%;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .followers-modal__header {
+    min-height: calc(56px + var(--safe-area-top));
+    padding: var(--safe-area-top) var(--space-3) 0;
+  }
+
+  .followers-modal__tabs {
+    min-width: 0;
+    gap: var(--space-3);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .followers-modal__tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .followers-modal__tab {
+    min-height: 48px;
+    padding-block: var(--space-3);
+    white-space: nowrap;
+  }
+
+  .followers-modal__close-btn {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .followers-modal__content {
+    padding-bottom: calc(var(--space-4) + var(--safe-area-bottom));
+  }
+
+  .user-item {
+    min-height: 60px;
+    padding-inline: var(--space-3);
+  }
+
+  .follow-request-actions {
+    gap: 6px;
+  }
+
+  .follow-request-btn {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 380px) {
+  .user-item {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .follow-request-actions {
+    width: 100%;
+    padding-left: 48px;
+  }
+
+  .follow-request-btn {
+    flex: 1;
+  }
+}
 </style>
