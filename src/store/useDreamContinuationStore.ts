@@ -189,6 +189,7 @@ export const useDreamContinuationStore = defineStore('dreamContinuation', () => 
     tasks,
     pinnedTasks,
     findTask,
+    track,
     start,
     pin,
     showInDialog,

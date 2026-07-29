@@ -169,6 +169,7 @@ export interface AiDreamAnalysisResult {
   }
   creative_continuation_history?: Array<NonNullable<AiDreamAnalysisResult['creative_continuation']>>
   creative_continuation_index?: number
+  continuationMetadata?: ApiDream['continuationMetadata']
   case_conclusion?: {
     status: 'preliminary' | 'clarified'
     headline: string
