@@ -40,8 +40,14 @@
                 <div class="oracle-citation-rule__heading">
                   <p>{{ localizedStatement(rule) }}</p>
                   <div
-                    class="oracle-score"
-                    :title="t('oracle.sourceArgumentScoreHelp')"
+                    :class="['oracle-score', { 'is-admin-link': hasAdminAccess }]"
+                    :title="hasAdminAccess
+                      ? t('oracle.sourceArgumentScoreAdminHelp')
+                      : t('oracle.sourceArgumentScoreHelp')"
+                    :role="hasAdminAccess ? 'link' : undefined"
+                    :tabindex="hasAdminAccess ? 0 : undefined"
+                    @click="openRuleScore(rule)"
+                    @keydown.enter.prevent="openRuleScore(rule)"
                   >
                     <Transition name="score-delta">
                       <b
@@ -53,12 +59,22 @@
                     </Transition>
                     <strong>{{ rule.evidenceScore }}</strong><span>/100</span>
                     <small>{{ t('oracle.sourceArgumentScore') }}</small>
+                    <small v-if="rule.sourceEvidenceScore != null" class="oracle-score__breakdown">
+                      {{ t('oracle.sourceArgumentScoreBreakdown', {
+                        source: rule.sourceEvidenceScore,
+                        feedback: signedAdjustment(rule.userValidationAdjustment),
+                      }) }}
+                    </small>
                   </div>
                 </div>
 
                 <details>
-                  <summary>{{ t('oracle.sourceRuleEvidence') }}</summary>
-                  <blockquote>{{ rule.quote }}</blockquote>
+                  <summary>
+                    {{ rule.usageExcerpt
+                      ? t('oracle.sourceRuleUsage')
+                      : t('oracle.sourceRuleEvidence') }}
+                  </summary>
+                  <blockquote>{{ rule.usageExcerpt || rule.quote }}</blockquote>
                 </details>
 
                 <div v-if="rule.verificationQuestion" class="oracle-citation-rule__verification">
@@ -80,7 +96,7 @@
 
           <footer>
             <AppButton variant="ghost" @click="close">{{ t('oracle.close') }}</AppButton>
-            <AppButton suffix-icon="↗" @click="$emit('open-source', citation.sourceId)">
+            <AppButton suffix-icon="external-link" @click="$emit('open-source', citation.sourceId)">
               {{ t('oracle.openFullSource') }}
             </AppButton>
           </footer>
@@ -97,35 +113,72 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppFeedbackChoiceGroup, { type FeedbackChoice } from '@/components/common/AppFeedbackChoiceGroup.vue'
 import {
   submitOracleCitationFeedback,
+  type DreamHypothesisFeedbackResponse,
   type OracleCitationDto,
   type OracleCitationRuleLinkDto,
+  type OracleRuleScoreUpdateDto,
 } from '@/api/oracleApi'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { useAuthStore } from '@/store/useAuthStore'
+import { useRouter } from 'vue-router'
+import { isAdminUser } from '@/utils/adminAccess'
+import apiClient from '@/api/client'
+import { getApiErrorDataString, getApiErrorMessage } from '@/utils/apiError'
+import {
+  inferOracleTextLanguage,
+  localizeOracleCitationStatement,
+  type OracleDisplayLanguage,
+} from '../services/oracleCitationLocalization.service'
 
 const props = defineProps<{
   modelValue: boolean
   messageId: string
   citation: OracleCitationDto | null
+  feedbackOrigin?: 'oracle' | 'dream'
+  dreamId?: string
 }>()
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
   (event: 'open-source', sourceId: string): void
+  (event: 'feedback-updated', payload: CitationFeedbackResult): void
 }>()
+
+interface CitationFeedbackResult {
+  ruleId?: string
+  answer?: FeedbackChoice | null
+  score?: number
+  scoreDelta?: number
+  scoreUpdates?: OracleRuleScoreUpdateDto[]
+  ruleScoreUpdates?: OracleRuleScoreUpdateDto[]
+  analysis?: DreamHypothesisFeedbackResponse['data']['analysis']
+}
 const { t, locale } = useI18n()
 const settingsStore = useSettingsStore()
+const authStore = useAuthStore()
+const router = useRouter()
 const savingRuleId = ref('')
 const modalRef = ref<HTMLElement | null>(null)
 const scoreDeltas = ref<Record<string, number>>({})
+const translatedStatements = ref<Record<string, string>>({})
 const deltaTimers = new Map<string, ReturnType<typeof setTimeout>>()
+let translationRun = 0
 const interactiveRules = computed(() =>
   (props.citation?.ruleLinks || []).filter((rule) => Boolean(rule.verificationQuestion)),
 )
+const hasAdminAccess = computed(() => isAdminUser(authStore.user))
 
-watch(() => props.modelValue, async (open) => {
+watch([
+  () => props.modelValue,
+  () => locale.value,
+  () => (props.citation?.ruleLinks || [])
+    .map((rule) => `${rule.ruleId}:${rule.statement}`)
+    .join('|'),
+], async ([open]) => {
   if (!open) return
   await nextTick()
   modalRef.value?.focus()
-})
+  void refreshStatementTranslations()
+}, { immediate: true })
 
 onBeforeUnmount(() => {
   for (const timer of deltaTimers.values()) clearTimeout(timer)
@@ -136,31 +189,83 @@ function close() {
   emit('update:modelValue', false)
 }
 
+function openRuleScore(rule: OracleCitationRuleLinkDto) {
+  if (!hasAdminAccess.value) return
+  close()
+  void router.push({
+    name: 'moderation-rule-candidates',
+    query: { ruleId: rule.ruleId },
+  })
+}
+
 function localizedStatement(rule: OracleCitationRuleLinkDto): string {
-  const language = String(locale.value).startsWith('en') ? 'en' : 'vi'
-  return rule.localizedStatement?.[language] || rule.statement
+  const language = displayLanguage()
+  const translated = translatedStatements.value[rule.ruleId]
+  if (translated) return translated
+  const prepared = rule.localizedStatement?.[language]
+  return prepared && inferOracleTextLanguage(prepared) === language
+    ? prepared
+    : rule.statement
 }
 
 function localizedQuestion(rule: OracleCitationRuleLinkDto): string {
-  const language = String(locale.value).startsWith('en') ? 'en' : 'vi'
+  const language = displayLanguage()
   return rule.localizedVerificationQuestion?.[language] || rule.verificationQuestion || ''
+}
+
+function displayLanguage(): OracleDisplayLanguage {
+  return String(locale.value).startsWith('en') ? 'en' : 'vi'
+}
+
+function signedAdjustment(value: number | undefined): string {
+  const adjustment = Number(value) || 0
+  return adjustment > 0 ? `+${adjustment}` : String(adjustment)
+}
+
+async function refreshStatementTranslations(): Promise<void> {
+  const run = ++translationRun
+  const language = displayLanguage()
+  const entries = await Promise.all(interactiveRules.value.map(async (rule) => [
+    rule.ruleId,
+    await localizeOracleCitationStatement(rule.statement, rule.localizedStatement, language),
+  ] as const))
+  if (run !== translationRun) return
+  translatedStatements.value = Object.fromEntries(entries)
 }
 
 async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | null) {
   if (!props.citation || savingRuleId.value) return
   savingRuleId.value = rule.ruleId
   try {
-    const result = await submitOracleCitationFeedback({
-      turnId: props.messageId,
-      citationIndex: props.citation.index,
-      ruleId: rule.ruleId,
-      answer,
-    })
+    const result: CitationFeedbackResult = props.feedbackOrigin === 'dream' && props.dreamId
+      ? (await apiClient.post<DreamHypothesisFeedbackResponse>(
+        `/dreams/${props.dreamId}/hypothesis-feedback`,
+        {
+        hypothesisIndex: rule.dreamHypothesisIndex,
+        verificationKey: rule.dreamVerificationKey,
+        answer,
+        },
+      )).data.data
+      : await submitOracleCitationFeedback({
+        turnId: props.messageId,
+        citationIndex: props.citation.index,
+        sourceId: props.citation.sourceId,
+        ruleId: rule.ruleId,
+        answer,
+      })
     rule.currentUserAnswer = answer
-    for (const update of result.scoreUpdates) {
-      const visibleRule = props.citation.ruleLinks?.find((item) => item.ruleId === update.ruleId)
+    if (Number.isFinite(Number(result.score))) {
+      rule.evidenceScore = Number(result.score)
+    }
+    emit('feedback-updated', result)
+    const scoreUpdates = result.scoreUpdates || result.ruleScoreUpdates || []
+    for (const update of scoreUpdates) {
+      const visibleRule = props.citation.ruleLinks?.find((item) =>
+        item.ruleId === update.ruleId || item.ruleCode === update.ruleId)
       if (!visibleRule) continue
       visibleRule.evidenceScore = update.score
+      visibleRule.userValidationAdjustment = update.validationAdjustment
+      visibleRule.sourceEvidenceScore = update.score - update.validationAdjustment
       const displayedDelta = update.voteDelta || update.scoreDelta
       if (displayedDelta) {
         scoreDeltas.value[update.ruleId] = displayedDelta
@@ -173,6 +278,9 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
       }
     }
     const delta = result.scoreDelta
+      ?? scoreUpdates
+        .filter(item => item.relation === 'direct')
+        .reduce((sum, item) => sum + (Number(item.scoreDelta) || 0), 0)
     const message = delta > 0
       ? t('oracle.sourceScoreIncreased', { points: delta })
       : delta < 0
@@ -181,8 +289,12 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
           ? t('oracle.sourceVoteRemoved')
           : t('oracle.sourceScoreUnchanged')
     settingsStore.showToast(message, 'success')
-  } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || t('oracle.sourceVoteFailed'), 'error')
+  } catch (error: unknown) {
+    settingsStore.showToast(
+      getApiErrorDataString(error, 'reason')
+        || getApiErrorMessage(error, t('oracle.sourceVoteFailed')),
+      'error',
+    )
   } finally {
     savingRuleId.value = ''
   }
@@ -201,7 +313,8 @@ async function submit(rule: OracleCitationRuleLinkDto, answer: FeedbackChoice | 
 .oracle-citation-modal__section-help{margin:0 0 12px;color:var(--color-text-muted);font-size:11px;line-height:1.5}
 .oracle-citation-rule{display:grid;gap:14px;padding:16px;border:1px solid var(--color-border);border-radius:14px;background:color-mix(in srgb,var(--color-bg-elevated) 78%,var(--color-bg-surface))}
 .oracle-citation-rule+.oracle-citation-rule{margin-top:11px}.oracle-citation-rule__heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.oracle-citation-rule__heading>p{margin:2px 0 0;color:var(--color-text-primary);font-size:13px;font-weight:650;line-height:1.52}
-.oracle-score{position:relative;display:grid;grid-template-columns:auto auto;align-content:center;justify-content:center;min-width:78px;padding:10px 10px 8px;border:1px solid rgb(96 165 250 / 35%);border-radius:12px;background:rgb(59 130 246 / 10%);color:#93c5fd;text-align:center}.oracle-score strong{font-size:19px;line-height:1}.oracle-score>span{align-self:end;font-size:10px}.oracle-score small{grid-column:1/-1;margin-top:5px;color:var(--color-text-muted);font-size:9px;line-height:1.15}.oracle-score>b{position:absolute;top:-9px;right:-8px;display:grid;place-items:center;min-width:27px;height:20px;padding:0 5px;border:2px solid var(--color-bg-surface);border-radius:999px;font-size:10px;box-shadow:0 3px 9px rgb(0 0 0 / 22%)}.oracle-score>b.is-positive{background:#0f9f6e;color:white}.oracle-score>b.is-negative{background:#dc4c55;color:white}
+.oracle-score{position:relative;display:grid;grid-template-columns:auto auto;align-content:center;justify-content:center;min-width:128px;padding:10px 10px 8px;border:1px solid rgb(96 165 250 / 35%);border-radius:12px;background:rgb(59 130 246 / 10%);color:#93c5fd;text-align:center}.oracle-score strong{font-size:19px;line-height:1}.oracle-score>span{align-self:end;font-size:10px}.oracle-score small{grid-column:1/-1;margin-top:5px;color:var(--color-text-muted);font-size:9px;line-height:1.15}.oracle-score__breakdown{max-width:150px}.oracle-score>b{position:absolute;top:-9px;right:-8px;display:grid;place-items:center;min-width:27px;height:20px;padding:0 5px;border:2px solid var(--color-bg-surface);border-radius:999px;font-size:10px;box-shadow:0 3px 9px rgb(0 0 0 / 22%)}.oracle-score>b.is-positive{background:#0f9f6e;color:white}.oracle-score>b.is-negative{background:#dc4c55;color:white}
+.oracle-score.is-admin-link{cursor:pointer;transition:background-color .18s ease,border-color .18s ease,transform .18s ease}.oracle-score.is-admin-link:hover,.oracle-score.is-admin-link:focus-visible{border-color:rgb(96 165 250 / 55%);background:rgb(59 130 246 / 16%);transform:translateY(-1px);outline:none}
 .oracle-citation-rule details summary{cursor:pointer;color:var(--color-text-secondary);font-size:12px}.oracle-citation-rule details blockquote{margin-top:9px}
 .oracle-citation-rule__verification{padding-top:12px;border-top:1px solid var(--color-border)}.oracle-citation-rule__verification h4{margin:0 0 6px;font-size:12px}.oracle-citation-rule__verification p{margin:0;color:var(--color-text-secondary);font-size:13px;line-height:1.55}
 .oracle-citation-rule__verification :deep(.feedback-choice-group){margin-top:11px}.score-delta-enter-active,.score-delta-leave-active{transition:transform .18s ease,opacity .18s ease}.score-delta-enter-from,.score-delta-leave-to{transform:translateY(4px) scale(.8);opacity:0}.modal-fade-enter-active,.modal-fade-leave-active{transition:opacity .18s ease}.modal-fade-enter-active .oracle-citation-modal,.modal-fade-leave-active .oracle-citation-modal{transition:transform .18s ease,opacity .18s ease}.modal-fade-enter-from,.modal-fade-leave-to{opacity:0}.modal-fade-enter-from .oracle-citation-modal,.modal-fade-leave-to .oracle-citation-modal{transform:translateY(10px);opacity:0}

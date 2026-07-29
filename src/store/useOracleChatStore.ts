@@ -1,53 +1,57 @@
 import { computed, ref } from 'vue'
-import { defineStore } from 'pinia'
+import { defineStore, storeToRefs } from 'pinia'
 import {
   createOracleThread,
   deleteOracleThread,
-  getOracleRunStatus,
   listOracleThreads,
   updateOracleThread,
   type OracleThreadDto,
 } from '@/api/oracleApi'
 import type { OracleMode, OracleThreadItem } from '@/features/oracle/oracleShell.types'
+import {
+  useOracleRunStore,
+  type BackgroundOracleRun,
+} from '@/store/useOracleRunStore'
+import { getApiErrorDataCode } from '@/utils/apiError'
 
 const ACTIVE_THREAD_STORAGE_KEY = 'oracle_active_thread_id'
-const ORACLE_RUN_NOTIFICATION_KEY = 'dreamscape:oracle-run-notification:v1'
+const PROMPT_QUEUE_STORAGE_KEY = 'oracle_prompt_queue_v1'
+const AUTH_USER_STORAGE_KEY = 'ds_user'
 
-interface BackgroundOracleRun {
-  threadId: string
-  runId: string
-  assistantTurnId?: string | null
-  title: string
-  startedAt: string
-  expectedMinMs?: number | null
-  expectedMaxMs?: number | null
-  stage?: 'thinking' | 'preparing' | 'completed' | null
-  stageStartedAt?: string | null
+export interface QueuedOraclePrompt {
+  id: string
+  threadId: string | null
+  content: string
+  createdAt: number
 }
 
-interface CompletedOracleRun {
-  threadId: string
-  title: string
-  expiresAt: number
+function accountStorageKey(key: string, userId: string | null): string {
+  return userId ? `${key}:${userId}` : key
 }
 
-function restoreNotification(): {
-  background: BackgroundOracleRun | null
-  completed: CompletedOracleRun | null
-} {
+function storedAccountId(): string | null {
   try {
-    const saved = JSON.parse(localStorage.getItem(ORACLE_RUN_NOTIFICATION_KEY) || 'null')
-    if (saved?.kind === 'background' && saved.runId && saved.threadId) {
-      return { background: saved, completed: null }
-    }
-    if (saved?.kind === 'completed' && Number(saved.expiresAt) > Date.now()) {
-      return { background: null, completed: saved }
-    }
-    localStorage.removeItem(ORACLE_RUN_NOTIFICATION_KEY)
+    return JSON.parse(localStorage.getItem(AUTH_USER_STORAGE_KEY) || 'null')?._id || null
   } catch {
-    localStorage.removeItem(ORACLE_RUN_NOTIFICATION_KEY)
+    return null
   }
-  return { background: null, completed: null }
+}
+
+function restorePromptQueue(userId: string | null): QueuedOraclePrompt[] {
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(accountStorageKey(PROMPT_QUEUE_STORAGE_KEY, userId)) || '[]',
+    )
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is QueuedOraclePrompt =>
+      typeof item?.id === 'string'
+      && (typeof item?.threadId === 'string' || item?.threadId === null)
+      && typeof item?.content === 'string'
+      && item.content.trim().length > 0
+      && Number.isFinite(item?.createdAt))
+  } catch {
+    return []
+  }
 }
 
 function toThreadItem(thread: OracleThreadDto): OracleThreadItem {
@@ -71,20 +75,73 @@ function toThreadItem(thread: OracleThreadDto): OracleThreadItem {
 }
 
 export const useOracleChatStore = defineStore('oracleChat', () => {
-  const restoredNotification = restoreNotification()
+  const runStore = useOracleRunStore()
+  const { backgroundRun, completedRun } = storeToRefs(runStore)
+  const sessionUserId = ref<string | null>(storedAccountId())
   const threads = ref<OracleThreadItem[]>([])
-  const activeThreadId = ref<string | null>(localStorage.getItem(ACTIVE_THREAD_STORAGE_KEY))
+  const promptQueue = ref<QueuedOraclePrompt[]>(restorePromptQueue(sessionUserId.value))
+  const activeThreadId = ref<string | null>(
+    localStorage.getItem(accountStorageKey(ACTIVE_THREAD_STORAGE_KEY, sessionUserId.value)),
+  )
   const isLoading = ref(false)
   const isMutating = ref(false)
   const errorCode = ref<string | null>(null)
-  const backgroundRun = ref<BackgroundOracleRun | null>(restoredNotification.background)
-  const completedRun = ref<CompletedOracleRun | null>(restoredNotification.completed)
-  let completionTimer: ReturnType<typeof setTimeout> | null = null
-  let backgroundPollTimer: ReturnType<typeof setTimeout> | null = null
+  const citationChange = ref<{
+    revision: number
+    threadIds: string[]
+    turnIds: string[]
+  } | null>(null)
 
   const activeThread = computed(
     () => threads.value.find((thread) => thread.id === activeThreadId.value) ?? null,
   )
+
+  function persistPromptQueue() {
+    const key = accountStorageKey(PROMPT_QUEUE_STORAGE_KEY, sessionUserId.value)
+    if (promptQueue.value.length) localStorage.setItem(key, JSON.stringify(promptQueue.value))
+    else localStorage.removeItem(key)
+  }
+
+  function enqueuePrompt(threadId: string | null, content: string): QueuedOraclePrompt | null {
+    const normalized = content.trim()
+    if (!normalized) return null
+    const prompt = {
+      id: crypto.randomUUID(),
+      threadId,
+      content: normalized,
+      createdAt: Date.now(),
+    }
+    promptQueue.value.push(prompt)
+    persistPromptQueue()
+    return prompt
+  }
+
+  function updateQueuedPrompt(id: string, content: string) {
+    const prompt = promptQueue.value.find((item) => item.id === id)
+    const normalized = content.trim()
+    if (!prompt || !normalized) return
+    prompt.content = normalized
+    persistPromptQueue()
+  }
+
+  function removeQueuedPrompt(id: string) {
+    promptQueue.value = promptQueue.value.filter((item) => item.id !== id)
+    persistPromptQueue()
+  }
+
+  function assignUnscopedPrompts(threadId: string) {
+    let changed = false
+    promptQueue.value.forEach((item) => {
+      if (item.threadId !== null) return
+      item.threadId = threadId
+      changed = true
+    })
+    if (changed) persistPromptQueue()
+  }
+
+  function promptsForThread(threadId: string | null): QueuedOraclePrompt[] {
+    return promptQueue.value.filter((item) => item.threadId === threadId)
+  }
 
   function replaceThread(dto: OracleThreadDto) {
     const item = toThreadItem(dto)
@@ -97,8 +154,8 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
     })
   }
 
-  function captureError(error: any): never {
-    errorCode.value = error?.response?.data?.code || 'oracle_internal_error'
+  function captureError(error: unknown): never {
+    errorCode.value = getApiErrorDataCode(error) || 'oracle_internal_error'
     throw error
   }
 
@@ -118,10 +175,7 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
           assistantTurnId: serverActive.activeRunAssistantTurnId,
         })
       } else if (backgroundRun.value) {
-        // The thread list is not an authoritative run-status endpoint. It can
-        // briefly omit a run during navigation, pagination, or a status write.
-        // Keep tracking the exact run ID until its own endpoint says terminal.
-        void refreshTrackedRun(backgroundRun.value)
+        void runStore.refreshTrackedRun(backgroundRun.value)
       }
       if (
         activeThreadId.value &&
@@ -182,6 +236,8 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
     try {
       await deleteOracleThread(threadId)
       threads.value = threads.value.filter((thread) => thread.id !== threadId)
+      promptQueue.value = promptQueue.value.filter((prompt) => prompt.threadId !== threadId)
+      persistPromptQueue()
       if (activeThreadId.value === threadId) selectThread(null)
     } catch (error) {
       captureError(error)
@@ -192,48 +248,9 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
 
   function selectThread(threadId: string | null) {
     activeThreadId.value = threadId
-    if (threadId) localStorage.setItem(ACTIVE_THREAD_STORAGE_KEY, threadId)
-    else localStorage.removeItem(ACTIVE_THREAD_STORAGE_KEY)
-  }
-
-  function persistBackground(run: BackgroundOracleRun) {
-    localStorage.setItem(ORACLE_RUN_NOTIFICATION_KEY, JSON.stringify({ kind: 'background', ...run }))
-  }
-
-  async function refreshTrackedRun(tracked: BackgroundOracleRun) {
-    const status = await getOracleRunStatus(tracked.runId)
-    if (backgroundRun.value?.runId !== tracked.runId) return
-    if (['completed', 'cancelled', 'failed'].includes(status.status)) {
-      completeRun(status.threadId)
-      return
-    }
-    trackRun(status.threadId, status.runId, {
-      startedAt: status.startedAt,
-      expectedMinMs: status.expectedMinMs,
-      expectedMaxMs: status.expectedMaxMs,
-      stage: status.stage,
-      stageStartedAt: status.stageStartedAt,
-      assistantTurnId: status.assistantTurnId,
-    })
-  }
-
-  function scheduleBackgroundPoll() {
-    if (backgroundPollTimer || !backgroundRun.value) return
-    // Poll only after the preceding request has settled. setInterval allowed
-    // slow status requests to overlap, which created unnecessary network,
-    // reactive and localStorage work while the model was busy.
-    backgroundPollTimer = setTimeout(async () => {
-      backgroundPollTimer = null
-      const tracked = backgroundRun.value
-      if (!tracked) return
-      try {
-        await refreshTrackedRun(tracked)
-      } catch {
-        // A transient network failure must not erase a still-running job.
-      } finally {
-        if (backgroundRun.value) scheduleBackgroundPoll()
-      }
-    }, 4000)
+    const storageKey = accountStorageKey(ACTIVE_THREAD_STORAGE_KEY, sessionUserId.value)
+    if (threadId) localStorage.setItem(storageKey, threadId)
+    else localStorage.removeItem(storageKey)
   }
 
   function trackRun(
@@ -247,34 +264,7 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
       thread.activeRunStatus = 'running'
       thread.activeRunStartedAt ||= new Date().toISOString()
     }
-    const previous = backgroundRun.value?.runId === runId ? backgroundRun.value : null
-    const nextRun: BackgroundOracleRun = {
-      threadId,
-      runId,
-      title: thread?.title || 'Oracle',
-      startedAt: metadata.startedAt || previous?.startedAt || new Date().toISOString(),
-      expectedMinMs: metadata.expectedMinMs ?? previous?.expectedMinMs ?? null,
-      expectedMaxMs: metadata.expectedMaxMs ?? previous?.expectedMaxMs ?? null,
-      stage: metadata.stage || previous?.stage || 'thinking',
-      stageStartedAt: metadata.stageStartedAt || previous?.stageStartedAt || null,
-      assistantTurnId: metadata.assistantTurnId || previous?.assistantTurnId || null,
-    }
-    const changed = !previous
-      || previous.threadId !== nextRun.threadId
-      || previous.title !== nextRun.title
-      || previous.startedAt !== nextRun.startedAt
-      || previous.expectedMinMs !== nextRun.expectedMinMs
-      || previous.expectedMaxMs !== nextRun.expectedMaxMs
-      || previous.stage !== nextRun.stage
-      || previous.stageStartedAt !== nextRun.stageStartedAt
-      || previous.assistantTurnId !== nextRun.assistantTurnId
-    if (changed) {
-      backgroundRun.value = nextRun
-      persistBackground(nextRun)
-    }
-    completedRun.value = null
-    if (completionTimer) clearTimeout(completionTimer)
-    scheduleBackgroundPoll()
+    runStore.trackRun(threadId, runId, thread?.title || 'Oracle', metadata)
   }
 
   function completeRun(threadId: string) {
@@ -285,32 +275,42 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
       thread.activeRunStartedAt = null
       thread.activeRunAssistantTurnId = null
     }
-    completedRun.value = {
-      threadId,
-      title: thread?.title || backgroundRun.value?.title || 'Oracle',
-      expiresAt: Date.now() + 3000,
-    }
-    backgroundRun.value = null
-    localStorage.setItem(ORACLE_RUN_NOTIFICATION_KEY, JSON.stringify({
-      kind: 'completed',
-      ...completedRun.value,
-    }))
-    if (backgroundPollTimer) clearTimeout(backgroundPollTimer)
-    backgroundPollTimer = null
-    if (completionTimer) clearTimeout(completionTimer)
-    completionTimer = setTimeout(() => {
-      completedRun.value = null
-      localStorage.removeItem(ORACLE_RUN_NOTIFICATION_KEY)
-      completionTimer = null
-    }, 3000)
+    runStore.completeRun(threadId, thread?.title)
   }
 
-  if (completedRun.value) {
-    completionTimer = setTimeout(() => {
-      completedRun.value = null
-      localStorage.removeItem(ORACLE_RUN_NOTIFICATION_KEY)
-      completionTimer = null
-    }, Math.max(0, completedRun.value.expiresAt - Date.now()))
+  function resetAccountState(): void {
+    threads.value = []
+    activeThreadId.value = null
+    errorCode.value = null
+    isLoading.value = false
+    isMutating.value = false
+    citationChange.value = null
+    promptQueue.value = []
+  }
+
+  function notifyCitationStateChanged(payload: {
+    threadIds?: string[]
+    turnIds?: string[]
+  }): void {
+    citationChange.value = {
+      revision: (citationChange.value?.revision || 0) + 1,
+      threadIds: [...new Set(payload.threadIds || [])],
+      turnIds: [...new Set(payload.turnIds || [])],
+    }
+  }
+
+  function startAccountSession(userId: string): void {
+    resetAccountState()
+    sessionUserId.value = userId
+    promptQueue.value = restorePromptQueue(userId)
+    activeThreadId.value = localStorage.getItem(accountStorageKey(ACTIVE_THREAD_STORAGE_KEY, userId))
+    runStore.startAccountSession(userId)
+  }
+
+  function endAccountSession(): void {
+    resetAccountState()
+    runStore.endAccountSession()
+    sessionUserId.value = null
   }
 
   return {
@@ -320,6 +320,8 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
     isLoading,
     isMutating,
     errorCode,
+    citationChange,
+    promptQueue,
     backgroundRun,
     completedRun,
     loadThreads,
@@ -330,5 +332,13 @@ export const useOracleChatStore = defineStore('oracleChat', () => {
     selectThread,
     trackRun,
     completeRun,
+    enqueuePrompt,
+    updateQueuedPrompt,
+    removeQueuedPrompt,
+    assignUnscopedPrompts,
+    promptsForThread,
+    notifyCitationStateChanged,
+    startAccountSession,
+    endAccountSession,
   }
 })

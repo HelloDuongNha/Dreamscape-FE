@@ -3,14 +3,7 @@
 
     <!-- ── My comment (top) ── -->
     <div class="reply-card__comment">
-      <div
-        class="reply-card__avatar"
-        :style="{ background: commentAvatarBg }"
-        aria-hidden="true"
-        translate="no"
-      >
-        {{ commentInitials }}
-      </div>
+      <UserAvatar :user="comment.userId" size="md" class="reply-card__avatar" />
       <div class="reply-card__comment-body">
         <div class="reply-card__comment-meta">
           <span class="reply-card__comment-name" translate="no">{{ comment.userId.display_name }}</span>
@@ -32,14 +25,13 @@
     >
       <!-- Original post header: avatar + name -->
       <div class="reply-card__original-header">
-        <div
+        <UserAvatar
+          v-if="originalAuthor"
+          :user="originalAuthor"
+          size="md"
+          show-streak
           class="reply-card__original-avatar"
-          :style="{ background: originalAvatarBg }"
-          aria-hidden="true"
-          translate="no"
-        >
-          {{ originalInitials }}
-        </div>
+        />
         <div class="reply-card__original-meta" translate="no">
           <span class="reply-card__original-name">{{ originalAuthor?.display_name }}</span>
           <span class="reply-card__original-username">{{ originalAuthor?.username }}</span>
@@ -74,8 +66,8 @@ import { useI18n } from 'vue-i18n'
 import { usePostStore } from '@/store/usePostStore'
 import { useDreamStore } from '@/store/useDreamStore'
 import { useLocaleStore } from '@/store/useLocaleStore'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo } from '@/utils/timeAgo'
+import UserAvatar from '@/components/common/UserAvatar.vue'
 import type { ApiComment, ApiDream, ApiUser } from '@/api/types'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -87,8 +79,6 @@ const dreamStore = useDreamStore()
 const localeStore = useLocaleStore()
 
 // ── My comment author ─────────────────────────────────────────────────────────
-const commentInitials  = computed(() => getInitials(props.comment.userId.display_name))
-const commentAvatarBg  = computed(() => getAvatarBg(props.comment.userId._id))
 const commentTime      = computed(() => timeAgo(props.comment.created_at, localeStore.currentLocale))
 
 // ── Original dream (populated dreamId from /api/comments/user/:id) ───────────
@@ -113,13 +103,6 @@ const originalAuthor = computed<ApiUser | null>(() => {
   if (typeof uid === 'object' && uid !== null) return uid as ApiUser
   return null
 })
-
-const originalInitials = computed(() =>
-  originalAuthor.value ? getInitials(originalAuthor.value.display_name) : '?'
-)
-const originalAvatarBg = computed(() =>
-  originalAuthor.value ? getAvatarBg(originalAuthor.value._id) : '#262626'
-)
 
 // ── Content truncation ────────────────────────────────────────────────────────
 const TRUNCATE_AT = 150

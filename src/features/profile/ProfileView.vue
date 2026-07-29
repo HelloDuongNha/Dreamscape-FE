@@ -31,6 +31,7 @@
         :is-me="isMe"
         :dream-count="userDreams.length"
         :approved-source-count="contributionStats?.approvedSourceCount || 0"
+        :pending-follow-count="displayUser.followRequestCount || 0"
         @updated="handleProfileUpdate"
         @open-followers="openFollowersModal"
       />
@@ -44,7 +45,7 @@
         <!-- Private Account Visibility Block -->
         <template v-if="!canViewContent">
           <div class="profile-private-lock">
-            <span class="profile-private-lock__icon" aria-hidden="true">🔒</span>
+            <AppIcon class="profile-private-lock__icon" name="lock" :size="32" />
             <p class="profile-private-lock__title">{{ t('profile.privateTitle') }}</p>
             <p class="profile-private-lock__sub">{{ t('profile.privateDesc') }}</p>
           </div>
@@ -131,7 +132,7 @@
                 <DreamCard
                   v-for="dream in likedDreams"
                   :key="dream._id"
-                  :dream="dream as any"
+              :dream="dream"
                   :user="getDreamAuthor(dream)"
                 />
               </div>
@@ -145,8 +146,12 @@
         :initial-tab="followersModalTab"
         :followers-list="displayUser.followersList"
         :following-list="displayUser.followingList"
+        :pending-requests="displayUser.followRequests"
+        :show-pending-tab="isMe"
+        :reviewing-request-id="reviewingRequestId"
         :follower-count="displayUser.followers ? displayUser.followers.length : (displayUser.follower_count || 0)"
         :following-count="displayUser.following ? displayUser.following.length : 0"
+        @review-request="reviewFollowRequest"
         @close="isFollowersModalOpen = false"
       />
 
@@ -166,13 +171,14 @@ import type { TabId }           from './ProfileTabs.vue'
 import FollowersModal           from './FollowersModal.vue'
 import AppButton                from '@/components/common/AppButton.vue'
 import AppSkeleton              from '@/components/common/AppSkeleton.vue'
+import AppIcon                  from '@/components/common/AppIcon.vue'
 import DreamCard                from '@/features/home/DreamCard.vue'
 import ReplyCard                from '@/components/common/ReplyCard.vue'
 import { useAuthStore }         from '@/store/useAuthStore'
 import { useDreamStore }        from '@/store/useDreamStore'
+import { useSettingsStore }     from '@/store/useSettingsStore'
 import type { ApiDream, ApiUser } from '@/api/types'
 import type { ApiComment }      from '@/api/types'
-import type { User }            from '@/data/mockUsers'
 import apiClient                from '@/api/client'
 
 const { t } = useI18n()
@@ -180,10 +186,11 @@ const route      = useRoute()
 const router     = useRouter()
 const authStore  = useAuthStore()
 const dreamStore = useDreamStore()
+const settingsStore = useSettingsStore()
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const isLoading  = ref(true)
-const targetUser = ref<User | null>(null)
+const targetUser = ref<ApiUser | null>(null)
 const userDreams = ref<ApiDream[]>([])
 const nextCursor = ref<string | null>(null)
 const hasMore    = ref(true)
@@ -196,13 +203,17 @@ const myComments      = ref<ApiComment[]>([])
 const isLoadingReplies = ref(false)
 
 const isFollowersModalOpen = ref(false)
-const followersModalTab = ref<'followers' | 'following'>('followers')
+const followersModalTab = ref<'followers' | 'following' | 'pending'>('followers')
+const reviewingRequestId = ref<string | null>(null)
 
 // Contribution profile & achievements system states (Correction 8)
-const contributionStats = ref<any>(null)
-const contributionAchievements = ref<any[]>([])
+interface ContributionStats {
+  approvedSourceCount: number
+}
 
-const openFollowersModal = (tab: 'followers' | 'following') => {
+const contributionStats = ref<ContributionStats | null>(null)
+
+const openFollowersModal = (tab: 'followers' | 'following' | 'pending') => {
   followersModalTab.value = tab
   isFollowersModalOpen.value = true
 }
@@ -219,13 +230,15 @@ const isMe = computed(() => targetUserId.value === authStore.myId)
 const canViewContent = computed(() => {
   if (isMe.value) return true
   if (!targetUser.value) return false
-  const isPrivate = targetUser.value.isPrivateAccount || false
+  if (targetUser.value.canViewPrivateContent !== undefined) {
+    return targetUser.value.canViewPrivateContent
+  }
   const isFollowing = targetUser.value.followers?.includes(authStore.myId) || false
-  return !isPrivate || isFollowing
+  return !targetUser.value.isPrivateAccount || isFollowing
 })
 
 // ── Build a display User from targetUser, authStore or fallback ────────
-const displayUser = computed<User>(() => {
+const displayUser = computed<ApiUser>(() => {
   if (targetUser.value) return targetUser.value
 
   if (isMe.value && authStore.myUser) {
@@ -238,6 +251,11 @@ const displayUser = computed<User>(() => {
       follower_count: authStore.myUser.followers ? authStore.myUser.followers.length : (authStore.myUser.follower_count ?? 0),
       followers:      authStore.myUser.followers ?? [],
       following:      authStore.myUser.following ?? [],
+      followRequests: [],
+      followRequestCount: authStore.myUser.followRequestCount ?? 0,
+      followStatus: 'none',
+      statsVisible: true,
+      canViewPrivateContent: true,
       isPrivateAccount: authStore.myUser.isPrivateAccount ?? false,
       dmPrivacy:      authStore.myUser.dmPrivacy ?? 'everyone',
       followersPrivacy: authStore.myUser.followersPrivacy ?? 'everyone',
@@ -258,6 +276,11 @@ const displayUser = computed<User>(() => {
     follower_count: 0,
     followers:      [],
     following:      [],
+    followRequests: [],
+    followRequestCount: 0,
+    followStatus: 'none',
+    statsVisible: true,
+    canViewPrivateContent: true,
     isPrivateAccount: false,
     dmPrivacy:      'everyone',
     followersPrivacy: 'everyone',
@@ -281,7 +304,7 @@ const likedDreams = computed(() => {
  * Build a User-shaped object for DreamCard from an ApiDream's populated userId.
  * Falls back to a stub if userId is a raw string (unlikely after populate).
  */
-function getDreamAuthor(dream: ApiDream): User {
+function getDreamAuthor(dream: ApiDream): ApiUser {
   if (typeof dream.userId === 'object' && dream.userId !== null) {
     const u = dream.userId as ApiUser
     return {
@@ -329,12 +352,10 @@ async function loadProfile() {
       if (data.success) {
         targetUser.value = data.user
         contributionStats.value = data.contributionStats || null
-        contributionAchievements.value = data.contributionAchievements || []
       }
     } catch (err) {
       targetUser.value = null
       contributionStats.value = null
-      contributionAchievements.value = []
     }
 
     // 2. Fetch dreams feed if allowed
@@ -407,14 +428,46 @@ watch(activeTab, async (tab) => {
 })
 
 // ── Edit support & Follow update handler ──────────────────────────────────────────
-function handleProfileUpdate(updatedUser: any) {
+function handleProfileUpdate(updatedUser: Partial<ApiUser>) {
   if (isMe.value) {
-    authStore.updateCurrentUser(updatedUser)
-  } else {
-    targetUser.value = updatedUser
+    if (authStore.myUser) {
+      authStore.updateCurrentUser({ ...authStore.myUser, ...updatedUser })
+    }
+  } else if (targetUser.value) {
+    targetUser.value = { ...targetUser.value, ...updatedUser }
   }
   // Re-fetch everything to sync state (including visibility transitions)
   loadProfile()
+}
+
+async function reviewFollowRequest(payload: {
+  requesterId: string
+  action: 'approve' | 'reject'
+}) {
+  if (reviewingRequestId.value) return
+  reviewingRequestId.value = payload.requesterId
+  try {
+    const { data } = await apiClient.patch(
+      `/users/follow-requests/${payload.requesterId}`,
+      { action: payload.action },
+    )
+    if (!data.success) return
+    targetUser.value = data.user
+    if (authStore.myUser) {
+      authStore.updateCurrentUser({ ...authStore.myUser, ...data.user })
+    }
+    settingsStore.showToastKey(
+      payload.action === 'approve'
+        ? 'toasts.followRequestApproved'
+        : 'toasts.followRequestRejected',
+      undefined,
+      'success',
+    )
+  } catch {
+    settingsStore.showToastKey('errors.followRequestReviewFailed', undefined, 'error')
+  } finally {
+    reviewingRequestId.value = null
+  }
 }
 
 // ── Profile delete handler ───────────────────────────────────────────────────
@@ -443,7 +496,6 @@ watch(() => route.params.id, async () => {
   hasMore.value    = true
   targetUser.value = null
   contributionStats.value = null
-  contributionAchievements.value = []
   await loadProfile()
 })
 </script>
@@ -563,5 +615,27 @@ watch(() => route.params.id, async () => {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   padding: var(--space-4) 0 var(--space-2);
+}
+
+@media (max-width: 640px) {
+  .profile-view {
+    max-width: none;
+    padding-bottom: var(--space-8);
+  }
+
+  .profile-content {
+    padding-top: 10px;
+  }
+
+  .profile-feed {
+    gap: var(--space-3);
+  }
+
+  .profile-private-lock,
+  .profile-empty,
+  .profile-placeholder,
+  .profile-404 {
+    padding: var(--space-10) var(--space-4);
+  }
 }
 </style>

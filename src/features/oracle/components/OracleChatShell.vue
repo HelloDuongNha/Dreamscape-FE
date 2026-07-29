@@ -106,7 +106,7 @@
                   </span>
                   <span v-else>{{ citation.excerpt }}</span>
                 </span>
-                <span aria-hidden="true">↗</span>
+                      <AppIcon name="external-link" :size="13" />
               </button>
             </div>
           </div>
@@ -141,13 +141,17 @@
           ×
         </button>
       </div>
+      <OraclePromptQueue
+        :items="queuedPrompts"
+        @edit="(id, content) => $emit('edit-queued-prompt', id, content)"
+        @remove="(id) => $emit('remove-queued-prompt', id)"
+        @editing-change="(editing) => $emit('queue-editing-change', editing)"
+      />
       <OracleComposer
         ref="composer"
         :is-sending="isSending"
-        :wait-for-complete="waitForComplete"
         :context-usage="contextUsage"
         :context-message-count="contextMessageCount"
-        @update:wait-for-complete="$emit('update:waitForComplete', $event)"
         @send="handleComposerSend"
         @cancel="$emit('cancel')"
       />
@@ -159,9 +163,12 @@
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import OracleComposer from './OracleComposer.vue'
+import OraclePromptQueue from './OraclePromptQueue.vue'
 import OracleMessageContent from './OracleMessageContent.vue'
 import AppCopyButton from '@/components/common/AppCopyButton.vue'
+import AppIcon from '@/components/common/AppIcon.vue'
 import type { OracleShellMessage } from '../oracleShell.types'
+import type { QueuedOraclePrompt } from '@/store/useOracleChatStore'
 
 const props = withDefaults(
   defineProps<{
@@ -170,10 +177,10 @@ const props = withDefaults(
     threadTitle?: string
     isSending?: boolean
     suggestedPrompts?: string[]
-    waitForComplete?: boolean
     contextUsage?: OracleShellMessage['contextUsage']
     contextMessageCount?: number
     runEstimate?: { expectedMinMs?: number | null; expectedMaxMs?: number | null }
+    queuedPrompts?: QueuedOraclePrompt[]
   }>(),
   {
     messages: () => [],
@@ -181,10 +188,10 @@ const props = withDefaults(
     threadTitle: '',
     isSending: false,
     suggestedPrompts: () => [],
-    waitForComplete: false,
     contextUsage: undefined,
     contextMessageCount: 0,
     runEstimate: undefined,
+    queuedPrompts: () => [],
   }
 )
 
@@ -193,9 +200,11 @@ const emit = defineEmits<{
   (e: 'send', content: string): void
   (e: 'cancel'): void
   (e: 'open-citation', message: OracleShellMessage, index: number): void
-  (e: 'update:waitForComplete', value: boolean): void
   (e: 'edit-message', message: OracleShellMessage, content: string): void
   (e: 'select-branch', leafId: string): void
+  (e: 'edit-queued-prompt', id: string, content: string): void
+  (e: 'remove-queued-prompt', id: string): void
+  (e: 'queue-editing-change', editing: boolean): void
 }>()
 
 const { t } = useI18n()
@@ -291,10 +300,9 @@ function timingLabel(message: OracleShellMessage): string {
   }
   if (message.runState === 'responding') {
     const thoughtEnd = message.thoughtCompletedAt || message.firstTokenAt || start
-    const revealStart = message.presentationStartedAt || thoughtEnd
     return t('oracle.thoughtThenRevealing', {
       thought: Math.max(0, Math.ceil((thoughtEnd - start) / 1000)),
-      revealing: Math.max(0, Math.floor((end - revealStart) / 1000)),
+      revealing: Math.max(0, Math.floor((end - thoughtEnd) / 1000)),
     })
   }
   if (message.runState === 'completed' && message.thoughtCompletedAt) {
@@ -792,6 +800,41 @@ defineExpose({ focusComposer })
 @media (max-width: 768px) {
   .oracle-chat-shell__sidebar-toggle {
     display: flex;
+  }
+
+  .oracle-chat-shell__thread-header {
+    min-height: 48px;
+    padding: 0 54px;
+  }
+
+  .oracle-chat-shell__thread-title {
+    max-width: 100%;
+  }
+
+  .oracle-chat-shell__body {
+    padding: 18px 12px 16px;
+  }
+
+  .oracle-timeline {
+    gap: 14px;
+  }
+
+  .oracle-msg__bubble {
+    max-width: 92%;
+    padding: 10px 12px;
+    font-size: 15px;
+  }
+
+  .oracle-chat-shell__footer {
+    padding: 0 10px 10px;
+  }
+
+  .oracle-welcome__title {
+    font-size: 24px;
+  }
+
+  .oracle-welcome__desc {
+    font-size: var(--font-size-base);
   }
 }
 </style>

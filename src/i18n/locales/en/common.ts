@@ -1,5 +1,7 @@
 /** English — common shell strings (identical key set to vi/common.ts) */
 export default {
+  showPassword: 'Show password',
+  hidePassword: 'Hide password',
   appName: 'DreamScape',
   toggleNav: 'Toggle navigation',
   scrollToTop: 'Scroll to top and refresh feed',
@@ -9,9 +11,20 @@ export default {
   searchLabel: 'Search dreams',
   searchPlaceholder: 'Search dreams...',
   clearSearch: 'Clear search',
+  pullToRefresh: {
+    pull: 'Pull down to refresh',
+    release: 'Release to refresh',
+    refreshing: 'Refreshing',
+  },
   pinnedTaskCollapse: 'Tuck notification into the screen edge',
   pinnedTaskExpand: 'Show notification',
   pinnedTaskView: 'View',
+  confirm: {
+    close: 'Close',
+    confirm: 'Confirm',
+    cancel: 'Cancel',
+    loading: 'Please wait…',
+  },
   titleEditor: {
     update: 'Update title',
     success: 'Document title updated.',
@@ -23,7 +36,7 @@ export default {
   progress: {
     elapsed: 'Running for {duration}', seconds: '{count} seconds', minutes: '{count} minutes',
     minutesSeconds: '{minutes} minutes {seconds} seconds', hoursMinutes: '{hours} hours {minutes} minutes',
-    measuring: 'Measuring processing speed to estimate completion', remaining: 'About {duration} remaining',
+    measuring: 'Measuring processing speed to estimate completion', estimateUnavailable: 'Time estimate unavailable', remaining: 'About {duration} remaining',
     overdue: 'Taking {duration} longer than expected · still processing',
     finishedEarly: 'Finished {duration} earlier than estimated',
     finishedLate: 'Finished {duration} later than estimated',
@@ -53,6 +66,13 @@ export default {
     parseDocling: 'Parse layout with Docling', parseDoclingDetail: 'Recover headings, paragraphs, tables, figures, and reading order.',
     cleanOcr: 'Clean OCR errors', cleanOcrDetail: 'Repair characters, spacing, and broken lines before saving.',
     buildReader: 'Build Smart Reader', buildReaderDetail: 'Only cleaned data is written to the final reader.',
+    structuredPrepare: 'Check identifiers and access', structuredPrepareDetail: 'Identify the DOI, URL, and content that may be imported.',
+    structuredRetrieve: 'Retrieve structured content', structuredRetrieveDetail: 'Prefer JATS/XML and HTML to preserve headings, tables, figures, and reading order.',
+    structuredCompile: 'Validate and build Smart Reader', structuredCompileDetail: 'Only valid content is written to Smart Reader.',
+    importPrepare: 'Receive source', importPrepareDetail: 'Validate the input and content access.',
+    importReader: 'Import Smart Reader', importReaderDetail: 'Prefer structured content before using a PDF fallback.',
+    importOriginal: 'Preserve original document', importOriginalDetail: 'Only save a lawful online PDF or a user-uploaded file.',
+    importFinish: 'Finalize document data', importFinishDetail: 'Synchronize identifiers, reader state, and preview information.',
     pin: {
       prefix: 'Document',
       runningTitle: 'Processing',
@@ -75,7 +95,7 @@ export default {
       sourceNone: 'None',
       sourceUnknown: 'Unknown',
       identifiers: '\n• Identifiers: {value}',
-      pdfStored: 'Saved to Cloudinary',
+      pdfStored: 'Saved to DreamScape',
       pdfBlocked: 'Blocked by source',
       pdfExternalOnly: 'External link available — not saved automatically',
       pdfUnavailable: 'No online PDF',
@@ -84,7 +104,16 @@ export default {
   },
   dreamProgress: {
     title: 'Dream analysis', aria: 'Dream analysis progress', stepsAria: 'Dream analysis steps',
-    runningSubject: 'Oracle is reading the full dream narrative', completedSubject: 'Oracle has completed the analysis', cancelledSubject: 'Analysis cancelled',
-    viewPost: 'View post', completed: 'The result is ready.', cancelled: 'Incomplete results were not saved. You can try again from the beginning.',
+    runningSubject: 'Oracle is reading the full dream narrative', completedSubject: 'Oracle has completed the analysis', cancelledSubject: 'Analysis cancelled', failedSubject: 'Analysis was not completed',
+    viewPost: 'View post', completed: 'The result is ready.', cancelled: 'Incomplete results were not saved. You can try again from the beginning.', failed: 'Oracle could not complete this analysis. You can try again.',
+    step: 'Step {current}/{total}', completedSteps: 'Completed {total}/{total} steps',
+    stages: {
+      queued: { label: 'Waiting for analysis', detail: 'Each account can process one dream at a time.' },
+      preparing: { label: 'Preparing narrative and profile', detail: 'Separating the dream narrative, waking response, and supplied context.' },
+      retrievingContext: { label: 'Finding details and similar cases', detail: 'Comparing dictionary entries, narrative details, and previous dreams.' },
+      retrievingRules: { label: 'Selecting applicable knowledge', detail: 'Checking approved claims, sources, and permitted inference scope.' },
+      generatingAnalysis: { label: 'Synthesizing interpretive threads', detail: 'The model is writing from the selected data and evidence.' },
+      finalizing: { label: 'Verifying and finalizing', detail: 'Removing unsupported inferences, linking sources, and standardizing questions.' },
+    },
   },
 } as const

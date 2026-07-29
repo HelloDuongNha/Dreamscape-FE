@@ -1,5 +1,6 @@
 import apiClient from './client'
 import type { OracleMode } from '@/features/oracle/oracleShell.types'
+import type { AiDreamAnalysisResult } from './types'
 
 export interface OracleThreadDto {
   _id: string
@@ -37,6 +38,8 @@ export interface OracleTurnDto {
     percent: number
     provider?: string
     modelName?: string
+    includedMessages?: number
+    omittedMessages?: number
   }
   runTiming?: {
     startedAt: string
@@ -55,6 +58,7 @@ export interface OracleCitationDto {
   title: string
   year?: number
   excerpt: string
+  doi?: string
   detail?: string
   ruleLinks?: OracleCitationRuleLinkDto[]
 }
@@ -66,11 +70,16 @@ export interface OracleCitationRuleLinkDto {
   localizedStatement?: { vi: string; en: string }
   quote: string
   evidenceScore: number
+  sourceEvidenceScore?: number
+  userValidationAdjustment?: number
+  usageExcerpt?: string
   supportingSourceCount: number
   verificationKey?: string
   verificationQuestion?: string
   localizedVerificationQuestion?: { vi: string; en: string }
   currentUserAnswer?: 'yes' | 'no' | 'unsure' | null
+  dreamHypothesisIndex?: number
+  dreamVerificationKey?: string
 }
 
 export interface OracleRuleScoreUpdateDto {
@@ -81,6 +90,31 @@ export interface OracleRuleScoreUpdateDto {
   validationAdjustment: number
   relation: 'direct' | 'shared_quote'
   voteDelta: -2 | -1 | 0 | 1 | 2
+}
+
+export interface OracleCitationFeedbackResult {
+  ruleId: string
+  answer: 'yes' | 'no' | 'unsure' | null
+  score: number
+  scoreDelta: number
+  voteDelta: -2 | 0 | 2
+  scoreUpdates: OracleRuleScoreUpdateDto[]
+}
+
+export interface DreamHypothesisFeedbackData {
+  analysis?: AiDreamAnalysisResult
+  feedbackRevision?: NonNullable<AiDreamAnalysisResult['feedback_revision']>
+  feedbackConclusion?: string | null
+  ruleScoreUpdates?: OracleRuleScoreUpdateDto[]
+  ruleId?: string
+  answer?: 'yes' | 'no' | 'unsure' | null
+  score?: number
+  scoreDelta?: number
+}
+
+export interface DreamHypothesisFeedbackResponse {
+  success: boolean
+  data: DreamHypothesisFeedbackData
 }
 
 export interface OracleRunDto {
@@ -108,36 +142,29 @@ export interface OracleRunStatusDto {
 export async function submitOracleCitationFeedback(input: {
   turnId: string
   citationIndex: number
+  sourceId?: string
   ruleId: string
   answer: 'yes' | 'no' | 'unsure' | null
-}): Promise<{
-  ruleId: string
-  answer: 'yes' | 'no' | 'unsure' | null
-  score: number
-  scoreDelta: number
-  voteDelta: -2 | 0 | 2
-  scoreUpdates: OracleRuleScoreUpdateDto[]
-}> {
-  const { data } = await apiClient.post<OracleResponse<{
-    ruleId: string
-    answer: 'yes' | 'no' | 'unsure' | null
-    score: number
-    scoreDelta: number
-    voteDelta: -2 | 0 | 2
-    scoreUpdates: OracleRuleScoreUpdateDto[]
-  }>>(`/oracle/turns/${input.turnId}/citations/${input.citationIndex}/feedback`, {
+}): Promise<OracleCitationFeedbackResult> {
+  const { data } = await apiClient.post<OracleResponse<OracleCitationFeedbackResult>>(
+    `/oracle/turns/${input.turnId}/citations/${input.citationIndex}/feedback`,
+    {
     ruleId: input.ruleId,
     answer: input.answer,
-  })
+    },
+    { params: input.sourceId ? { sourceId: input.sourceId } : undefined },
+  )
   return data.data
 }
 
 export async function getOracleCitationDetails(
   turnId: string,
-  citationIndex: number
+  citationIndex: number,
+  sourceId?: string,
 ): Promise<OracleCitationDto> {
   const { data } = await apiClient.get<OracleResponse<OracleCitationDto>>(
-    `/oracle/turns/${turnId}/citations/${citationIndex}`
+    `/oracle/turns/${turnId}/citations/${citationIndex}`,
+    { params: sourceId ? { sourceId } : undefined },
   )
   return data.data
 }

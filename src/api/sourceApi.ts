@@ -1,26 +1,60 @@
 import apiClient from './client'
 import type { TranslateReaderRequest, TranslateReaderResponse } from '../features/library/services/smartReaderTranslation.types'
 import type { PdfImportProgressResponse } from './moderationApi'
+import type { PdfProcessingResponse } from './academicSourceProcessing.types'
+import type { AxiosProgressEvent } from 'axios'
+
+export interface AcademicSourcePreview {
+  title: string
+  authors?: string[]
+  year?: number
+  journal?: string
+  publisher?: string
+  doi?: string
+  pmcid?: string
+  url?: string
+  fileName?: string
+  fileSize?: number
+  sourceProvider?: string
+  fullTextAvailable?: boolean
+}
+
+export interface SourceContributionResult {
+  success: boolean
+  message?: string
+  data?: {
+    _id?: string
+    data?: { _id?: string }
+  }
+}
 
 export interface ContributeSourcePayload {
   doi?: string
+  pmcid?: string
   url?: string
-  isbn?: string
   submittedNote?: string
-  metadata?: any
+  metadata?: AcademicSourcePreview
 }
 
 export interface PreviewSourcePayload {
   doi?: string
+  pmcid?: string
   url?: string
-  isbn?: string
 }
 
 /**
  * Fetches preview metadata for a DOI or URL without saving.
  */
-export const previewSource = async (payload: PreviewSourcePayload) => {
-  const { data } = await apiClient.post<{ success: boolean; message?: string; data?: any }>(
+export const previewSource = async (payload: PreviewSourcePayload): Promise<{
+  success: boolean
+  message?: string
+  data?: AcademicSourcePreview
+}> => {
+  const { data } = await apiClient.post<{
+    success: boolean
+    message?: string
+    data?: AcademicSourcePreview
+  }>(
     '/sources/preview',
     payload
   )
@@ -30,8 +64,10 @@ export const previewSource = async (payload: PreviewSourcePayload) => {
 /**
  * Submits a DOI or URL as a new academic source contribution.
  */
-export const contributeSource = async (payload: ContributeSourcePayload) => {
-  const { data } = await apiClient.post<{ success: boolean; message?: string; data?: any }>(
+export const contributeSource = async (
+  payload: ContributeSourcePayload,
+): Promise<SourceContributionResult> => {
+  const { data } = await apiClient.post<SourceContributionResult>(
     '/sources/contribute',
     payload
   )
@@ -54,8 +90,8 @@ export const contributePdfSource = async (
     publisher?: string
     submittedNote?: string
   },
-  onUploadProgress?: (progressEvent: any) => void
-) => {
+  onUploadProgress?: (progressEvent: AxiosProgressEvent) => void
+): Promise<SourceContributionResult> => {
   const formData = new FormData()
   formData.append('pdfFile', file)
   if (payload.doi) formData.append('doi', payload.doi)
@@ -69,7 +105,7 @@ export const contributePdfSource = async (
   if (payload.publisher) formData.append('publisher', payload.publisher)
   if (payload.submittedNote) formData.append('submittedNote', payload.submittedNote)
 
-  const { data } = await apiClient.post<{ success: boolean; message?: string; data?: any }>(
+  const { data } = await apiClient.post<SourceContributionResult>(
     '/sources/contribute-pdf',
     formData,
     {
@@ -84,12 +120,34 @@ export const contributePdfSource = async (
 
 export interface GetApprovedSourcesParams {
   q?: string
+  doi?: string
   page?: number
   limit?: number
 }
 
+export interface ApprovedSourceCatalogItem {
+  _id: string
+  title?: string
+  authors?: string[]
+  year?: number
+  journal?: string
+  doi?: string
+  url?: string
+  sourceOrigin?: string
+  originalFile?: Record<string, unknown>
+  fullTextSourceType?: string
+  allowedUse?: string
+  verificationStatus?: string
+  copyrightStatus?: string
+  progress?: number
+  metadata?: {
+    authors?: string[]
+    category?: string
+  }
+}
+
 export interface ApprovedSourcesResponse {
-  items: any[]
+  items: ApprovedSourceCatalogItem[]
   pagination: {
     page: number
     limit: number
@@ -102,11 +160,12 @@ export interface ApprovedSourcesResponse {
  * Fetches approved academic sources catalog with pagination and optional query search.
  */
 export const getApprovedSources = async (
-  params: GetApprovedSourcesParams
+  params: GetApprovedSourcesParams,
+  signal?: AbortSignal
 ): Promise<ApprovedSourcesResponse> => {
   const { data } = await apiClient.get<{ success: boolean; data: ApprovedSourcesResponse }>(
     '/sources/approved',
-    { params }
+    { params, signal }
   )
   return data.data
 }
@@ -189,8 +248,17 @@ export const deleteApprovedSourceOriginalPdf = async (id: string): Promise<any> 
 /**
  * Triggers PDF ingestion processing for approved academic sources.
  */
-export const processUploadedPdfForApprovedSource = async (id: string, forceReplace = false, structuredFirst = false, signal?: AbortSignal): Promise<any> => {
-  const { data } = await apiClient.post<any>(`/sources/approved/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst }, { signal })
+export const processUploadedPdfForApprovedSource = async (
+  id: string,
+  forceReplace = false,
+  structuredFirst = false,
+  signal?: AbortSignal,
+): Promise<PdfProcessingResponse> => {
+  const { data } = await apiClient.post<PdfProcessingResponse>(
+    `/sources/approved/${id}/process-uploaded-pdf`,
+    { forceReplace, structuredFirst },
+    { signal },
+  )
   return data
 }
 

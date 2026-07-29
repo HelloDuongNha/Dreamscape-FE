@@ -111,13 +111,17 @@
                 class="oracle-sidebar__item-action"
                 :aria-label="t('oracle.conversationMenu')"
                 :aria-expanded="openMenuThreadId === thread.id"
-                @click.stop="toggleMenu(thread.id)"
+                @click.stop="toggleMenu(thread.id, $event)"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
                 </svg>
               </button>
-              <div v-if="openMenuThreadId === thread.id" class="oracle-sidebar__item-menu" @click.stop>
+              <div
+                v-if="openMenuThreadId === thread.id"
+                :class="['oracle-sidebar__item-menu', { 'oracle-sidebar__item-menu--up': menuOpensUp }]"
+                @click.stop
+              >
                 <button type="button" @click="emit('toggle-pin', thread.id); closeMenu()">
                   {{ thread.pinned ? t('oracle.unpinConversation') : t('oracle.pinConversation') }}
                 </button>
@@ -183,6 +187,7 @@ const editingThreadId = ref<string | null>(null)
 const renameDraft = ref('')
 const renameInputs = ref<HTMLInputElement[]>([])
 const openMenuThreadId = ref<string | null>(null)
+const menuOpensUp = ref(false)
 
 function checkMobile() {
   isMobile.value = window.innerWidth <= 768
@@ -205,12 +210,15 @@ function startRename(thread: OracleThreadItem) {
   void nextTick(() => renameInputs.value.at(-1)?.focus())
 }
 
-function toggleMenu(threadId: string) {
+function toggleMenu(threadId: string, event: MouseEvent) {
+  const button = event.currentTarget as HTMLElement | null
+  menuOpensUp.value = Boolean(button && button.getBoundingClientRect().bottom + 132 > window.innerHeight)
   openMenuThreadId.value = openMenuThreadId.value === threadId ? null : threadId
 }
 
 function closeMenu() {
   openMenuThreadId.value = null
+  menuOpensUp.value = false
 }
 
 function cancelRename() {
@@ -468,6 +476,11 @@ onUnmounted(() => {
   box-shadow: 0 14px 35px rgba(0, 0, 0, 0.32);
 }
 
+.oracle-sidebar__item-menu--up {
+  top: auto;
+  bottom: calc(100% - 3px);
+}
+
 .oracle-sidebar__item-menu button {
   padding: 0.62rem 0.72rem;
   border: 0;
@@ -560,10 +573,10 @@ onUnmounted(() => {
 
   .oracle-sidebar {
     position: fixed;
-    top: 0;
+    top: var(--header-height);
     left: 0;
-    bottom: 0;
-    width: 280px;
+    bottom: var(--mobile-nav-height);
+    width: min(86vw, 320px);
     z-index: var(--z-modal, 101);
     transform: translateX(-100%);
     transition: transform 0.25s ease;

@@ -67,13 +67,18 @@ const pdfStageDefinitions = computed(() => [
   { key: 'compiling_reader', label: t('common.sourceProgress.buildReader'), detail: t('common.sourceProgress.buildReaderDetail') },
 ])
 
-const activePdfStage = computed(() => {
-  if (sourceProgressStore.pipelineKind !== 'pdf') return null
-  return pdfStageDefinitions.value.find(stage => stage.key === sourceProgressStore.pdfStage) || null
-})
+const structuredStageDefinitions = computed(() => [
+  { key: 'prepare', label: t('common.sourceProgress.structuredPrepare'), detail: t('common.sourceProgress.structuredPrepareDetail') },
+  { key: 'retrieve', label: t('common.sourceProgress.structuredRetrieve'), detail: t('common.sourceProgress.structuredRetrieveDetail') },
+  { key: 'compile', label: t('common.sourceProgress.structuredCompile'), detail: t('common.sourceProgress.structuredCompileDetail') },
+])
 
-const presentedStepText = computed(() => activePdfStage.value?.label || sourceProgressStore.stepText)
-const presentedDetailText = computed(() => activePdfStage.value?.detail || sourceProgressStore.stageDetail)
+const importStageDefinitions = computed(() => [
+  { key: 'prepare', label: t('common.sourceProgress.importPrepare'), detail: t('common.sourceProgress.importPrepareDetail') },
+  { key: 'reader', label: t('common.sourceProgress.importReader'), detail: t('common.sourceProgress.importReaderDetail') },
+  { key: 'original', label: t('common.sourceProgress.importOriginal'), detail: t('common.sourceProgress.importOriginalDetail') },
+  { key: 'finish', label: t('common.sourceProgress.importFinish'), detail: t('common.sourceProgress.importFinishDetail') },
+])
 
 const currentStageIndex = computed(() => {
   if (sourceProgressStore.status === 'success') return stageCount.value
@@ -89,26 +94,27 @@ const currentStageIndex = computed(() => {
   return sourceProgressStore.progress >= 75 ? 3 : sourceProgressStore.progress >= 45 ? 2 : sourceProgressStore.progress >= 20 ? 1 : 0
 })
 
+const stageDefinitions = computed(() => sourceProgressStore.pipelineKind === 'pdf'
+  ? pdfStageDefinitions.value
+  : sourceProgressStore.pipelineKind === 'structured'
+    ? structuredStageDefinitions.value
+    : importStageDefinitions.value)
+
+const activeStage = computed(() => {
+  if (sourceProgressStore.pipelineKind === 'pdf') {
+    return pdfStageDefinitions.value.find(stage => stage.key === sourceProgressStore.pdfStage)
+      || pdfStageDefinitions.value[currentStageIndex.value]
+  }
+  return stageDefinitions.value[currentStageIndex.value]
+})
+
+const presentedStepText = computed(() => activeStage.value?.label || sourceProgressStore.stepText)
+const presentedDetailText = computed(() => activeStage.value?.detail || sourceProgressStore.stageDetail)
+
 const stages = computed<LongRunningTaskStage[]>(() => {
-  const definitions = sourceProgressStore.pipelineKind === 'pdf'
-    ? pdfStageDefinitions.value
-    : sourceProgressStore.pipelineKind === 'structured'
-      ? [
-          { key: 'prepare', label: 'Kiểm tra định danh và quyền truy cập', detail: 'Xác định DOI, URL và phạm vi nội dung được phép nhập.' },
-          { key: 'retrieve', label: 'Lấy nội dung có cấu trúc', detail: 'Ưu tiên JATS/XML và HTML để giữ heading, bảng, hình và thứ tự đọc.' },
-          { key: 'compile', label: 'Kiểm tra và dựng Bản đọc', detail: 'Chỉ nội dung hợp lệ được ghi vào Bản đọc thông minh.' },
-        ]
-      : [
-          { key: 'prepare', label: 'Tiếp nhận nguồn', detail: 'Kiểm tra dữ liệu đầu vào và quyền truy cập.' },
-          { key: 'reader', label: 'Nhập Bản đọc thông minh', detail: 'Ưu tiên nguồn có cấu trúc trước khi dùng PDF.' },
-          { key: 'original', label: 'Lưu tài liệu gốc', detail: 'Chỉ lưu PDF từ nguồn hợp pháp hoặc tệp đã được tải lên.' },
-          { key: 'finish', label: 'Hoàn thiện dữ liệu', detail: 'Đồng bộ định danh, trạng thái đọc và thông tin xem trước.' },
-        ]
-  return definitions.map((definition, index) => ({
+  return stageDefinitions.value.map((definition, index) => ({
     ...definition,
-    activeDetail: index === currentStageIndex.value
-      ? (sourceProgressStore.pipelineKind === 'pdf' ? definition.detail : sourceProgressStore.stageDetail)
-      : definition.detail,
+    activeDetail: definition.detail,
     state: sourceProgressStore.status === 'cancelled' && index === currentStageIndex.value
       ? 'failed'
       : index < currentStageIndex.value || sourceProgressStore.status === 'success'

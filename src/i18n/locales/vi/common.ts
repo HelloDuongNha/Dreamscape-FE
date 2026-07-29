@@ -1,5 +1,7 @@
 /** Vietnamese — common shell strings */
 export default {
+  showPassword: 'Hiện mật khẩu',
+  hidePassword: 'Ẩn mật khẩu',
   appName: 'DreamScape',
   toggleNav: 'Mở/đóng điều hướng',
   scrollToTop: 'Cuộn lên đầu và làm mới trang',
@@ -9,9 +11,20 @@ export default {
   searchLabel: 'Tìm kiếm giấc mơ',
   searchPlaceholder: 'Tìm kiếm giấc mơ...',
   clearSearch: 'Xóa tìm kiếm',
+  pullToRefresh: {
+    pull: 'Kéo xuống để làm mới',
+    release: 'Thả để làm mới',
+    refreshing: 'Đang làm mới',
+  },
   pinnedTaskCollapse: 'Thu thông báo vào cạnh màn hình',
   pinnedTaskExpand: 'Mở lại thông báo',
   pinnedTaskView: 'Xem',
+  confirm: {
+    close: 'Đóng',
+    confirm: 'Xác nhận',
+    cancel: 'Hủy',
+    loading: 'Vui lòng chờ…',
+  },
   titleEditor: {
     update: 'Cập nhật tiêu đề',
     success: 'Đã cập nhật tiêu đề tài liệu.',
@@ -23,7 +36,7 @@ export default {
   progress: {
     elapsed: 'Đã chạy {duration}', seconds: '{count} giây', minutes: '{count} phút',
     minutesSeconds: '{minutes} phút {seconds} giây', hoursMinutes: '{hours} giờ {minutes} phút',
-    measuring: 'Đang đo tốc độ xử lý để ước tính', remaining: 'Còn khoảng {duration}',
+    measuring: 'Đang đo tốc độ xử lý để ước tính', estimateUnavailable: 'Chưa có thời gian dự kiến', remaining: 'Còn khoảng {duration}',
     overdue: 'Lâu hơn dự kiến {duration} · vẫn đang xử lý',
     finishedEarly: 'Hoàn tất sớm hơn dự kiến {duration}',
     finishedLate: 'Hoàn tất muộn hơn dự kiến {duration}',
@@ -53,6 +66,13 @@ export default {
     parseDocling: 'Phân tích bố cục bằng Docling', parseDoclingDetail: 'Khôi phục heading, đoạn văn, bảng, hình và thứ tự đọc.',
     cleanOcr: 'Làm sạch lỗi OCR', cleanOcrDetail: 'Sửa lỗi ký tự, khoảng trắng và dòng vỡ trước khi lưu.',
     buildReader: 'Dựng Bản đọc thông minh', buildReaderDetail: 'Chỉ dữ liệu đã làm sạch mới được ghi vào bản đọc cuối.',
+    structuredPrepare: 'Kiểm tra định danh và quyền truy cập', structuredPrepareDetail: 'Xác định DOI, URL và phạm vi nội dung được phép nhập.',
+    structuredRetrieve: 'Lấy nội dung có cấu trúc', structuredRetrieveDetail: 'Ưu tiên JATS/XML và HTML để giữ heading, bảng, hình và thứ tự đọc.',
+    structuredCompile: 'Kiểm tra và dựng Bản đọc', structuredCompileDetail: 'Chỉ nội dung hợp lệ được ghi vào Bản đọc thông minh.',
+    importPrepare: 'Tiếp nhận nguồn', importPrepareDetail: 'Kiểm tra dữ liệu đầu vào và quyền truy cập.',
+    importReader: 'Nhập Bản đọc thông minh', importReaderDetail: 'Ưu tiên nguồn có cấu trúc trước khi dùng PDF.',
+    importOriginal: 'Lưu tài liệu gốc', importOriginalDetail: 'Chỉ lưu PDF từ nguồn hợp pháp hoặc tệp đã được tải lên.',
+    importFinish: 'Hoàn thiện dữ liệu', importFinishDetail: 'Đồng bộ định danh, trạng thái đọc và thông tin xem trước.',
     pin: {
       prefix: 'Tài liệu',
       runningTitle: 'Đang xử lý',
@@ -75,7 +95,7 @@ export default {
       sourceNone: 'Không có',
       sourceUnknown: 'Không xác định',
       identifiers: '\n• Định danh: {value}',
-      pdfStored: 'Đã lưu Cloudinary',
+      pdfStored: 'Đã lưu PDF gốc',
       pdfBlocked: 'Bị chặn bởi nguồn',
       pdfExternalOnly: 'Có link ngoài — không lưu tự động',
       pdfUnavailable: 'Không có PDF online',
@@ -84,7 +104,16 @@ export default {
   },
   dreamProgress: {
     title: 'Phân tích giấc mơ', aria: 'Tiến trình phân tích giấc mơ', stepsAria: 'Các bước phân tích giấc mơ',
-    runningSubject: 'Oracle đang đọc toàn bộ mạch giấc mơ', completedSubject: 'Oracle đã hoàn tất phân tích', cancelledSubject: 'Phân tích đã được hủy',
-    viewPost: 'Xem bài viết', completed: 'Kết quả đã sẵn sàng.', cancelled: 'Kết quả chưa hoàn tất không được lưu. Bạn có thể thử lại từ đầu.',
+    runningSubject: 'Oracle đang đọc toàn bộ mạch giấc mơ', completedSubject: 'Oracle đã hoàn tất phân tích', cancelledSubject: 'Phân tích đã được hủy', failedSubject: 'Phân tích chưa hoàn tất',
+    viewPost: 'Xem bài viết', completed: 'Kết quả đã sẵn sàng.', cancelled: 'Kết quả chưa hoàn tất không được lưu. Bạn có thể thử lại từ đầu.', failed: 'Oracle không thể hoàn tất lần phân tích này. Bạn có thể thử lại.',
+    step: 'Bước {current}/{total}', completedSteps: 'Đã hoàn tất {total}/{total} bước',
+    stages: {
+      queued: { label: 'Chờ tới lượt phân tích', detail: 'Mỗi tài khoản chỉ có một giấc mơ được xử lý tại một thời điểm.' },
+      preparing: { label: 'Chuẩn bị lời kể và hồ sơ', detail: 'Tách nội dung giấc mơ, phản ứng khi tỉnh và bối cảnh đã cung cấp.' },
+      retrievingContext: { label: 'Tìm chi tiết và trường hợp tương đồng', detail: 'Đối chiếu từ điển, chi tiết trong lời kể và những giấc mơ trước.' },
+      retrievingRules: { label: 'Chọn tri thức có thể áp dụng', detail: 'Kiểm tra lập luận đã duyệt, nguồn tài liệu và phạm vi được phép suy luận.' },
+      generatingAnalysis: { label: 'Tổng hợp các mạch diễn giải', detail: 'Mô hình viết từ phần dữ liệu và bằng chứng đã chọn.' },
+      finalizing: { label: 'Kiểm chứng và hoàn thiện', detail: 'Loại suy luận không có căn cứ, gắn nguồn và chuẩn hóa câu hỏi.' },
+    },
   },
 } as const

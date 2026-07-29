@@ -13,14 +13,14 @@
       <component
         :is="type === 'textarea' ? 'textarea' : 'input'"
         :id="inputId"
-        :type="type !== 'textarea' ? type : undefined"
+        :type="resolvedInputType"
         :value="modelValue"
         :placeholder="placeholder"
         :disabled="disabled"
         :readonly="readonly"
         :required="required"
         :rows="type === 'textarea' ? rows : undefined"
-        :class="['app-input__field', { 'app-input__field--with-prefix': !!prefixIcon, 'app-input__field--with-suffix': !!suffixIcon, 'app-input__field--textarea': type === 'textarea' }]"
+        :class="['app-input__field', { 'app-input__field--with-prefix': !!prefixIcon, 'app-input__field--with-suffix': !!suffixIcon || type === 'password', 'app-input__field--textarea': type === 'textarea' }]"
         v-bind="$attrs"
         @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
         @focus="isFocused = true"
@@ -30,6 +30,25 @@
       <span v-if="suffixIcon" class="app-input__icon app-input__icon--suffix" aria-hidden="true">
         {{ suffixIcon }}
       </span>
+
+      <button
+        v-if="type === 'password'"
+        type="button"
+        class="app-input__password-toggle"
+        :aria-label="t(passwordVisible ? 'common.hidePassword' : 'common.showPassword')"
+        :aria-pressed="passwordVisible"
+        :disabled="disabled"
+        @mousedown.prevent
+        @click="passwordVisible = !passwordVisible"
+      >
+        <svg v-if="passwordVisible" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 4.2A10.8 10.8 0 0 1 12 4c5.5 0 9 5.2 9 5.2a14 14 0 0 1-2.1 2.6M6.2 6.2C4.2 7.5 3 9.2 3 9.2S6.5 16 12 16c1.3 0 2.5-.3 3.5-.7"/>
+        </svg>
+        <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/>
+          <circle cx="12" cy="12" r="2.5"/>
+        </svg>
+      </button>
     </div>
 
     <Transition name="fade">
@@ -41,6 +60,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = withDefaults(defineProps<{
   modelValue?: string | number
@@ -63,8 +83,15 @@ const props = withDefaults(defineProps<{
 
 defineEmits<{ 'update:modelValue': [value: string] }>()
 
+const { t } = useI18n()
 const isFocused = ref(false)
+const passwordVisible = ref(false)
 const inputId   = computed(() => props.id ?? `app-input-${Math.random().toString(36).slice(2, 7)}`)
+const resolvedInputType = computed(() => {
+  if (props.type === 'textarea') return undefined
+  if (props.type === 'password') return passwordVisible.value ? 'text' : 'password'
+  return props.type
+})
 </script>
 
 <style scoped>
@@ -107,6 +134,38 @@ const inputId   = computed(() => props.id ?? `app-input-${Math.random().toString
 .app-input__icon--prefix { left: var(--space-4); }
 .app-input__icon--suffix { right: var(--space-4); }
 .app-input-wrapper--focused .app-input__icon { color: var(--color-primary); }
+
+.app-input__password-toggle {
+  position: absolute;
+  right: var(--space-2);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.app-input__password-toggle:hover,
+.app-input__password-toggle:focus-visible {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+  outline: none;
+}
+.app-input__password-toggle:disabled { cursor: not-allowed; opacity: .5; }
+.app-input__password-toggle svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 /* Core field */
 .app-input__field {

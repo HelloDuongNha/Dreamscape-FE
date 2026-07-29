@@ -3,16 +3,23 @@ import { ref, computed } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import apiClient from '@/api/client'
 import router from '@/router'
+import { useDreamStore } from '@/store/useDreamStore'
+import { usePostStore } from '@/store/usePostStore'
 import type {
   ApiConversation,
   ApiMessage,
+  ApiNotification,
   ApiUser,
+  MessagingSearchResponse,
   SocketMessage,
+  SocketPresenceUpdate,
   SocketStatusUpdate,
 } from '@/api/types'
 
 const SOCKET_URL = 'http://localhost:5001'
 const TOKEN_KEY  = 'ds_token'
+const MUTED_CONVERSATIONS_KEY = 'ds_muted_conversations'
+const ONLINE_HEARTBEAT_WINDOW_MS = 90_000
 
 // ─── Exported Types ───────────────────────────────────────────────────────────
 
@@ -31,12 +38,22 @@ export const useChatStore = defineStore('chat', () => {
   const activeConversationId = ref<string | null>(null)
   const isLoadingConvs       = ref(false)
   const isLoadingMsgs        = ref(false)
+  const sessionUserId        = ref<string>(
+    (() => {
+      try { return JSON.parse(localStorage.getItem('ds_user') ?? '{}')._id ?? '' }
+      catch { return '' }
+    })()
+  )
 
   // Per-conversation mute state (conversationId → boolean)
   const mutedConversations = ref<Record<string, boolean>>({})
+  const presenceByUserId = ref<Record<string, SocketPresenceUpdate>>({})
 
   // Socket — lazily initialized when user logs in
   let socket: Socket | null = null
+  let sessionEpoch = 0
+  let dreamCitationRefreshTimer: ReturnType<typeof setTimeout> | null = null
+  const pendingDreamCitationRefreshes = new Set<string>()
 
   // ── Getters ────────────────────────────────────────────────────────────────
 
@@ -82,16 +99,61 @@ export const useChatStore = defineStore('chat', () => {
       : false
   )
 
+  function isUserOnline(userId: string, lastHeartbeatAt?: string): boolean {
+    const livePresence = presenceByUserId.value[userId]
+    if (livePresence) return livePresence.isOnline
+    if (!lastHeartbeatAt) return false
+    return Date.now() - new Date(lastHeartbeatAt).getTime() <= ONLINE_HEARTBEAT_WINDOW_MS
+  }
+
+  function getUserLastActiveAt(userId: string, fallback?: string): string | undefined {
+    return presenceByUserId.value[userId]?.lastActiveAt || fallback
+  }
+
   // ── Private helpers ────────────────────────────────────────────────────────
 
   function _myId(): string {
-    try { return JSON.parse(localStorage.getItem('ds_user') ?? '{}')._id ?? '' }
-    catch { return '' }
+    return sessionUserId.value
   }
 
   /** Find a conversation by id in the reactive store */
   function _findConv(convId: string): ApiConversation | undefined {
     return conversations.value.find(c => c._id === convId)
+  }
+
+  function _mutedStorageKey(userId = sessionUserId.value): string {
+    return `${MUTED_CONVERSATIONS_KEY}:${userId}`
+  }
+
+  function _loadMutedConversations(userId: string): void {
+    if (!userId) {
+      mutedConversations.value = {}
+      return
+    }
+    try {
+      const stored = JSON.parse(localStorage.getItem(_mutedStorageKey(userId)) || '{}')
+      if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
+        mutedConversations.value = {}
+        return
+      }
+      mutedConversations.value = Object.entries(stored).reduce<Record<string, boolean>>(
+        (result, [conversationId, muted]) => {
+          if (conversationId && muted === true) result[conversationId] = true
+          return result
+        },
+        {},
+      )
+    } catch {
+      mutedConversations.value = {}
+    }
+  }
+
+  function _persistMutedConversations(): void {
+    if (!sessionUserId.value) return
+    localStorage.setItem(
+      _mutedStorageKey(),
+      JSON.stringify(mutedConversations.value),
+    )
   }
 
   // ── Socket Initialization ──────────────────────────────────────────────────
@@ -101,10 +163,19 @@ export const useChatStore = defineStore('chat', () => {
    * Idempotent — calling multiple times is safe.
    */
   function connectSocket(): void {
-    if (socket?.connected) return
-
     const token = localStorage.getItem(TOKEN_KEY)
     if (!token) return
+
+    if (socket) {
+      const socketToken = (socket.auth as { token?: string } | undefined)?.token
+      if (socketToken === token) {
+        if (!socket.connected) socket.connect()
+        return
+      }
+      socket.removeAllListeners()
+      socket.disconnect()
+      socket = null
+    }
 
     socket = io(SOCKET_URL, {
       auth:        { token },
@@ -112,119 +183,12 @@ export const useChatStore = defineStore('chat', () => {
       autoConnect: true,
     })
 
-    socket.on('connect', () => {
-      console.log('🔌 Socket connected:', socket?.id)
-    })
+    socket.on('connect', handleSocketConnected)
 
-    socket.on('disconnect', (reason) => {
-      console.log('🔌 Socket disconnected:', reason)
-    })
+    socket.on('user_presence_changed', handlePresenceChanged)
 
     // ── Incoming message ─────────────────────────────────────────────────────
-    socket.on('receive_message', (payload: SocketMessage) => {
-      const isFromMe     = payload.senderId === _myId()
-      const isActiveConv = payload.conversationId === activeConversationId.value
-
-      // ── Task 1: Temp ID deduplication ─────────────────────────────────────
-      // If tempId present, swap the optimistic entry with the real one in-place
-      if (payload.tempId) {
-        const idx = messages.value.findIndex(m => m._id === payload.tempId)
-        if (idx !== -1) {
-          messages.value[idx] = {
-            _id:            String(payload._id),
-            conversationId: payload.conversationId,
-            senderId:       payload.senderId,
-            content:        payload.content,
-            timestamp:      String(payload.timestamp),
-            status:         payload.status,
-          }
-          // Update conversation last_message snippet
-          const conv = _findConv(payload.conversationId)
-          if (conv) {
-            conv.last_message = payload.content
-            conv.updated_at   = String(payload.timestamp)
-          }
-          return // Sender's own echo — no badge increment, no duplicate push
-        }
-      }
-
-      // ── Avoid full duplicates (safety net) ────────────────────────────────
-      const already = messages.value.some(m => m._id === String(payload._id))
-      if (!already) {
-        messages.value.push({
-          _id:            String(payload._id),
-          conversationId: payload.conversationId,
-          senderId:       payload.senderId,
-          content:        payload.content,
-          timestamp:      String(payload.timestamp),
-          status:         payload.status,
-        })
-      }
-
-      // Always update conversation last_message snippet
-      const conv = _findConv(payload.conversationId)
-      if (conv) {
-        conv.last_message = payload.content
-        conv.updated_at   = String(payload.timestamp)
-      }
-
-      // ── Task 2: Per-conversation unread_count on conversations[] ───────────
-      // Only count messages from others arriving in a non-active conversation.
-      // We write directly to conv.unread_count so totalUnread auto-updates.
-      if (!isFromMe && !isActiveConv && !already) {
-        const targetConv = _findConv(payload.conversationId)
-        if (targetConv) {
-          targetConv.unread_count = (targetConv.unread_count || 0) + 1
-        }
-
-        // Active page guard and dynamic toast trigger
-        const isOnMessagesPage = router.currentRoute.value.path === '/messages'
-        const isMuted = mutedConversations.value[payload.conversationId] ?? false
-        if (!isOnMessagesPage && !isMuted) {
-          (async () => {
-            let conv = _findConv(payload.conversationId)
-            if (!conv) {
-              await loadConversations()
-              conv = _findConv(payload.conversationId)
-            }
-
-            let senderName = 'Unknown User'
-            let senderAvatar = ''
-            let senderUsername = ''
-
-            if (conv) {
-              const partner = conv.participant_ids.find(u => u._id === payload.senderId)
-              if (partner) {
-                senderName = partner.display_name
-                senderAvatar = partner.avatar ?? ''
-                senderUsername = partner.username
-              }
-            }
-
-            const { useMessageToastStore } = await import('@/store/useMessageToastStore')
-            useMessageToastStore().addMessageToast({
-              conversationId: payload.conversationId,
-              senderId:       payload.senderId,
-              senderName,
-              senderAvatar,
-              senderUsername,
-              content:        payload.content,
-              timestamp:      payload.timestamp,
-            })
-          })()
-        }
-      }
-
-      // ── Auto-deliver: notify server the message was received ───────────────
-      if (!isFromMe && !already) {
-        socket?.emit('message_delivered', { messageId: String(payload._id) })
-      }
-
-      // ── Strict seen: ONLY emit mark_as_seen when recipient is viewing this conv
-      if (!isFromMe && isActiveConv) {
-        socket?.emit('mark_as_seen', { conversationId: payload.conversationId })
-      }
-    })
+    socket.on('receive_message', handleReceivedMessage)
 
     // ── Status update from server ────────────────────────────────────────────
     socket.on('message_status_updated', (payload: SocketStatusUpdate) => {
@@ -242,22 +206,214 @@ export const useChatStore = defineStore('chat', () => {
       }
     })
 
-    socket.on('error_message', (err: { message: string }) => {
-      console.log('Socket error:', err.message)
+    socket.on('error_message', (err: { code?: string; tempId?: string }) => {
+      if (err.tempId) {
+        messages.value = messages.value.filter(message => message._id !== err.tempId)
+      }
+      void import('@/store/useSettingsStore').then(({ useSettingsStore }) => {
+        const key = err.code === 'conversation_access_denied'
+          ? 'messages.conversationUnavailable'
+          : 'messages.sendFailed'
+        useSettingsStore().showToastKey(key, undefined, 'error')
+      })
     })
 
     // ── Incoming notification ────────────────────────────────────────────────
-    socket.on('new_notification', (payload: any) => {
+    socket.on('new_notification', (payload: ApiNotification) => {
       import('@/store/useNotificationStore').then(({ useNotificationStore }) => {
         useNotificationStore().addNotification(payload)
       })
+    })
+
+    socket.on('dream_citation_state_changed', (payload: { dreamIds?: string[] }) => {
+      scheduleDreamCitationRefresh(payload?.dreamIds || [])
+    })
+
+    socket.on('oracle_citation_state_changed', (payload: {
+      threadIds?: string[]
+      turnIds?: string[]
+    }) => {
+      void import('@/store/useOracleChatStore').then(({ useOracleChatStore }) => {
+        useOracleChatStore().notifyCitationStateChanged(payload)
+      })
+    })
+  }
+
+  function handleSocketConnected(): void {
+    void reconcileVisibleCitationState()
+  }
+
+  function handlePresenceChanged(payload: SocketPresenceUpdate): void {
+    if (!payload?.userId || !payload.lastActiveAt) return
+    presenceByUserId.value[payload.userId] = payload
+
+    for (const conversation of conversations.value) {
+      const participant = conversation.participant_ids.find(user => user._id === payload.userId)
+      if (participant) participant.lastHeartbeatAt = payload.lastActiveAt
+    }
+  }
+
+  function handleReceivedMessage(payload: SocketMessage): void {
+    const isFromMe = payload.senderId === _myId()
+    const isActiveConversation = payload.conversationId === activeConversationId.value
+    if (replaceOptimisticMessage(payload)) return
+
+    const alreadyReceived = messages.value.some(message => message._id === String(payload._id))
+    if (!alreadyReceived) messages.value.push(toApiMessage(payload))
+    updateConversationPreview(payload)
+
+    if (!isFromMe && !isActiveConversation && !alreadyReceived) {
+      incrementUnreadCount(payload.conversationId)
+      showIncomingMessageToast(payload)
+    }
+    if (!isFromMe && !alreadyReceived) {
+      socket?.emit('message_delivered', { messageId: String(payload._id) })
+    }
+    if (!isFromMe && isActiveConversation) {
+      socket?.emit('mark_as_seen', { conversationId: payload.conversationId })
+    }
+  }
+
+  function replaceOptimisticMessage(payload: SocketMessage): boolean {
+    if (!payload.tempId) return false
+    const messageIndex = messages.value.findIndex(message => message._id === payload.tempId)
+    if (messageIndex === -1) return false
+    messages.value[messageIndex] = toApiMessage(payload)
+    updateConversationPreview(payload)
+    return true
+  }
+
+  function toApiMessage(payload: SocketMessage): ApiMessage {
+    return {
+      _id: String(payload._id),
+      conversationId: payload.conversationId,
+      senderId: payload.senderId,
+      content: payload.content,
+      timestamp: String(payload.timestamp),
+      status: payload.status,
+    }
+  }
+
+  function updateConversationPreview(payload: SocketMessage): void {
+    const conversation = _findConv(payload.conversationId)
+    if (!conversation) return
+    conversation.last_message = payload.content
+    conversation.updated_at = String(payload.timestamp)
+  }
+
+  function incrementUnreadCount(conversationId: string): void {
+    const conversation = _findConv(conversationId)
+    if (!conversation) return
+    conversation.unread_count = (conversation.unread_count || 0) + 1
+  }
+
+  function showIncomingMessageToast(payload: SocketMessage): void {
+    const isOnMessagesPage = router.currentRoute.value.path === '/messages'
+    const isMuted = mutedConversations.value[payload.conversationId] ?? false
+    if (isOnMessagesPage || isMuted) return
+    void loadAndShowIncomingMessageToast(payload)
+  }
+
+  async function loadAndShowIncomingMessageToast(payload: SocketMessage): Promise<void> {
+    let conversation = _findConv(payload.conversationId)
+    if (!conversation) {
+      await loadConversations()
+      conversation = _findConv(payload.conversationId)
+    }
+
+    const partner = conversation?.participant_ids.find(user => user._id === payload.senderId)
+    const { useMessageToastStore } = await import('@/store/useMessageToastStore')
+    useMessageToastStore().addMessageToast({
+      conversationId: payload.conversationId,
+      senderId: payload.senderId,
+      senderName: partner?.display_name ?? 'Unknown User',
+      senderAvatar: partner?.avatar ?? '',
+      senderUsername: partner?.username ?? '',
+      content: payload.content,
+      timestamp: payload.timestamp,
+    })
+  }
+
+  async function reconcileVisibleCitationState(): Promise<void> {
+    const postStore = usePostStore()
+    if (postStore.focusedId) {
+      try {
+        await postStore.refreshFocusedDream()
+      } catch (error) {
+        console.warn('Could not reconcile the focused Dream after reconnect.', error)
+      }
+    }
+
+    const { useOracleChatStore } = await import('@/store/useOracleChatStore')
+    const oracleStore = useOracleChatStore()
+    if (!oracleStore.activeThreadId) return
+    oracleStore.notifyCitationStateChanged({
+      threadIds: [oracleStore.activeThreadId],
+      turnIds: [],
     })
   }
 
   /** Disconnect socket (called on logout) */
   function disconnectSocket(): void {
+    if (dreamCitationRefreshTimer) clearTimeout(dreamCitationRefreshTimer)
+    dreamCitationRefreshTimer = null
+    pendingDreamCitationRefreshes.clear()
+    socket?.removeAllListeners()
     socket?.disconnect()
     socket = null
+  }
+
+  function scheduleDreamCitationRefresh(dreamIds: string[]): void {
+    for (const dreamId of dreamIds) {
+      if (dreamId) pendingDreamCitationRefreshes.add(dreamId)
+    }
+    if (dreamCitationRefreshTimer || pendingDreamCitationRefreshes.size === 0) return
+    dreamCitationRefreshTimer = setTimeout(() => {
+      dreamCitationRefreshTimer = null
+      void refreshChangedDreams()
+    }, 120)
+  }
+
+  async function refreshChangedDreams(): Promise<void> {
+    const dreamIds = [...pendingDreamCitationRefreshes]
+    pendingDreamCitationRefreshes.clear()
+    const dreamStore = useDreamStore()
+    const postStore = usePostStore()
+    await Promise.all(dreamIds.map(async dreamId => {
+      try {
+        if (postStore.focusedId === dreamId) {
+          await postStore.refreshFocusedDream()
+          return
+        }
+        await dreamStore.refreshDream(dreamId)
+      } catch (error) {
+        console.warn('Could not refresh a Dream citation update.', error)
+      }
+    }))
+  }
+
+  function resetSession(): void {
+    sessionEpoch += 1
+    disconnectSocket()
+    conversations.value = []
+    messages.value = []
+    activeConversationId.value = null
+    mutedConversations.value = {}
+    presenceByUserId.value = {}
+    isLoadingConvs.value = false
+    isLoadingMsgs.value = false
+    sessionUserId.value = ''
+    void import('@/store/useMessageToastStore').then(({ useMessageToastStore }) => {
+      useMessageToastStore().clearAll()
+    })
+  }
+
+  function startSession(userId: string): void {
+    resetSession()
+    sessionUserId.value = userId
+    _loadMutedConversations(userId)
+    connectSocket()
+    void loadConversations()
   }
 
   // ── HTTP Actions ───────────────────────────────────────────────────────────
@@ -265,12 +421,19 @@ export const useChatStore = defineStore('chat', () => {
   /** Fetch all conversations for the logged-in user (includes unread_count from server) */
   async function loadConversations(): Promise<void> {
     if (isLoadingConvs.value) return
+    const requestEpoch = sessionEpoch
+    const requestUserId = sessionUserId.value
+    if (!requestUserId) return
     isLoadingConvs.value = true
     try {
       const { data } = await apiClient.get<{ success: boolean; data: ApiConversation[] }>('/conversations')
-      conversations.value = data.data
+      if (requestEpoch === sessionEpoch && requestUserId === sessionUserId.value) {
+        conversations.value = data.data
+      }
     } finally {
-      isLoadingConvs.value = false
+      if (requestEpoch === sessionEpoch) {
+        isLoadingConvs.value = false
+      }
     }
   }
 
@@ -279,6 +442,7 @@ export const useChatStore = defineStore('chat', () => {
    * Task 2: immediately set unread_count = 0 in the store and emit mark_as_seen.
    */
   async function openConversation(convId: string): Promise<void> {
+    const requestEpoch = sessionEpoch
     activeConversationId.value = convId
 
     // Task 2: reset this conversation's unread_count immediately in the store
@@ -301,9 +465,14 @@ export const useChatStore = defineStore('chat', () => {
       const { data } = await apiClient.get<{ success: boolean; data: ApiMessage[] }>(
         `/conversations/messages/${convId}`
       )
-      messages.value.push(...data.data)
+      if (requestEpoch === sessionEpoch && activeConversationId.value === convId) {
+        const knownIds = new Set(messages.value.map(message => message._id))
+        messages.value.push(...data.data.filter(message => !knownIds.has(message._id)))
+      }
     } finally {
-      isLoadingMsgs.value = false
+      if (requestEpoch === sessionEpoch) {
+        isLoadingMsgs.value = false
+      }
     }
   }
 
@@ -315,6 +484,23 @@ export const useChatStore = defineStore('chat', () => {
       { username: query.trim() }
     )
     return data.data ?? []
+  }
+
+  async function searchMessaging(query: string): Promise<MessagingSearchResponse> {
+    const normalizedQuery = query.trim()
+    if (!normalizedQuery) return { conversations: [], messages: [] }
+    const requestEpoch = sessionEpoch
+    const { data } = await apiClient.post<{
+      success: boolean
+      data: MessagingSearchResponse
+    }>('/conversations/search', {
+      searchMode: 'messaging',
+      query: normalizedQuery,
+    })
+    if (requestEpoch !== sessionEpoch) {
+      return { conversations: [], messages: [] }
+    }
+    return data.data
   }
 
   /** Find-or-create a conversation with a given userId, then open it */
@@ -374,6 +560,7 @@ export const useChatStore = defineStore('chat', () => {
     conversations.value = conversations.value.filter(c => c._id !== convId)
     messages.value      = messages.value.filter(m => m.conversationId !== convId)
     delete mutedConversations.value[convId]
+    _persistMutedConversations()
 
     if (activeConversationId.value === convId) {
       activeConversationId.value = null
@@ -397,6 +584,10 @@ export const useChatStore = defineStore('chat', () => {
    */
   function toggleMute(convId: string): void {
     mutedConversations.value[convId] = !mutedConversations.value[convId]
+    if (!mutedConversations.value[convId]) {
+      delete mutedConversations.value[convId]
+    }
+    _persistMutedConversations()
   }
 
   return {
@@ -412,15 +603,20 @@ export const useChatStore = defineStore('chat', () => {
     conversationsWithPartner,
     activeMessages,
     activePartner,
+    isUserOnline,
+    getUserLastActiveAt,
     currentUserId,
     isActiveMuted,
     // Actions
     connectSocket,
     disconnectSocket,
+    resetSession,
+    startSession,
     loadConversations,
     openConversation,
     openConversationWithUser,
     searchUsers,
+    searchMessaging,
     sendMessage,
     deleteConversation,
     toggleMute,

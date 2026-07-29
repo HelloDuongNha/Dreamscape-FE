@@ -51,9 +51,7 @@ apiClient.interceptors.response.use(
 
         try {
           const { useSettingsStore } = await import('@/store/useSettingsStore')
-          // NOTE: This toast message is not localised in Phase I18N-1.
-          // It is backend-driven error messaging and will be addressed in a later phase.
-          useSettingsStore().showToast('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.', 'error')
+          useSettingsStore().showToastKey('errors.sessionExpired', undefined, 'error')
         } catch (e) {
           console.error('Failed to show toast:', e)
         }

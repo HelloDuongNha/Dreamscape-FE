@@ -26,7 +26,7 @@ type TranslationStatus =
   | 'unknown'
 
 const cache = new EphemeralTranslationCache()
-const BROWSER_TRANSLATION_PIPELINE_VERSION = 'browser-v11'
+const BROWSER_TRANSLATION_PIPELINE_VERSION = 'browser-v12'
 
 function isUnchangedResult(source: string, translated: string): boolean {
   return source.normalize('NFKC').replace(/\s+/g, ' ').trim()

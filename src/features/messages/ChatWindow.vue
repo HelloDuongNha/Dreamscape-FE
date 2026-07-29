@@ -6,96 +6,56 @@
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
       </svg>
     </span>
-    <p class="chat-empty__text">Select a conversation to start chatting</p>
+    <p class="chat-empty__text">{{ t('messages.selectConversation') }}</p>
   </div>
 
   <!-- Active chat window -->
-  <div v-else class="chat-window" @click="closeMenu">
+  <div v-else class="chat-window">
 
     <!-- ── Header ── -->
     <header class="chat-header">
+      <button
+        type="button"
+        class="chat-header__back"
+        :aria-label="t('messages.backToConversations')"
+        @click="$emit('back')"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m15 18-6-6 6-6"/>
+        </svg>
+      </button>
       <div
         class="chat-header__avatar"
         :style="{ background: partnerAvatarBg }"
         aria-hidden="true"
       >
         {{ partnerInitials }}
+        <span
+          v-if="partnerIsOnline"
+          class="chat-header__online-indicator"
+          :aria-label="t('messages.activeNow')"
+        />
       </div>
       <div class="chat-header__info">
         <span class="chat-header__name">{{ chatStore.activePartner?.display_name ?? '…' }}</span>
-        <span class="chat-header__handle">{{ chatStore.activePartner?.username ?? '' }}</span>
+        <span class="chat-header__presence">{{ partnerPresenceLabel }}</span>
       </div>
 
       <!-- Loading indicator for messages -->
-      <div v-if="chatStore.isLoadingMsgs" class="chat-header__loading" aria-label="Loading messages">
+      <div v-if="chatStore.isLoadingMsgs" class="chat-header__loading" :aria-label="t('messages.loadingMessages')">
         <span class="chat-header__dot" />
         <span class="chat-header__dot" />
         <span class="chat-header__dot" />
       </div>
 
-      <!-- ── 3-dot Action Menu ── -->
-      <div class="chat-menu" @click.stop>
-        <button
-          id="chat-menu-btn"
-          class="chat-menu__trigger"
-          :aria-expanded="menuOpen"
-          aria-haspopup="true"
-          aria-label="Conversation options"
-          @click.stop="toggleMenu"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <circle cx="12" cy="5" r="1.8"/>
-            <circle cx="12" cy="12" r="1.8"/>
-            <circle cx="12" cy="19" r="1.8"/>
-          </svg>
-        </button>
-
-        <!-- Dropdown panel -->
-        <Transition name="menu-fade">
-          <div v-if="menuOpen" id="chat-menu-panel" class="chat-menu__panel" role="menu">
-
-            <!-- Mute toggle -->
-            <button
-              id="chat-menu-mute"
-              class="chat-menu__item"
-              role="menuitem"
-              @click="handleToggleMute"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                <template v-if="chatStore.isActiveMuted">
-                  <!-- Bell with slash = muted, clicking unmutes -->
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </template>
-                <template v-else>
-                  <!-- Bell = not muted, clicking mutes -->
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-                </template>
-              </svg>
-              <span>{{ chatStore.isActiveMuted ? 'Unmute notifications' : 'Mute notifications' }}</span>
-              <span v-if="chatStore.isActiveMuted" class="chat-menu__badge">Muted</span>
-            </button>
-
-            <div class="chat-menu__divider" role="separator" />
-
-            <!-- Delete conversation -->
-            <button
-              id="chat-menu-delete"
-              class="chat-menu__item chat-menu__item--danger"
-              role="menuitem"
-              :disabled="isDeleting"
-              @click="handleDelete"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                <path d="M10 11v6"/><path d="M14 11v6"/>
-                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-              </svg>
-              <span>{{ isDeleting ? 'Deleting…' : 'Delete conversation' }}</span>
-            </button>
-          </div>
-        </Transition>
-      </div>
+      <ConversationActionsMenu
+        :key="chatStore.activeConversationId || 'empty'"
+        :muted="chatStore.isActiveMuted"
+        :deleting="isDeleting"
+        variant="header"
+        @toggle-mute="handleToggleMute"
+        @delete="handleDelete"
+      />
     </header>
 
     <!-- ── Message list ── -->
@@ -103,12 +63,12 @@
       ref="messageListRef"
       class="chat-messages"
       role="log"
-      aria-label="Message history"
+      :aria-label="t('messages.messageHistory')"
       aria-live="polite"
     >
       <!-- Empty conversation -->
       <div v-if="!chatStore.isLoadingMsgs && !chatStore.activeMessages.length" class="chat-messages__empty">
-        <p>No messages yet. Say hello!</p>
+        <p>{{ t('messages.sayHello') }}</p>
       </div>
 
       <div
@@ -127,7 +87,9 @@
             >
               {{ partnerInitials }}
             </div>
-            <div class="chat-bubble chat-bubble--other">{{ msg.content }}</div>
+            <div class="chat-bubble chat-bubble--other">
+              {{ msg.content_unavailable ? t('messages.contentUnavailable') : msg.content }}
+            </div>
           </div>
           <span class="chat-bubble__time chat-bubble__time--other">{{ timeAgo(msg.timestamp) }}</span>
         </template>
@@ -139,7 +101,7 @@
               class="chat-bubble chat-bubble--me"
               :class="{ 'chat-bubble--optimistic': msg._id.startsWith('temp-') }"
             >
-              {{ msg.content }}
+              {{ msg.content_unavailable ? t('messages.contentUnavailable') : msg.content }}
             </div>
             <span class="chat-bubble__time">{{ timeAgo(msg.timestamp) }}</span>
             <!-- Status indicator — only on the last sent message -->
@@ -157,22 +119,24 @@
 
     <!-- ── Input area ── -->
     <div class="chat-input-area">
-      <label :for="inputId" class="sr-only">Type a message</label>
+      <label :for="inputId" class="sr-only">{{ t('messages.typeMessage') }}</label>
       <input
         :id="inputId"
         v-model="newMessage"
         type="text"
         class="chat-input"
-        placeholder="Message..."
+        :placeholder="t('messages.messagePlaceholder')"
         autocomplete="off"
         maxlength="2000"
-        @keydown.enter.prevent="handleSend"
+        @compositionstart="isComposing = true"
+        @compositionend="isComposing = false"
+        @keydown.enter="handleComposerEnter"
       />
       <button
         :id="`send-btn-${chatStore.activeConversationId}`"
         class="chat-send-btn"
         :disabled="!newMessage.trim()"
-        aria-label="Send message"
+        :aria-label="t('messages.sendMessage')"
         @click="handleSend"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -185,18 +149,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useChatStore }            from '@/store/useChatStore'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
+import { getInitials, getAvatarBg } from '@/utils/avatar'
 import { timeAgo }                 from '@/utils/timeAgo'
+import { useLocaleStore }          from '@/store/useLocaleStore'
 import type { ApiMessage }         from '@/api/types'
+import ConversationActionsMenu     from './ConversationActionsMenu.vue'
+
+defineEmits<{ back: [] }>()
 
 const chatStore     = useChatStore()
+const localeStore   = useLocaleStore()
+const { t } = useI18n()
 const newMessage    = ref('')
 const messageListRef = ref<HTMLElement | null>(null)
 const inputId       = `chat-input-${Math.random().toString(36).slice(2, 6)}`
-const menuOpen      = ref(false)
 const isDeleting    = ref(false)
+const isComposing   = ref(false)
+const presenceClock = ref(Date.now())
+let presenceTimer: ReturnType<typeof setInterval> | null = null
 
 // ── Partner visuals ─────────────────────────────────────────────────────────
 const partnerInitials = computed(() =>
@@ -205,6 +178,31 @@ const partnerInitials = computed(() =>
 const partnerAvatarBg = computed(() =>
   chatStore.activePartner ? getAvatarBg(chatStore.activePartner._id) : '#262626'
 )
+const partnerIsOnline = computed(() => {
+  const partner = chatStore.activePartner
+  return Boolean(partner && chatStore.isUserOnline(partner._id, partner.lastHeartbeatAt))
+})
+const partnerPresenceLabel = computed(() => {
+  presenceClock.value
+  const partner = chatStore.activePartner
+  if (!partner) return ''
+  if (partnerIsOnline.value) return t('messages.activeNow')
+
+  const lastActiveAt = chatStore.getUserLastActiveAt(partner._id, partner.lastHeartbeatAt)
+  return lastActiveAt
+    ? t('messages.activeAgo', { time: timeAgo(lastActiveAt, localeStore.currentLocale) })
+    : `@${partner.username}`
+})
+
+onMounted(() => {
+  presenceTimer = setInterval(() => {
+    presenceClock.value = Date.now()
+  }, 30_000)
+})
+
+onUnmounted(() => {
+  if (presenceTimer) clearInterval(presenceTimer)
+})
 
 // ── isMe: determines bubble style ───────────────────────────────────────────
 function isMe(msg: ApiMessage): boolean {
@@ -239,6 +237,12 @@ function handleSend() {
   scrollToBottom()
 }
 
+function handleComposerEnter(event: KeyboardEvent) {
+  if (event.isComposing || isComposing.value || event.keyCode === 229) return
+  event.preventDefault()
+  handleSend()
+}
+
 // ── Scroll ──────────────────────────────────────────────────────────────────
 function scrollToBottom() {
   nextTick(() => {
@@ -255,18 +259,9 @@ watch(
   { flush: 'post' }
 )
 
-// ── 3-dot menu ───────────────────────────────────────────────────────────────
-function toggleMenu() {
-  menuOpen.value = !menuOpen.value
-}
-function closeMenu() {
-  menuOpen.value = false
-}
-
 async function handleDelete() {
   if (!chatStore.activeConversationId || isDeleting.value) return
   isDeleting.value = true
-  menuOpen.value   = false
   try {
     await chatStore.deleteConversation(chatStore.activeConversationId)
   } finally {
@@ -277,11 +272,7 @@ async function handleDelete() {
 function handleToggleMute() {
   if (!chatStore.activeConversationId) return
   chatStore.toggleMute(chatStore.activeConversationId)
-  menuOpen.value = false
 }
-
-// Close menu when active conversation changes
-watch(() => chatStore.activeConversationId, () => { menuOpen.value = false })
 </script>
 
 <style scoped>
@@ -319,6 +310,7 @@ watch(() => chatStore.activeConversationId, () => { menuOpen.value = false })
   position: relative;
 }
 .chat-header__avatar {
+  position: relative;
   width: 36px;
   height: 36px;
   border-radius: var(--radius-full);
@@ -330,9 +322,23 @@ watch(() => chatStore.activeConversationId, () => { menuOpen.value = false })
   color: #fff;
   flex-shrink: 0;
 }
+.chat-header__online-indicator {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--color-bg-surface);
+  border-radius: var(--radius-full);
+  background: #22c55e;
+  box-sizing: border-box;
+}
 .chat-header__info   { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
 .chat-header__name   { font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); }
-.chat-header__handle { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.chat-header__presence { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.chat-header__back {
+  display: none;
+}
 
 /* Loading dots in header */
 .chat-header__loading {
@@ -354,91 +360,6 @@ watch(() => chatStore.activeConversationId, () => { menuOpen.value = false })
   0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
   40%            { opacity: 1;   transform: translateY(-3px); }
 }
-
-/* ── 3-dot menu ── */
-.chat-menu {
-  position: relative;
-  flex-shrink: 0;
-}
-.chat-menu__trigger {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-lg);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-.chat-menu__trigger:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-}
-
-/* Dropdown panel — flat dark, no blur, no shadow */
-.chat-menu__panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  width: 210px;
-  background: #181818;
-  border: 1px solid #262626;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  z-index: 200;
-}
-
-.chat-menu__item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  background: transparent;
-  border: none;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  text-align: left;
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-.chat-menu__item:hover {
-  background: #222222;
-  color: var(--color-text-primary);
-}
-.chat-menu__item:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.chat-menu__item--danger { color: #ed4956; }
-.chat-menu__item--danger:hover { background: #1a1010; color: #ff6b75; }
-
-.chat-menu__badge {
-  margin-left: auto;
-  font-size: 10px;
-  background: #2a2a2a;
-  color: var(--color-text-muted);
-  padding: 1px 6px;
-  border-radius: var(--radius-full);
-  border: 1px solid #333;
-}
-
-.chat-menu__divider {
-  height: 1px;
-  background: #262626;
-  margin: 2px 0;
-}
-
-/* Menu transition */
-.menu-fade-enter-active,
-.menu-fade-leave-active { transition: opacity 0.12s ease, transform 0.12s ease; }
-.menu-fade-enter-from,
-.menu-fade-leave-to     { opacity: 0; transform: translateY(-4px); }
 
 /* ── Message list ── */
 .chat-messages {
@@ -590,5 +511,53 @@ watch(() => chatStore.activeConversationId, () => { menuOpen.value = false })
   background: var(--color-bg-elevated);
   color: var(--color-text-muted);
   cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .chat-header {
+    min-height: 58px;
+    gap: 9px;
+    padding: 9px 10px;
+  }
+
+  .chat-header__back {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--color-text-primary);
+  }
+
+  .chat-header__back:active {
+    background: var(--color-bg-hover);
+  }
+
+  .chat-messages {
+    gap: 10px;
+    padding: 14px 12px;
+  }
+
+  .chat-bubble-wrap {
+    max-width: 86%;
+  }
+
+  .chat-bubble {
+    padding: 8px 12px;
+    font-size: 15px;
+  }
+
+  .chat-input-area {
+    padding: 9px 10px;
+  }
+
+  .chat-input {
+    min-width: 0;
+    font-size: 16px;
+  }
 }
 </style>

@@ -26,6 +26,9 @@
             autocomplete="email"
             :disabled="loading"
           />
+          <RouterLink to="/forgot-password" class="auth-link auth-link--forgot">
+            {{ t('auth.forgotPasswordLink') }}
+          </RouterLink>
         </div>
 
         <div class="auth-field">
@@ -188,4 +191,5 @@ async function handleLogin() {
   text-underline-offset: 3px;
 }
 .auth-link:hover { color: #fff; }
+.auth-link--forgot { align-self: flex-end; font-size: var(--font-size-sm, 0.875rem); }
 </style>

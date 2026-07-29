@@ -286,7 +286,16 @@ function isPlausiblyComplete(source: string, translated: string): boolean {
   const sourceLetters = Array.from(source).filter(character => /\p{L}/u.test(character)).length
   const translatedLetters = Array.from(translated).filter(character => /\p{L}/u.test(character)).length
   if (sourceLetters < 12) return translatedLetters > 0
-  return translatedLetters >= Math.max(6, Math.floor(sourceLetters * 0.28))
+  const minimumRatio = sourceLetters >= 120 ? 0.4 : sourceLetters >= 48 ? 0.38 : 0.34
+  return translatedLetters >= Math.max(6, Math.floor(sourceLetters * minimumRatio))
+}
+
+function hasSuspiciousRepeatedTranslation(text: string): boolean {
+  const units = text
+    .split(/(?<=[.!?])\s+/u)
+    .map(normalizeForComparison)
+    .filter(unit => unit.length >= 12)
+  return units.length >= 3 && new Set(units).size <= Math.ceil(units.length / 3)
 }
 
 function normalizeForComparison(text: string): string {
@@ -550,9 +559,10 @@ async function translateLastResort(
     }
     translatedGroups.push(translatedTokens.join(''))
   }
+  const joined = translatedGroups.join(' ')
   const normalizedGroups = translatedGroups.map(group => normalizeForComparison(group)).filter(Boolean)
   if (normalizedGroups.length >= 3 && new Set(normalizedGroups).size === 1) return source
-  return translatedGroups.join(' ')
+  return isPlausiblyComplete(localized, joined) ? joined : source
 }
 
 export async function translateBrowserText(
@@ -593,6 +603,7 @@ export async function translateBrowserText(
     translated.push(candidate)
   }
   const contextualTranslation = capitalizeSentenceStarts(translated.join(' '), targetLanguage)
+  if (hasSuspiciousRepeatedTranslation(contextualTranslation)) return normalizedText
   return applySourceCase(normalizedText, contextualTranslation, targetLanguage)
 }
 

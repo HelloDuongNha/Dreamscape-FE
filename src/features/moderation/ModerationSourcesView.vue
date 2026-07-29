@@ -3,20 +3,25 @@
     <!-- Unauthorized Fallback Screen -->
     <div v-if="isUnauthorized" class="unauthorized-container">
       <div class="unauthorized-card">
-        <div class="unauthorized-icon" aria-hidden="true">🔒</div>
-        <h3 class="unauthorized-title">Không có quyền truy cập</h3>
-        <p class="unauthorized-desc">Bạn không có quyền truy cập trang duyệt nguồn.</p>
+        <AppIcon class="unauthorized-icon" name="lock" :size="34" />
+        <h3 class="unauthorized-title">{{ t('library.moderation.unauthorizedTitle') }}</h3>
+        <p class="unauthorized-desc">{{ t('library.moderation.unauthorizedDesc') }}</p>
       </div>
     </div>
 
     <!-- Main Moderation Panel -->
     <div v-else class="moderation-panel">
       <div class="moderation-header">
-        <div>
-          <h2 class="settings-section__title">Duyệt nguồn học thuật</h2>
+        <div class="moderation-header__left">
+          <h2 class="settings-section__title">{{ t('library.moderation.title') }}</h2>
           <p class="settings-section__desc">
-            Quản lý và kiểm duyệt các bài báo, nghiên cứu khoa học được đóng góp bởi thành viên.
+            {{ t('library.moderation.description') }}
           </p>
+        </div>
+        <div class="moderation-header__right">
+          <AppButton variant="primary" size="sm" @click="showContributionModal = true">
+            {{ t('library.contribute') }}
+          </AppButton>
         </div>
       </div>
 
@@ -35,7 +40,7 @@
       <!-- Loading State -->
       <div v-if="isLoading" class="moderation-loading">
         <span class="spinner"></span>
-        <p>{{ activeStatus === 'evidence_gaps' ? t('oracle.evidenceLoading') : 'Đang tải danh sách nguồn...' }}</p>
+        <p>{{ activeStatus === 'evidence_gaps' ? t('oracle.evidenceLoading') : t('library.moderation.loading') }}</p>
       </div>
 
       <div v-else-if="activeStatus === 'evidence_gaps'" class="evidence-gap-panel">
@@ -51,7 +56,7 @@
             </button>
           </div>
           <AppCopyButton
-            v-if="evidenceGaps.length"
+            v-if="evidenceGaps.some(gap => gap.status !== 'resolved')"
             class="evidence-gap-copy-all"
             :text="allEvidenceResearchPrompts"
             :resolve-text="loadAllEvidenceResearchPrompts"
@@ -64,7 +69,7 @@
         </div>
 
         <div v-if="evidenceGaps.length === 0" class="moderation-empty">
-          <div class="moderation-empty__icon" aria-hidden="true">✓</div>
+          <AppIcon class="moderation-empty__icon" name="check" :size="28" />
           <h3 class="moderation-empty__title">{{ t('oracle.evidenceEmptyTitle') }}</h3>
           <p class="moderation-empty__desc">{{ t('oracle.evidenceEmptyDescription') }}</p>
         </div>
@@ -77,27 +82,36 @@
                   {{ evidenceGapStatusLabel(gap.status) }}
                 </span>
                 <h3>{{ evidenceGapClaim(gap) }}</h3>
-                <small v-if="gap.occurrenceCount > 1">
-                  {{ t('oracle.evidenceMergedOccurrences', { count: gap.occurrenceCount }) }}
-                </small>
-                <details v-if="gap.relatedClaims?.length > 1" class="evidence-gap-related">
-                  <summary>{{ t('oracle.evidenceViewMergedClaims') }}</summary>
-                  <ul>
-                    <li v-for="claim in localizedRelatedClaims(gap)" :key="claim">{{ claim }}</li>
-                  </ul>
-                </details>
               </div>
-              <AppCopyButton
-                class="evidence-gap-copy"
-                :text="evidenceResearchPrompt(gap)"
-                :label="t('oracle.evidenceCopyOne')"
-                :copied-label="t('oracle.evidenceCopiedShort')"
-                :success-message="t('oracle.evidenceCopied')"
-                :error-message="t('oracle.evidenceCopyFailed')"
-              />
+              <div v-if="gap.status !== 'resolved'" class="evidence-gap-card__tools">
+                <AppCopyButton
+                  :text="evidenceResearchPrompt(gap)"
+                  :label="t('oracle.evidenceCopyOne')"
+                  :copied-label="t('oracle.evidenceCopiedShort')"
+                  :success-message="t('oracle.evidenceCopied')"
+                  :error-message="t('oracle.evidenceCopyFailed')"
+                />
+                <button
+                  type="button"
+                  class="evidence-gap-help"
+                  :aria-expanded="helpGapId === gap._id"
+                  :aria-label="t('oracle.evidencePromptHelpTitle')"
+                  @click="helpGapId = helpGapId === gap._id ? null : gap._id"
+                >
+                  ?
+                </button>
+                <div
+                  v-if="helpGapId === gap._id"
+                  class="evidence-gap-help__popover"
+                  role="tooltip"
+                >
+                  <strong>{{ t('oracle.evidencePromptHelpTitle') }}</strong>
+                  <p>{{ t('oracle.evidencePromptHelp') }}</p>
+                </div>
+              </div>
             </header>
 
-            <section>
+            <section v-if="gap.status !== 'resolved'">
               <h4>{{ t('oracle.evidenceMeaning') }}</h4>
               <p>{{ t('oracle.evidenceMeaningText', { claim: evidenceGapClaim(gap) }) }}</p>
             </section>
@@ -111,11 +125,53 @@
               >
                 <strong>{{ rule.ruleCode }}</strong>
                 <span>{{ rule.statement }}</span>
-                <small>{{ rule.evidenceScore }}/100 · {{ rule.supportingSourceCount }} {{ t('oracle.evidenceSources') }}</small>
+                <small>{{ t('oracle.evidenceMatchedExcerpt') }}</small>
               </div>
+              <button
+                v-for="source in gap.resolvedSources"
+                :key="source.sourceId"
+                type="button"
+                class="evidence-gap-source-link"
+                @click="openResolvedEvidenceSource(source.sourceId)"
+              >
+                <span class="evidence-gap-source-link__content">
+                  <strong>
+                    {{ source.title }}
+                    <small v-if="source.year">({{ source.year }})</small>
+                  </strong>
+                  <q>{{ source.excerpt }}</q>
+                </span>
+              <small>{{ t('oracle.evidenceInspectLinkedSource') }}</small>
+              </button>
             </section>
 
-            <details class="deep-research-preview">
+            <details v-if="gap.usageExcerpts.length" class="evidence-gap-usage">
+              <summary>
+                {{
+                  t(
+                    gap.status === 'resolved'
+                      ? 'oracle.evidenceUsageTitle'
+                      : 'oracle.evidencePendingUsageTitle',
+                    { count: gap.usageExcerpts.length },
+                  )
+                }}
+              </summary>
+              <p>{{ t('oracle.evidenceUsagePrivacy') }}</p>
+              <div class="evidence-gap-usage__list">
+                <article
+                  v-for="(usage, index) in gap.usageExcerpts"
+                  :key="`${usage.surfaceType}-${usage.citationIndex ?? 'pending'}-${index}`"
+                >
+                  <header>
+                    <span>{{ usage.surfaceType === 'oracle' ? t('oracle.evidenceUsageOracle') : t('oracle.evidenceUsageDream') }}</span>
+                    <strong>[{{ usage.citationIndex ?? '?' }}]</strong>
+                  </header>
+                  <blockquote>{{ usage.excerpt }}</blockquote>
+                </article>
+              </div>
+            </details>
+
+            <details v-if="gap.status !== 'resolved'" class="deep-research-preview">
               <summary>{{ t('oracle.evidenceViewPrompt') }}</summary>
               <div class="deep-research-preview__languages" :aria-label="t('oracle.evidencePromptLanguage')">
                 <button
@@ -141,23 +197,31 @@
 
       <!-- Empty State -->
       <div v-else-if="sources.length === 0" class="moderation-empty">
-        <div class="moderation-empty__icon" aria-hidden="true">🗂️</div>
-        <h3 class="moderation-empty__title">Không có dữ liệu</h3>
+        <AppIcon class="moderation-empty__icon" name="folder" :size="28" />
+        <h3 class="moderation-empty__title">{{ t('library.moderation.emptyTitle') }}</h3>
         <p class="moderation-empty__desc">
-          Không tìm thấy nguồn tài liệu nào trong mục "{{ activeTabLabel }}".
+          {{ t('library.moderation.emptyDesc', { tab: activeTabLabel }) }}
         </p>
       </div>
 
       <!-- Content Grid List -->
       <div v-else class="sources-list">
-        <div v-for="source in sources" :key="source._id" class="source-card">
+        <div
+          v-for="source in sources"
+          :key="source._id"
+          :class="['source-card', { 'source-card--clickable': source.reviewStatus === 'pending' }]"
+          :role="source.reviewStatus === 'pending' ? 'link' : undefined"
+          :tabindex="source.reviewStatus === 'pending' ? 0 : undefined"
+          @click="openSourcePreview(source, $event)"
+          @keydown="handleSourceCardKeydown(source, $event)"
+        >
           <!-- Card Header -->
           <div class="source-card__header">
             <h4 class="source-card__title">
-              {{ source.title || source.metadata?.title || 'Tài liệu không có tiêu đề' }}
+              {{ source.title || source.metadata?.title || t('library.moderation.untitled') }}
             </h4>
             <div style="display: flex; gap: var(--space-2); align-items: center;">
-              <span v-if="source.originalFile" class="pdf-badge">PDF Upload</span>
+              <span v-if="source.originalFile" class="pdf-badge">{{ t('library.moderation.pdfBadge') }}</span>
               <AppStatusBadge :status="source.reviewStatus" kind="moderation" />
             </div>
           </div>
@@ -169,68 +233,68 @@
               <span class="grid-value mono">{{ source.doi }}</span>
             </div>
             <div v-if="source.url" class="grid-item">
-              <span class="grid-label">Link nguồn:</span>
+              <span class="grid-label">{{ t('library.moderation.card.sourceLink') }}</span>
               <a :href="source.url" target="_blank" rel="noopener noreferrer" class="grid-value preview-link">
                 {{ source.url }}
               </a>
             </div>
             <div v-if="source.metadata?.authors && source.metadata.authors.length > 0" class="grid-item">
-              <span class="grid-label">Tác giả:</span>
+              <span class="grid-label">{{ t('library.moderation.card.authors') }}</span>
               <span class="grid-value">{{ source.metadata.authors.join(', ') }}</span>
             </div>
             <div v-if="source.metadata?.year" class="grid-item">
-              <span class="grid-label">Năm XB:</span>
+              <span class="grid-label">{{ t('library.moderation.card.year') }}</span>
               <span class="grid-value">{{ source.metadata.year }}</span>
             </div>
             <div v-if="source.metadata?.journal || source.metadata?.publisher" class="grid-item">
-              <span class="grid-label">Tạp chí / Nhà XB:</span>
+              <span class="grid-label">{{ t('library.moderation.card.journal') }}</span>
               <span class="grid-value">{{ source.metadata?.journal || source.metadata?.publisher }}</span>
             </div>
             
             <div v-if="source.submittedNote" class="grid-item grid-item--full">
-              <span class="grid-label">Ghi chú đóng góp:</span>
+              <span class="grid-label">{{ t('library.moderation.card.contributionNote') }}</span>
               <p class="grid-value note-box">{{ source.submittedNote }}</p>
             </div>
 
             <!-- Bản đọc thông minh row -->
             <div class="grid-item">
-              <span class="grid-label">Bản đọc thông minh:</span>
+              <span class="grid-label">{{ t('library.moderation.card.smartReader') }}</span>
               <div class="grid-value inline-flex-center">
                 <template v-if="sourceProgressStore.contributionId === source._id && sourceProgressStore.status === 'pending'">
                   <span class="spinner spinner-xs" style="margin-right: var(--space-2);"></span>
-                  <span class="processing-status-text">Đang nhập...</span>
+                  <span class="processing-status-text">{{ t('library.moderation.status.importing') }}</span>
                 </template>
                 <template v-else-if="source.readableInApp || (source.smartReaderStats && source.smartReaderStats.pageCount > 0)">
-                  <span>Có</span>
+                  <span>{{ t('library.moderation.status.available') }}</span>
                 </template>
                 <template v-else-if="source.fullTextStatus === 'failed'">
-                  <span>Lỗi</span>
+                  <span>{{ t('library.moderation.status.failed') }}</span>
                 </template>
                 <template v-else>
-                  <span>Chưa có</span>
+                  <span>{{ t('library.moderation.status.none') }}</span>
                 </template>
               </div>
             </div>
 
             <!-- PDF gốc / PDF online row -->
             <div class="grid-item">
-              <span class="grid-label">PDF gốc / PDF online:</span>
+              <span class="grid-label">{{ t('library.moderation.card.pdfOriginal') }}</span>
               <div class="grid-value inline-flex-center">
                 <template v-if="sourceProgressStore.contributionId === source._id && sourceProgressStore.status === 'pending'">
                   <span class="spinner spinner-xs" style="margin-right: var(--space-2);"></span>
-                  <span class="processing-status-text">Đang kiểm tra...</span>
+                  <span class="processing-status-text">{{ t('library.moderation.status.checking') }}</span>
                 </template>
                 <template v-else-if="source.originalFile">
-                  <span>Đã lưu Cloudinary</span>
+                  <span>{{ t('library.moderation.status.storedPdf') }}</span>
                 </template>
                 <template v-else-if="source.pdfUrl">
-                  <span>Có link online</span>
+                  <span>{{ t('library.moderation.status.onlineLink') }}</span>
                 </template>
                 <template v-else-if="source.fullTextStatus === 'failed' && source.submittedNote?.toLowerCase().includes('pdf')">
-                  <span>Bị chặn / Lỗi tải</span>
+                  <span>{{ t('library.moderation.status.blocked') }}</span>
                 </template>
                 <template v-else>
-                  <span>Chưa có</span>
+                  <span>{{ t('library.moderation.status.none') }}</span>
                 </template>
               </div>
             </div>
@@ -238,25 +302,25 @@
             <!-- Stats rows (Only shown when preprocessing is finished and readableInApp is true) -->
             <template v-if="!(sourceProgressStore.contributionId === source._id && sourceProgressStore.status === 'pending') && (source.readableInApp || (source.smartReaderStats && source.smartReaderStats.pageCount > 0))">
               <div class="grid-item">
-                <span class="grid-label">Số trang:</span>
+                <span class="grid-label">{{ t('library.moderation.card.pageCount') }}</span>
                 <span class="grid-value">
-                  {{ source.smartReaderStats?.pageCount || 'Đang cập nhật' }}
+                  {{ source.smartReaderStats?.pageCount || t('library.moderation.status.updating') }}
                 </span>
               </div>
               <div class="grid-item">
-                <span class="grid-label">Figure:</span>
+                <span class="grid-label">{{ t('library.moderation.card.figures') }}</span>
                 <span class="grid-value">
                   {{ source.smartReaderStats?.figureCount ?? 0 }}
                 </span>
               </div>
               <div class="grid-item">
-                <span class="grid-label">Table:</span>
+                <span class="grid-label">{{ t('library.moderation.card.tables') }}</span>
                 <span class="grid-value">
                   {{ source.smartReaderStats?.tableCount ?? 0 }}
                 </span>
               </div>
               <div class="grid-item">
-                <span class="grid-label">Tài liệu tham khảo:</span>
+                <span class="grid-label">{{ t('library.moderation.card.references') }}</span>
                 <span class="grid-value">
                   {{ source.smartReaderStats?.referenceCount ?? 0 }}
                 </span>
@@ -264,16 +328,16 @@
             </template>
 
             <div v-if="source.originalFile" class="grid-item grid-item--full">
-              <span class="grid-label">Tài liệu đã tải lên (PDF):</span>
+              <span class="grid-label">{{ t('library.moderation.card.uploadedPdf') }}</span>
               <div class="pdf-info-box">
                 <div class="pdf-info-header">
-                  <span class="pdf-file-icon" aria-hidden="true">📄</span>
+                  <AppIcon class="pdf-file-icon" name="document" :size="20" />
                   <div class="pdf-file-details">
                     <span class="pdf-file-name" :title="source.originalFile.originalFileName">
                       {{ source.originalFile.originalFileName }}
                     </span>
                     <span class="pdf-file-meta">
-                      Kích thước: {{ formatBytes(source.originalFile.fileSize) }}
+                      {{ t('library.moderation.card.fileSize', { size: formatBytes(source.originalFile.fileSize) }) }}
                       <span v-if="source.originalFile.fileHash" class="pdf-file-hash">
                         | Hash: <span class="mono text-xs">{{ source.originalFile.fileHash.substring(0, 10) }}...</span>
                       </span>
@@ -288,7 +352,7 @@
                     :disabled="activePdfActionId === source._id"
                     @click="openStoredPdf(source)"
                   >
-                    {{ activePdfActionId === source._id ? 'Đang mở...' : 'Mở PDF ↗' }}
+                    {{ activePdfActionId === source._id ? t('library.moderation.pdf.opening') : t('library.moderation.pdf.openPdf') }}
                   </button>
                   <button
                     v-if="source.originalFile"
@@ -297,7 +361,7 @@
                     :disabled="activePdfActionId === source._id"
                     @click="requestPdfDownload(source)"
                   >
-                    Tải PDF
+                    {{ t('library.moderation.pdf.downloadPdf') }}
                   </button>
                 </div>
               </div>
@@ -306,18 +370,18 @@
 
           <!-- Reviewer Info Block (if approved or rejected) -->
           <div v-if="source.reviewStatus !== 'pending'" class="source-card__reviewer-info">
-            <h5 class="reviewer-title">Thông tin kiểm duyệt</h5>
+            <h5 class="reviewer-title">{{ t('library.moderation.reviewer.title') }}</h5>
             <div class="reviewer-grid">
               <div>
-                <span class="grid-label">Người duyệt:</span>
-                <span class="grid-value">{{ source.reviewedBy?.display_name || source.reviewedBy?.username || 'Hệ thống' }}</span>
+                <span class="grid-label">{{ t('library.moderation.reviewer.reviewedBy') }}</span>
+                <span class="grid-value">{{ source.reviewedBy?.display_name || source.reviewedBy?.username || t('library.moderation.reviewer.system') }}</span>
               </div>
               <div>
-                <span class="grid-label">Thời gian:</span>
+                <span class="grid-label">{{ t('library.moderation.reviewer.reviewedAt') }}</span>
                 <span class="grid-value">{{ formatDate(source.reviewedAt) }}</span>
               </div>
               <div v-if="source.reviewNote" class="grid-item--full">
-                <span class="grid-label">Ghi chú duyệt:</span>
+                <span class="grid-label">{{ t('library.moderation.reviewer.reviewNote') }}</span>
                 <p class="grid-value note-box">{{ source.reviewNote }}</p>
               </div>
             </div>
@@ -330,21 +394,27 @@
               class="app-btn app-btn--secondary app-btn--sm"
               style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center;"
             >
-              Xem trước
+              {{ t('library.moderation.actions.preview') }}
             </RouterLink>
             <AppButton
               variant="danger-outline"
               size="sm"
+              :loading="isReaderBuildInProgress(source)"
+              :disabled="isReaderBuildInProgress(source)"
+              :title="isReaderBuildInProgress(source) ? t('library.moderation.actions.waitForReader') : undefined"
               @click="openReviewModal(source, 'rejected')"
             >
-              Từ chối
+              {{ t('library.moderation.actions.reject') }}
             </AppButton>
             <AppButton
               variant="smart"
               size="sm"
+              :loading="isReaderBuildInProgress(source)"
+              :disabled="isReaderBuildInProgress(source)"
+              :title="isReaderBuildInProgress(source) ? t('library.moderation.actions.waitForReader') : undefined"
               @click="openReviewModal(source, 'approved')"
             >
-              Duyệt
+              {{ t('library.moderation.actions.approve') }}
             </AppButton>
           </div>
         </div>
@@ -357,18 +427,17 @@
           class="pagination-btn"
           @click="changePage(pagination.page - 1)"
         >
-          Trước
+          {{ t('library.moderation.pagination.previous') }}
         </button>
         <span class="pagination-info">
-          Trang {{ pagination.page }} / {{ pagination.pages }}
-          (Tổng: {{ pagination.total }} {{ activeStatus === 'evidence_gaps' ? 'khoảng trống' : 'nguồn' }})
+          {{ t('library.moderation.pagination.summary', { page: pagination.page, pages: pagination.pages, total: pagination.total, unit: activeStatus === 'evidence_gaps' ? t('library.moderation.pagination.unitGaps') : t('library.moderation.pagination.unitSources') }) }}
         </span>
         <button
           :disabled="pagination.page === pagination.pages"
           class="pagination-btn"
           @click="changePage(pagination.page + 1)"
         >
-          Sau
+          {{ t('library.moderation.pagination.next') }}
         </button>
       </div>
     </div>
@@ -381,17 +450,17 @@
           class="modal-overlay"
           role="dialog"
           aria-modal="true"
-          aria-label="Xử lý kiểm duyệt"
-          @click.self="closeReviewModal"
+          :aria-label="t('library.moderation.review.ariaLabel')"
+          @click.self.prevent
         >
           <div class="modal-container" tabindex="-1">
             <div class="modal-header">
               <h3 class="modal-header__title">
-                {{ reviewAction === 'approved' ? 'Phê duyệt nguồn đóng góp' : 'Từ chối nguồn đóng góp' }}
+                {{ reviewAction === 'approved' ? t('library.moderation.review.approveTitle') : t('library.moderation.review.rejectTitle') }}
               </h3>
               <button
                 class="modal-close-btn"
-                aria-label="Đóng"
+                :aria-label="t('library.moderation.review.close')"
                 @click="closeReviewModal"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
@@ -402,13 +471,15 @@
 
             <div class="modal-body">
               <p class="modal-confirm-text">
-                Bạn có chắc chắn muốn <strong>{{ reviewAction === 'approved' ? 'duyệt' : 'từ chối' }}</strong> nguồn đóng góp này?
+                {{ reviewAction === 'approved'
+                  ? t('library.moderation.review.confirmApprove')
+                  : t('library.moderation.review.confirmReject') }}
               </p>
               <div class="selected-source-preview">
-                <strong>{{ selectedSource?.title || selectedSource?.metadata?.title || 'Tài liệu không có tiêu đề' }}</strong>
+                <strong>{{ selectedSource?.title || selectedSource?.metadata?.title || t('library.moderation.untitled') }}</strong>
                 <div v-if="selectedSource?.doi" class="mono text-xs">{{ selectedSource.doi }}</div>
                 <div v-if="selectedSource?.originalFile" class="text-xs" style="margin-top: 4px; color: var(--color-text-muted);">
-                  Tệp: {{ selectedSource.originalFile.originalFileName }} ({{ formatBytes(selectedSource.originalFile.fileSize) }})
+                  {{ t('library.moderation.review.fileLabel', { name: selectedSource.originalFile.originalFileName, size: formatBytes(selectedSource.originalFile.fileSize) }) }}
                 </div>
               </div>
               
@@ -417,8 +488,8 @@
                   id="review-note-input"
                   v-model="reviewNote"
                   type="textarea"
-                  label="Ghi chú kiểm duyệt (Không bắt buộc)"
-                  placeholder="Nhập lý do duyệt hoặc từ chối nguồn tài liệu này (tối đa 1000 ký tự)..."
+                  :label="t('library.moderation.review.noteLabel')"
+                  :placeholder="t('library.moderation.review.notePlaceholder')"
                   maxlength="1000"
                   :rows="3"
                 />
@@ -431,7 +502,7 @@
                   :disabled="isSubmitting"
                   @click="closeReviewModal"
                 >
-                  Hủy
+                  {{ t('library.moderation.review.cancel') }}
                 </AppButton>
                 
                 <AppButton
@@ -441,7 +512,7 @@
                   :loading="isSubmitting"
                   @click="submitReview"
                 >
-                  Xác nhận
+                  {{ t('library.moderation.review.confirm') }}
                 </AppButton>
               </div>
             </div>
@@ -452,13 +523,19 @@
 
     <AppConfirm
       v-model="showPdfDownloadConfirm"
-      title="Tải tài liệu PDF"
+      :title="t('library.moderation.pdfDownload.title')"
       :message="pdfDownloadConfirmMessage"
-      confirm-label="Tải về"
-      cancel-label="Hủy"
+      :confirm-label="t('library.moderation.pdfDownload.confirm')"
+      :cancel-label="t('library.moderation.pdfDownload.cancel')"
       :loading="isDownloadingPdf"
       @confirm="confirmPdfDownload"
       @cancel="cancelPdfDownload"
+    />
+    <AcademicContributionModal
+      :open="showContributionModal"
+      :is-admin="true"
+      @close="showContributionModal = false"
+      @submitted="handleContributionSubmitted"
     />
   </div>
 </template>
@@ -466,6 +543,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import {
   getModerationSources,
@@ -476,15 +554,33 @@ import {
   type SourceContribution,
 } from '@/api/moderationApi'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
+import { useExtractionStore } from '@/store/useExtractionStore'
 import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
 import AppStatusBadge from '@/components/common/AppStatusBadge.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 import AppCopyButton from '@/components/common/AppCopyButton.vue'
+import AppIcon from '@/components/common/AppIcon.vue'
+import AcademicContributionModal from '@/components/academic/AcademicContributionModal.vue'
+import {
+  buildEvidenceResearchPrompt,
+  type EvidenceResearchLanguage,
+} from './services/evidenceResearchPrompt.service'
+import { isSourceReaderBuildInProgress } from './services/sourceReviewAvailability.service'
+import { getApiErrorMessage, getApiErrorStatus } from '@/utils/apiError'
 
 const settingsStore = useSettingsStore()
 const sourceProgressStore = useSourceProgressStore()
+const extractionStore = useExtractionStore()
 const { t, locale } = useI18n()
+const router = useRouter()
+const route = useRoute()
+const showContributionModal = ref(false)
+
+function handleContributionSubmitted(): void {
+  showContributionModal.value = false
+  fetchSources()
+}
 
 watch(() => sourceProgressStore.status, (newStatus) => {
   if (newStatus === 'success' && activeStatus.value === 'pending') {
@@ -513,7 +609,8 @@ const currentPage = ref(1)
 const sources = ref<SourceContribution[]>([])
 const evidenceGaps = ref<OracleEvidenceGapItem[]>([])
 const evidenceGapStatus = ref<EvidenceGapStatus>('active')
-const researchPromptLanguage = ref<'vi' | 'en'>(String(locale.value).startsWith('en') ? 'en' : 'vi')
+const researchPromptLanguage = ref<EvidenceResearchLanguage>(String(locale.value).startsWith('en') ? 'en' : 'vi')
+const helpGapId = ref<string | null>(null)
 const pagination = ref({
   total: 0,
   page: 1,
@@ -532,14 +629,14 @@ const isDownloadingPdf = ref(false)
 const activePdfActionId = ref<string | null>(null)
 
 const pdfDownloadConfirmMessage = computed(() => {
-  const name = pendingPdfDownload.value?.originalFile?.originalFileName || 'tài liệu này'
-  return `Tải “${name}” về thiết bị của bạn?`
+  const name = pendingPdfDownload.value?.originalFile?.originalFileName || t('library.moderation.pdfDownload.fallbackName')
+  return t('library.moderation.pdfDownload.message', { name })
 })
 
 const tabs = computed(() => [
-  { status: 'pending' as const, label: 'Chờ duyệt' },
-  { status: 'approved' as const, label: 'Đã duyệt' },
-  { status: 'rejected' as const, label: 'Từ chối' },
+  { status: 'pending' as const, label: t('library.moderation.tabs.pending') },
+  { status: 'approved' as const, label: t('library.moderation.tabs.approved') },
+  { status: 'rejected' as const, label: t('library.moderation.tabs.rejected') },
   { status: 'evidence_gaps' as const, label: t('oracle.evidenceTab') },
 ])
 const evidenceGapFilters: Array<{ value: EvidenceGapStatus; labelKey: string }> = [
@@ -562,12 +659,14 @@ async function fetchSources() {
     })
     sources.value = res.sources
     pagination.value = res.pagination
-  } catch (err: any) {
-    if (err.response && err.response.status === 403) {
+  } catch (error: unknown) {
+    if (getApiErrorStatus(error) === 403) {
       isUnauthorized.value = true
     } else {
-      const errMsg = err.response?.data?.message || err.message || 'Không thể kết nối với hệ thống.'
-      settingsStore.showToast(errMsg, 'error')
+      settingsStore.showToast(
+        getApiErrorMessage(error, t('library.moderation.toast.networkError')),
+        'error',
+      )
     }
   } finally {
     isLoading.value = false
@@ -584,9 +683,15 @@ async function fetchEvidenceGaps() {
     })
     evidenceGaps.value = result.gaps
     pagination.value = result.pagination
-  } catch (err: any) {
-    if (err.response?.status === 403) isUnauthorized.value = true
-    else settingsStore.showToast(err.response?.data?.message || 'Không thể tải khoảng trống bằng chứng.', 'error')
+  } catch (error: unknown) {
+    if (getApiErrorStatus(error) === 403) {
+      isUnauthorized.value = true
+    } else {
+      settingsStore.showToast(
+        getApiErrorMessage(error, t('library.moderation.toast.evidenceLoadError')),
+        'error',
+      )
+    }
   } finally {
     isLoading.value = false
   }
@@ -595,12 +700,14 @@ async function fetchEvidenceGaps() {
 function changeTab(status: ModerationTab) {
   activeStatus.value = status
   currentPage.value = 1
+  persistModerationView()
   if (status === 'evidence_gaps') fetchEvidenceGaps()
   else fetchSources()
 }
 
 function changePage(page: number) {
   currentPage.value = page
+  persistModerationView()
   if (activeStatus.value === 'evidence_gaps') fetchEvidenceGaps()
   else fetchSources()
 }
@@ -608,11 +715,25 @@ function changePage(page: number) {
 function changeEvidenceGapStatus(status: EvidenceGapStatus) {
   evidenceGapStatus.value = status
   currentPage.value = 1
+  persistModerationView()
   fetchEvidenceGaps()
 }
 
+function persistModerationView(): void {
+  router.replace({
+    query: {
+      ...route.query,
+      tab: activeStatus.value,
+      evidenceStatus: evidenceGapStatus.value,
+      page: String(currentPage.value),
+    },
+  })
+}
+
 function evidenceGapStatusLabel(status: OracleEvidenceGapItem['status']) {
-  return status === 'resolved' ? t('oracle.evidenceResolved') : t('oracle.evidenceNeedsSource')
+  if (status === 'resolved') return t('oracle.evidenceResolved')
+  if (status === 'candidate_found') return t('oracle.evidenceCandidateFound')
+  return t('oracle.evidenceNeedsSource')
 }
 
 function evidenceGapClaim(gap: OracleEvidenceGapItem): string {
@@ -620,16 +741,16 @@ function evidenceGapClaim(gap: OracleEvidenceGapItem): string {
   return gap.localizedClaims?.[language] || gap.claim
 }
 
-function localizedRelatedClaims(gap: OracleEvidenceGapItem): string[] {
-  const language = String(locale.value).startsWith('en') ? 'en' : 'vi'
-  return gap.localizedRelatedClaims?.[language] || gap.relatedClaims
+function evidenceResearchPrompt(gap: OracleEvidenceGapItem): string {
+  return buildEvidenceResearchPrompt(gap, researchPromptLanguage.value)
 }
 
-function evidenceResearchPrompt(gap: OracleEvidenceGapItem): string {
-  return gap.deepResearchPrompts?.[researchPromptLanguage.value] || gap.deepResearchPrompt
+function openResolvedEvidenceSource(sourceId: string): void {
+  router.push(`/library/sources/${sourceId}`)
 }
 
 const allEvidenceResearchPrompts = computed(() => evidenceGaps.value
+  .filter(gap => gap.status !== 'resolved')
   .map((gap, index) => `${t('oracle.evidencePromptNumber', { number: index + 1 })}\n${evidenceResearchPrompt(gap)}`)
   .join('\n\n---\n\n'))
 
@@ -638,19 +759,14 @@ async function loadAllEvidenceResearchPrompts(): Promise<string> {
   const limit = 50
   let page = 1
   let pages = 1
-
   do {
-    const result = await getOracleEvidenceGaps({
-      status: evidenceGapStatus.value,
-      page,
-      limit,
-    })
+    const result = await getOracleEvidenceGaps({ status: 'active', page, limit })
     allGaps.push(...result.gaps)
     pages = Math.max(1, result.pagination.pages)
     page += 1
   } while (page <= pages)
-
   return allGaps
+    .filter(gap => gap.status !== 'resolved')
     .map((gap, index) => `${t('oracle.evidencePromptNumber', { number: index + 1 })}\n${evidenceResearchPrompt(gap)}`)
     .join('\n\n---\n\n')
 }
@@ -660,10 +776,33 @@ watch(locale, (value) => {
 })
 
 function openReviewModal(source: SourceContribution, action: 'approved' | 'rejected') {
+  if (isReaderBuildInProgress(source)) {
+    settingsStore.showToast(t('library.moderation.actions.waitForReader'), 'error')
+    return
+  }
   selectedSource.value = source
   reviewAction.value = action
   reviewNote.value = ''
   showReviewModal.value = true
+}
+
+function isReaderBuildInProgress(source: SourceContribution): boolean {
+  return isSourceReaderBuildInProgress(source, sourceProgressStore)
+}
+
+function openSourcePreview(source: SourceContribution, event?: MouseEvent): void {
+  if (source.reviewStatus !== 'pending') return
+  const target = event?.target
+  if (target instanceof Element && target.closest('a, button, input, textarea, select, summary')) {
+    return
+  }
+  router.push(`/moderation/sources/${source._id}/preview`)
+}
+
+function handleSourceCardKeydown(source: SourceContribution, event: KeyboardEvent): void {
+  if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return
+  event.preventDefault()
+  openSourcePreview(source)
 }
 
 function closeReviewModal() {
@@ -680,11 +819,18 @@ async function submitReview() {
   const payload = {
     reviewStatus: reviewAction.value,
     reviewNote: reviewNote.value.trim() || undefined,
+    title: selectedSource.value.title || selectedSource.value.metadata?.title,
   }
 
   try {
     const res = await reviewSource(id, payload)
     if (res.success) {
+      if (reviewAction.value === 'approved') {
+        extractionStore.trackApprovalResult(
+          res,
+          selectedSource.value.title || t('library.local.academicDocument'),
+        )
+      }
       let msg = res.message
       let toastType: 'success' | 'error' = 'success'
       
@@ -694,32 +840,38 @@ async function submitReview() {
         const warnError = res.details?.error || ''
         
         if (warnCode === 'FULLTEXT_IMPORT_SSRF_BLOCKED' || warnError.includes('SSRF')) {
-          msg = 'Nguồn đã được lưu, nhưng không thể nhập bản đọc tự động. URL bị chặn bởi kiểm tra an toàn SSRF. Không tắt bảo vệ này.'
+          msg = t('library.moderation.toast.warnSsrf')
         } else if (warnError.includes('403') || msg?.includes('403')) {
-          msg = 'Nguồn đã được lưu, nhưng không thể nhập bản đọc tự động. Máy chủ tài liệu trả về 403. Hãy upload PDF thủ công hoặc dùng link PDF công khai khác.'
+          msg = t('library.moderation.toast.warn403')
         } else if (warnCode === 'APPROVED_METADATA_ONLY' || warnError.includes('Tài liệu không có tệp')) {
-          msg = 'Nguồn đã được lưu, nhưng không thể nhập bản đọc tự động. Nguồn này chỉ có metadata, chưa có toàn văn để nhập.'
+          msg = t('library.moderation.toast.warnMetadataOnly')
         } else {
-          msg = 'Nguồn đã được lưu, nhưng không thể nhập bản đọc tự động.'
+          msg = t('library.moderation.toast.warnGeneric')
         }
       } else if (!msg) {
-        msg = reviewAction.value === 'approved' ? 'Nguồn đã được duyệt.' : 'Nguồn đã bị từ chối.'
+        msg = reviewAction.value === 'approved' ? t('library.moderation.toast.approved') : t('library.moderation.toast.rejected')
       }
       
       settingsStore.showToast(msg, toastType)
       closeReviewModal()
       fetchSources()
     }
-  } catch (err: any) {
-    if (err.response && err.response.status === 409) {
-      settingsStore.showToast(err.response.data?.message || 'Yêu cầu kiểm duyệt đã được xử lý trước đó.', 'error')
-    } else if (err.response && err.response.status === 403) {
-      settingsStore.showToast('Bạn không có quyền thực hiện hành động này.', 'error')
+  } catch (error: unknown) {
+    const status = getApiErrorStatus(error)
+    if (status === 409) {
+      settingsStore.showToast(
+        getApiErrorMessage(error, t('library.moderation.toast.alreadyProcessed')),
+        'error',
+      )
+    } else if (status === 403) {
+      settingsStore.showToast(t('library.moderation.toast.noPermission'), 'error')
       isUnauthorized.value = true
       closeReviewModal()
     } else {
-      const errMsg = err.response?.data?.message || err.response?.data?.error || err.message || 'Có lỗi xảy ra khi phê duyệt nguồn.'
-      settingsStore.showToast(errMsg, 'error')
+      settingsStore.showToast(
+        getApiErrorMessage(error, t('library.moderation.toast.reviewError')),
+        'error',
+      )
     }
   } finally {
     isSubmitting.value = false
@@ -730,7 +882,8 @@ function formatDate(dateStr?: string) {
   if (!dateStr) return 'N/A'
   try {
     const d = new Date(dateStr)
-    return d.toLocaleString('vi-VN', {
+    const loc = String(locale.value).startsWith('en') ? 'en-US' : 'vi-VN'
+    return d.toLocaleString(loc, {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -745,7 +898,7 @@ function formatDate(dateStr?: string) {
 async function fetchStoredPdf(source: SourceContribution): Promise<Blob> {
   const blob = await getModerationSourcePdfInline(source._id)
   if (blob.type !== 'application/pdf') {
-    let message = 'Tệp trả về không phải PDF hợp lệ.'
+    let message = t('library.moderation.toast.notValidPdf')
     try {
       const parsed = JSON.parse(await blob.text())
       message = parsed?.message || message
@@ -761,13 +914,16 @@ async function openStoredPdf(source: SourceContribution) {
   try {
     const blob = await fetchStoredPdf(source)
     const blobUrl = URL.createObjectURL(blob)
-    if (!previewWindow) throw new Error('Trình duyệt đã chặn tab xem PDF.')
+    if (!previewWindow) throw new Error(t('library.moderation.toast.popupBlocked'))
     previewWindow.opener = null
     previewWindow.location.href = blobUrl
     window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
-  } catch (error: any) {
+  } catch (error: unknown) {
     previewWindow?.close()
-    settingsStore.showToast(error.message || 'Không thể mở PDF.', 'error')
+    settingsStore.showToast(
+      getApiErrorMessage(error, t('library.moderation.toast.openPdfFailed')),
+      'error',
+    )
   } finally {
     activePdfActionId.value = null
   }
@@ -798,10 +954,13 @@ async function confirmPdfDownload() {
     link.click()
     link.remove()
     URL.revokeObjectURL(blobUrl)
-    settingsStore.showToast('Đã bắt đầu tải PDF.', 'success')
+    settingsStore.showToast(t('library.moderation.toast.downloadStarted'), 'success')
     cancelPdfDownload()
-  } catch (error: any) {
-    settingsStore.showToast(error.message || 'Không thể tải PDF.', 'error')
+  } catch (error: unknown) {
+    settingsStore.showToast(
+      getApiErrorMessage(error, t('library.moderation.toast.downloadFailed')),
+      'error',
+    )
   } finally {
     isDownloadingPdf.value = false
     activePdfActionId.value = null
@@ -809,7 +968,15 @@ async function confirmPdfDownload() {
 }
 
 onMounted(() => {
-  fetchSources()
+  const requestedTab = String(route.query.tab || '')
+  if (['pending', 'approved', 'rejected', 'evidence_gaps'].includes(requestedTab)) {
+    activeStatus.value = requestedTab as ModerationTab
+  }
+  if (route.query.evidenceStatus === 'resolved') evidenceGapStatus.value = 'resolved'
+  const requestedPage = Number(route.query.page)
+  if (Number.isInteger(requestedPage) && requestedPage > 0) currentPage.value = requestedPage
+  if (activeStatus.value === 'evidence_gaps') fetchEvidenceGaps()
+  else fetchSources()
 })
 </script>
 
@@ -829,9 +996,24 @@ onMounted(() => {
 }
 
 .moderation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   border-bottom: 1px solid var(--color-border);
   padding-bottom: var(--space-4);
   margin-bottom: var(--space-5);
+  gap: var(--space-4);
+}
+
+.moderation-header__left {
+  flex: 1;
+}
+
+.moderation-header__right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
 }
 
 .settings-section__title {
@@ -1029,6 +1211,98 @@ onMounted(() => {
   color: var(--color-text-muted);
 }
 
+.evidence-gap-source-link {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-bg-elevated));
+  cursor: pointer;
+  text-align: left;
+}
+
+.evidence-gap-source-link:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-elevated));
+}
+
+.evidence-gap-source-link small {
+  color: var(--color-text-muted);
+}
+
+.evidence-gap-source-link__content {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.evidence-gap-source-link__content q {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-gap-usage {
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.evidence-gap-usage > summary {
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 650;
+}
+
+.evidence-gap-usage > p {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.evidence-gap-usage__list {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.evidence-gap-usage__list article {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+}
+
+.evidence-gap-usage__list header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.evidence-gap-usage__list header strong {
+  color: var(--color-primary);
+}
+
+.evidence-gap-usage__list blockquote {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
 .deep-research-preview {
   border-top: 1px solid var(--color-border);
   padding-top: var(--space-3);
@@ -1043,7 +1317,7 @@ onMounted(() => {
 
 .deep-research-preview pre {
   overflow-x: auto;
-  margin: var(--space-3) 0 0;
+  margin: var(--space-3) 0;
   padding: var(--space-4);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
@@ -1076,6 +1350,58 @@ onMounted(() => {
 .deep-research-preview__languages button.active {
   color: var(--color-text-primary);
   background: var(--color-bg-active);
+}
+
+.evidence-gap-help {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: help;
+  font-size: 11px;
+}
+
+.evidence-gap-card__tools {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.evidence-gap-card__tools .evidence-gap-help {
+  margin-left: 0;
+}
+
+.evidence-gap-help__popover {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(320px, 80vw);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-elevated);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+}
+
+.evidence-gap-help__popover strong {
+  color: var(--color-text-primary);
+}
+
+.evidence-gap-help__popover p {
+  margin: var(--space-1) 0 0;
+  font-size: inherit;
 }
 
 /* Loading & Empty state */
@@ -1146,6 +1472,23 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+.source-card--clickable {
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.source-card--clickable:hover {
+  border-color: var(--color-primary);
+  background: var(--color-bg-hover);
+}
+
+.source-card--clickable:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .source-card__header {
@@ -1631,5 +1974,163 @@ onMounted(() => {
   font-size: var(--font-size-xs);
   color: var(--color-primary, #60a5fa);
   font-weight: var(--font-weight-medium);
+}
+
+@media (max-width: 640px) {
+  .settings-section {
+    min-height: 100%;
+    padding: var(--space-3);
+  }
+
+  .moderation-header {
+    flex-direction: column;
+    margin-bottom: var(--space-3);
+  }
+
+  .moderation-header__right,
+  .moderation-header__right :deep(button) {
+    width: 100%;
+  }
+
+  .moderation-tabs {
+    margin-inline: calc(-1 * var(--space-3));
+    margin-bottom: var(--space-4);
+    padding-inline: var(--space-3);
+    scrollbar-width: none;
+  }
+
+  .moderation-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .moderation-tab {
+    min-height: 44px;
+    padding-inline: var(--space-3);
+  }
+
+  .evidence-gap-toolbar,
+  .evidence-gap-filters {
+    width: 100%;
+  }
+
+  .evidence-gap-filters {
+    scrollbar-width: none;
+  }
+
+  .evidence-gap-filters button {
+    min-height: 40px;
+  }
+
+  .evidence-gap-copy-all {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .evidence-gap-card,
+  .source-card {
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
+
+  .evidence-gap-card__header,
+  .source-card__header {
+    flex-direction: column;
+  }
+
+  .evidence-gap-rule {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .evidence-gap-rule > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .evidence-gap-help__popover {
+    position: fixed;
+    inset: auto 12px calc(var(--mobile-nav-height) + var(--safe-area-bottom) + 12px);
+    width: auto;
+  }
+
+  .source-card__grid,
+  .reviewer-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .grid-value {
+    overflow-wrap: anywhere;
+  }
+
+  .source-card__actions {
+    flex-wrap: wrap;
+  }
+
+  .source-card__actions :deep(button) {
+    flex: 1 1 130px;
+    min-height: 44px;
+  }
+
+  .moderation-pagination {
+    gap: var(--space-2);
+    margin-top: var(--space-5);
+  }
+
+  .pagination-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding-inline: var(--space-3);
+  }
+
+  .modal-overlay {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .modal-container {
+    width: 100%;
+    max-width: none;
+    min-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .modal-header {
+    padding-top: calc(var(--space-4) + var(--safe-area-top));
+  }
+
+  .modal-close-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .modal-body {
+    flex: 1;
+    max-height: none;
+    padding: var(--space-4);
+    padding-bottom: calc(var(--space-5) + var(--safe-area-bottom));
+  }
+
+  .wizard-actions,
+  .wizard-actions--split {
+    flex-direction: column-reverse;
+  }
+
+  .wizard-actions :deep(button),
+  .wizard-actions--split :deep(button) {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .pdf-info-box {
+    align-items: stretch;
+  }
+
+  .pdf-info-actions {
+    width: 100%;
+  }
+
+  .pdf-action-btn {
+    flex: 1;
+    min-height: 40px;
+  }
 }
 </style>

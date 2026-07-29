@@ -1,5 +1,11 @@
 import apiClient from './client'
 import type { TranslateReaderRequest, TranslateReaderResponse } from '../features/library/services/smartReaderTranslation.types'
+import type {
+  PdfCacheResponse,
+  PdfProcessingResponse,
+  StructuredReaderImportResponse,
+  StructuredReaderReimportResponse,
+} from './academicSourceProcessing.types'
 
 export interface ReviewSourcePayload {
   reviewStatus: 'approved' | 'rejected'
@@ -48,6 +54,31 @@ export interface SourceContributionUser {
   avatar?: string
 }
 
+export interface ReaderBuildSnapshot {
+  status?: 'success' | 'failed'
+  engine: string
+  sourceType: string
+  sectionCount: number
+  chunkCount: number
+  builtAt: string
+  durationMs?: number
+  estimatedDurationSeconds?: number
+  pageCount?: number
+  ocrUsed?: boolean
+  failureCode?: string
+  failureMessage?: string
+}
+
+export interface PdfImportHistoryEntry {
+  durationMs: number
+  estimatedDurationSeconds: number
+  pageCount: number
+  fileSizeBytes: number
+  ocrUsed: boolean
+  succeeded?: boolean
+  completedAt: string
+}
+
 export interface SourceContribution {
   _id: string
   title?: string
@@ -69,24 +100,11 @@ export interface SourceContribution {
     referenceCount: number
     updatedAt?: string
   }
-  readerBuildSnapshots?: Array<{
-    engine: string
-    sourceType: string
-    sectionCount: number
-    chunkCount: number
-    builtAt: string
-  }>
-  pdfImportHistory?: Array<{
-    durationMs: number
-    estimatedDurationSeconds: number
-    pageCount: number
-    fileSizeBytes: number
-    ocrUsed: boolean
-    succeeded?: boolean
-    completedAt: string
-  }>
+  readerBuildSnapshots?: ReaderBuildSnapshot[]
+  pdfImportHistory?: PdfImportHistoryEntry[]
   readableInApp?: boolean
   fullTextStatus?: 'none' | 'importing' | 'imported' | 'failed' | 'available'
+  extractionStatus?: 'uploaded' | 'inspecting' | 'extracting_text' | 'resolving_identifiers' | 'fetching_preferred_source' | 'ocr_processing' | 'compiling_reader' | 'completed' | 'partial' | 'failed'
   pdfUrl?: string
   license?: string
   allowedUse?: 'metadata_only' | 'abstract_only' | 'open_access_fulltext'
@@ -131,19 +149,6 @@ export interface OracleEvidenceGapItem {
     vi: string
     en: string
   }
-  meaning: string
-  evidenceNeeded: string[]
-  expectedRule: {
-    subject: string
-    outcome: string
-    requiredFields: string[]
-  }
-  searchTerms: string[]
-  deepResearchPrompt: string
-  deepResearchPrompts: {
-    vi: string
-    en: string
-  }
   candidateRules: Array<{
     _id: string
     ruleCode: string
@@ -155,6 +160,18 @@ export interface OracleEvidenceGapItem {
     status: string
   }>
   resolvedRules: OracleEvidenceGapItem['candidateRules']
+  resolvedSources: Array<{
+    sourceId: string
+    title: string
+    year?: number | null
+    excerpt: string
+    ruleId: string
+  }>
+  usageExcerpts: Array<{
+    surfaceType: 'oracle' | 'dream_analysis'
+    citationIndex: number | null
+    excerpt: string
+  }>
   resolutionCitationIndex?: number | null
   occurrenceCount: number
   relatedClaims: string[]
@@ -256,12 +273,12 @@ export const updateSourceContributionTitle = async (
 export const importFullText = async (
   id: string,
   signal?: AbortSignal,
-): Promise<{ success: boolean; message?: string; data?: any }> => {
-  const { data } = await apiClient.post<{
-    success: boolean
-    message?: string
-    data?: any
-  }>(`/moderation/sources/${id}/import-fulltext`, undefined, { signal })
+): Promise<StructuredReaderImportResponse> => {
+  const { data } = await apiClient.post<StructuredReaderImportResponse>(
+    `/moderation/sources/${id}/import-fulltext`,
+    undefined,
+    { signal },
+  )
   return data
 }
 
@@ -271,14 +288,12 @@ export const importFullText = async (
 export const reimportFullText = async (
   id: string,
   signal?: AbortSignal,
-): Promise<{ success: boolean; reimported: boolean; cleared: any; importResult: any; warnings: string[] }> => {
-  const { data } = await apiClient.post<{
-    success: boolean
-    reimported: boolean
-    cleared: any
-    importResult: any
-    warnings: string[]
-  }>(`/moderation/sources/${id}/reimport-fulltext`, undefined, { signal })
+): Promise<StructuredReaderReimportResponse> => {
+  const { data } = await apiClient.post<StructuredReaderReimportResponse>(
+    `/moderation/sources/${id}/reimport-fulltext`,
+    undefined,
+    { signal },
+  )
   return data
 }
 
@@ -314,8 +329,16 @@ export const getModerationSourcePdfInline = async (id: string): Promise<Blob> =>
 /**
  * Triggers online PDF caching for moderation sources.
  */
-export const cacheModerationSourceOriginalPdf = async (id: string, options?: { force?: boolean }, signal?: AbortSignal): Promise<any> => {
-  const { data } = await apiClient.post<any>(`/moderation/sources/${id}/cache-original-pdf`, options, { signal })
+export const cacheModerationSourceOriginalPdf = async (
+  id: string,
+  options?: { force?: boolean },
+  signal?: AbortSignal,
+): Promise<PdfCacheResponse> => {
+  const { data } = await apiClient.post<PdfCacheResponse>(
+    `/moderation/sources/${id}/cache-original-pdf`,
+    options,
+    { signal },
+  )
   return data
 }
 
@@ -349,8 +372,17 @@ export const deleteModerationSourceOriginalPdf = async (id: string): Promise<any
 /**
  * Triggers PDF ingestion extraction/compilation processing for moderation contributions.
  */
-export const processUploadedPdfForContribution = async (id: string, forceReplace = false, structuredFirst = false, signal?: AbortSignal): Promise<any> => {
-  const { data } = await apiClient.post<any>(`/moderation/sources/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst }, { signal })
+export const processUploadedPdfForContribution = async (
+  id: string,
+  forceReplace = false,
+  structuredFirst = false,
+  signal?: AbortSignal,
+): Promise<PdfProcessingResponse> => {
+  const { data } = await apiClient.post<PdfProcessingResponse>(
+    `/moderation/sources/${id}/process-uploaded-pdf`,
+    { forceReplace, structuredFirst },
+    { signal },
+  )
   return data
 }
 

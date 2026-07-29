@@ -11,13 +11,16 @@ export default {
   profile: 'Trang cá nhân',
   settings: 'Cài đặt',
   logout: 'Đăng xuất',
+  more: 'Thêm',
+  mobileNav: 'Điều hướng trên điện thoại',
+  adminTools: 'Công cụ quản trị',
   // Sidebar controls
   expandSidebar: 'Mở rộng thanh bên',
   collapseSidebar: 'Thu gọn thanh bên',
   collapseLabel: 'Thu gọn',
   // Badge aria-label — {count} is interpolated
   unreadCount: '{count} chưa đọc',
-  // Moderation (moderator-only nav items)
+  // Moderation (administrator-only nav items)
   moderationSources: 'Duyệt nguồn',
   ruleReview: 'Duyệt lập luận',
   // Header page titles — keyed by Vue Router route name
@@ -36,6 +39,8 @@ export default {
   titleLogin: 'Đăng nhập — DreamScape',
   titleRegister: 'Đăng ký — DreamScape',
   titleVerifyOtp: 'Xác thực OTP — DreamScape',
+  titleForgotPassword: 'Khôi phục mật khẩu — DreamScape',
+  titleResetPassword: 'Đặt lại mật khẩu — DreamScape',
   titleHome: 'Trang chủ — DreamScape',
   titleOracle: 'Oracle — DreamScape',
   titleMessages: 'Tin nhắn — DreamScape',

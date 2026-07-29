@@ -26,7 +26,6 @@ export interface OracleShellMessage {
   runState?: 'thinking' | 'preparing' | 'responding' | 'completed' | 'cancelled' | 'failed';
   startedAt?: number;
   thoughtCompletedAt?: number;
-  presentationStartedAt?: number;
   firstTokenAt?: number;
   completedAt?: number;
   expectedMinMs?: number;
@@ -46,6 +45,9 @@ export interface OracleShellMessage {
       localizedStatement?: { vi: string; en: string };
       quote: string;
       evidenceScore: number;
+      sourceEvidenceScore?: number;
+      userValidationAdjustment?: number;
+      usageExcerpt?: string;
       supportingSourceCount: number;
       verificationKey?: string;
       verificationQuestion?: string;
@@ -60,6 +62,8 @@ export interface OracleShellMessage {
     percent: number;
     provider?: string;
     modelName?: string;
+    includedMessages?: number;
+    omittedMessages?: number;
   };
   parentTurnId?: string;
   branchRootTurnId?: string;

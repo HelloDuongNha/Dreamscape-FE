@@ -10,15 +10,15 @@
         role="link"
         style="cursor: pointer"
       >
-        <div class="dream-card__avatar" :style="{ background: avatarBg }" translate="no" @click.stop="navigateToProfile">
-          {{ initials }}
+        <div class="dream-card__avatar" @click.stop="navigateToProfile">
+          <UserAvatar :user="user" size="md" show-streak />
         </div>
       </div>
 
       <div class="dream-card__meta">
         <div class="dream-card__name-row">
           <span class="dream-card__name" role="link" style="cursor: pointer" translate="no" @click.stop="navigateToProfile">{{ user.display_name }}</span>
-          <span class="dream-card__username" role="link" style="cursor: pointer" translate="no" @click.stop="navigateToProfile">{{ user.username }}</span>
+          <span class="dream-card__username" role="link" style="cursor: pointer" translate="no" @click.stop="navigateToProfile">{{ formatUsername(user.username) }}</span>
         </div>
         <span class="dream-card__time">{{ timestamp }}</span>
       </div>
@@ -35,9 +35,12 @@
         <span v-if="dream.additions?.length" class="dream-card__edited-badge">
           {{ t('home.additionsCount', { count: dream.additions.length }) }}
         </span>
-        <span class="dream-card__mood" :class="`dream-card__mood--${moodClass}`" translate="no">
-          {{ dream.mood_tag }}
-        </span>
+        <DreamMoodTag
+          v-if="moodLabel"
+          :label="moodLabel"
+          :valence="analysis?.emotional_valence"
+          :tone-key="analysis?.emotional_tone_key"
+        />
       </div>
 
       <!-- ── 3-dot owner menu ── -->
@@ -48,12 +51,14 @@
         :label="t('home.postOptions')"
         @select="handleMenuSelect"
       >
-        <template #trigger="{ toggle }">
+        <template #trigger="{ toggle, isOpen, panelId }">
           <button
             :id="`post-menu-btn-${dream._id}`"
             class="dream-card__menu-btn"
             :aria-label="t('home.postOptions')"
-            aria-haspopup="true"
+            aria-haspopup="menu"
+            :aria-expanded="isOpen"
+            :aria-controls="isOpen ? panelId : undefined"
             @click.stop="toggle"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -66,55 +71,69 @@
       </AppDropdown>
     </header>
 
-    <!-- ── Body: content OR inline editor ── -->
+    <!-- ── Body ── -->
     <div class="dream-card__body">
-      <!-- Inline edit mode -->
-      <template v-if="editMode">
-        <textarea
-          :id="`edit-textarea-${dream._id}`"
-          v-model="editContent"
-          class="dream-card__edit-textarea"
-          maxlength="2000"
-          rows="4"
-          :aria-label="t('home.editDreamAria')"
-          translate="no"
-        />
-        <div class="dream-card__edit-actions">
-          <span class="dream-card__edit-count">{{ editContent.length }} / 2000</span>
-          <button
-            :id="`edit-cancel-${dream._id}`"
-            class="dream-card__edit-btn dream-card__edit-btn--cancel"
-            :disabled="isSaving"
-            @click="cancelEdit"
-          >{{ t('home.cancel') }}</button>
-          <button
-            :id="`edit-save-${dream._id}`"
-            class="dream-card__edit-btn dream-card__edit-btn--save"
-            :disabled="isSaving || !editContent.trim()"
-            @click="saveEdit"
-          >{{ isSaving ? t('home.saving') : t('home.save') }}</button>
-        </div>
-      </template>
+      <p class="dream-card__content" @click="openModal">
+        <span v-if="dreamExcerpt.clippedBefore" aria-hidden="true">…</span>
+        <template v-for="(segment, index) in dreamExcerpt.segments" :key="index">
+          <mark v-if="segment.highlighted" class="dream-card__highlight" translate="no">
+            {{ segment.text }}
+          </mark>
+          <span v-else translate="no">{{ segment.text }}</span>
+        </template>
+        <button
+          v-if="dreamExcerpt.clippedAfter"
+          class="dream-card__see-more"
+          :aria-label="t('home.readFullDreamAria', { name: user.display_name })"
+          @click.stop="openModal"
+        >…{{ t('home.seeMore') }}</button>
+      </p>
+    </div>
 
-      <!-- Normal read mode -->
-      <template v-else>
-        <p class="dream-card__content" @click="openModal">
-          <span translate="no">{{ displayContent }}</span>
-          <button
-            v-if="isTruncated"
-            class="dream-card__see-more"
-            :aria-label="t('home.readFullDreamAria', { name: user.display_name })"
-            @click.stop="openModal"
-          >…{{ t('home.seeMore') }}</button>
+    <div
+      v-if="presentedCommentMatches.length"
+      class="dream-card__search-comments"
+      :aria-label="t('home.matchedComments')"
+    >
+      <div class="dream-card__search-comments-label">
+        {{ t('home.matchedComments') }}
+      </div>
+      <article
+        v-for="comment in presentedCommentMatches"
+        :key="comment._id"
+        class="dream-card__search-comment"
+      >
+        <span class="dream-card__search-comment-author" translate="no">
+          {{ comment.user?.display_name || t('home.unknownUser') }}
+        </span>
+        <p>
+          <span v-if="comment.excerpt.clippedBefore" aria-hidden="true">…</span>
+          <template v-for="(segment, index) in comment.excerpt.segments" :key="index">
+            <mark v-if="segment.highlighted" class="dream-card__highlight" translate="no">
+              {{ segment.text }}
+            </mark>
+            <span v-else translate="no">{{ segment.text }}</span>
+          </template>
+          <span v-if="comment.excerpt.clippedAfter" aria-hidden="true">…</span>
         </p>
-      </template>
+      </article>
+      <span
+        v-if="matchedCommentCount > presentedCommentMatches.length"
+        class="dream-card__search-comments-more"
+      >
+        {{ t('home.moreMatchedComments', { count: matchedCommentCount - presentedCommentMatches.length }) }}
+      </span>
     </div>
 
 
     <!-- ── Oracle status ── -->
-    <div v-if="!editMode && dream.ai_status" class="dream-card__oracle-wrap">
+    <div v-if="dream.ai_status" class="dream-card__oracle-wrap">
+      <div v-if="dream.ai_analysis_enabled === false" class="dream-card__ai-disabled">
+        <span aria-hidden="true">◈</span>
+        <span>{{ t('home.aiAnalysisDisabled') }}</span>
+      </div>
       <OracleAnalysisResult
-        v-if="dream.ai_status === 'completed' && analysis"
+        v-else-if="dream.ai_status === 'completed' && analysis"
         :analysis="analysis"
         compact
         @view-details="openModal"
@@ -124,7 +143,7 @@
         <span>{{ t('home.oracleAnalyzing') }}</span>
       </div>
       <div v-else-if="dream.ai_status === 'failed' || dream.ai_status === 'cancelled'" class="dream-card__status-failed">
-        <span class="warning-icon" aria-hidden="true">⚠️</span>
+        <AppIcon class="warning-icon" name="warning" :size="20" />
         <span class="error-msg-text">{{ dream.ai_status === 'cancelled' ? t('home.oracleCancelled') : t('home.oracleFailed') }}</span>
         <button
           v-if="isOwner"
@@ -138,7 +157,7 @@
     </div>
 
     <!-- ── Footer: interactions ── -->
-    <footer v-if="!editMode" class="dream-card__footer">
+    <footer class="dream-card__footer">
       <!-- Like button: filled #EF4444 heart when liked, outline when not -->
       <button
         :id="`like-btn-${dream._id}`"
@@ -184,6 +203,18 @@
       @confirm="confirmDelete"
       @cancel="showDeleteConfirm = false"
     />
+    <AppConfirm
+      v-model="showDisableAiConfirm"
+      :title="t('home.disableAiTitle')"
+      :message="t('home.disableAiMessage')"
+      :secondary-label="t('home.keepAiResult')"
+      :confirm-label="t('home.deleteAiResult')"
+      :danger="true"
+      :loading="isUpdatingAi"
+      @secondary="disableAiAnalysis('keep')"
+      @confirm="disableAiAnalysis('delete')"
+      @cancel="showDisableAiConfirm = false"
+    />
   </article>
 </template>
 
@@ -192,22 +223,32 @@ import { ref, computed }     from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { timeAgo }           from '@/utils/timeAgo'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
+import { formatUsername }    from '@/utils/username'
 import { usePostStore }      from '@/store/usePostStore'
 import { useDreamStore }     from '@/store/useDreamStore'
 import { useAuthStore }      from '@/store/useAuthStore'
 import { useOracleStore }    from '@/store/useOracleStore'
 import { useLocaleStore }    from '@/store/useLocaleStore'
+import { useSettingsStore }  from '@/store/useSettingsStore'
 import apiClient             from '@/api/client'
 import AppDropdown           from '@/components/common/AppDropdown.vue'
 import AppConfirm            from '@/components/common/AppConfirm.vue'
+import AppIcon               from '@/components/common/AppIcon.vue'
 import OracleAnalysisResult  from '@/components/common/OracleAnalysisResult.vue'
-import type { DropdownOption } from '@/components/common/AppDropdown.vue'
-import type { ApiDream }     from '@/api/types'
-import type { User }         from '@/data/mockUsers'
+import DreamMoodTag          from '@/components/common/DreamMoodTag.vue'
+import UserAvatar            from '@/components/common/UserAvatar.vue'
+import type { DropdownItem, DropdownOption } from '@/components/common/AppDropdown.vue'
+import type {
+  ApiDream,
+  ApiUser,
+  DreamSearchCommentMatch,
+  SearchTextRange,
+} from '@/api/types'
+import { createHighlightedExcerpt } from '@/utils/highlightText'
 
 const oracleStore = useOracleStore()
 const localeStore = useLocaleStore()
+const settingsStore = useSettingsStore()
 const { t } = useI18n({ useScope: 'global' })
 
 async function retryAnalysis(dreamId: string) {
@@ -223,8 +264,8 @@ async function retryAnalysis(dreamId: string) {
       
       oracleStore.startTracking(data.data)
     }
-  } catch (err) {
-    console.error('Failed to retry analysis:', err)
+  } catch {
+    settingsStore.showToast(t('home.oracleFailed'), 'error')
   }
 }
 
@@ -236,7 +277,17 @@ function navigateToProfile() {
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 
-const props = defineProps<{ dream: ApiDream; user: User }>()
+const props = withDefaults(defineProps<{
+  dream: ApiDream
+  user: ApiUser
+  contentHighlights?: SearchTextRange[]
+  matchedComments?: DreamSearchCommentMatch[]
+  matchedCommentCount?: number
+}>(), {
+  contentHighlights: () => [],
+  matchedComments: () => [],
+  matchedCommentCount: 0,
+})
 const emit  = defineEmits<{
   delete: [dreamId: string]
 }>()
@@ -249,8 +300,6 @@ const authStore  = useAuthStore()
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 
-const initials  = computed(() => getInitials(props.user.display_name))
-const avatarBg  = computed(() => getAvatarBg(props.user._id))
 const timestamp = computed(() => timeAgo(props.dream.created_at, localeStore.currentLocale))
 
 const isOwner = computed(() => {
@@ -286,27 +335,32 @@ async function handleLike(): Promise<void> {
 
 // ── Content truncation ────────────────────────────────────────────────────────
 
-const TRUNCATE_AT    = 200
-const isTruncated    = computed(() => props.dream.content.length > TRUNCATE_AT)
-const displayContent = computed(() =>
-  isTruncated.value ? props.dream.content.slice(0, TRUNCATE_AT) : props.dream.content
+const dreamExcerpt = computed(() =>
+  createHighlightedExcerpt(props.dream.content, props.contentHighlights, 240)
+)
+const presentedCommentMatches = computed(() =>
+  props.matchedComments.map(comment => ({
+    ...comment,
+    excerpt: createHighlightedExcerpt(comment.content, comment.ranges, 240),
+  }))
 )
 
 function openModal() {
-  if (editMode.value) return
   postStore.openPost(props.dream._id)
 }
 
-const moodClass = computed(() => props.dream.mood_tag.toLowerCase().replace(/\s+/g, '-'))
-
 const analysis = computed(() => props.dream.ai_result ?? props.dream.aiAnalysis ?? null)
+const moodLabel = computed(() =>
+  String(analysis.value?.emotional_tone || props.dream.mood_tag || '').trim()
+)
 
 // ── 3-dot menu ───────────────────────────────────────────────────────────────
 
-const menuOptions = computed((): DropdownOption[] => [
-  {
+const menuOptions = computed<DropdownItem[]>(() => {
+  const options: DropdownItem[] = [{
     label: t('home.editPost'),
     value: 'edit',
+    disabled: props.dream.ai_status === 'pending',
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
   },
   {
@@ -315,20 +369,40 @@ const menuOptions = computed((): DropdownOption[] => [
     icon:  props.dream.privacy === 'private'
       ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
       : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
-  },
-  { divider: true } as any,
+  }]
+
+  options.push({
+    label: props.dream.ai_analysis_enabled === false
+      ? t('home.enableAiAnalysis')
+      : t('home.disableAiAnalysis'),
+    value: 'ai-toggle',
+    icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3"/><path d="M18.4 5.6l-2.1 2.1"/><path d="M21 12h-3"/><path d="M5 12H2"/><path d="M7.7 7.7 5.6 5.6"/><circle cx="12" cy="12" r="4"/><path d="M8 21h8"/></svg>`,
+  })
+
+  if (props.dream.ai_analysis_enabled !== false) {
+    options.push({
+      label: t('home.reanalyze'),
+      value: 'reanalyze',
+      disabled: props.dream.ai_status === 'pending',
+      icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg>`,
+    })
+  }
+
+  options.push(
+    { divider: true },
   {
     label:  t('home.delete'),
     value:  'delete',
     danger: true,
     icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
-  },
-])
+  })
+  return options
+})
 
 async function handleMenuSelect(item: DropdownOption) {
   switch (item.value) {
     case 'edit':
-      startEdit()
+      await postStore.openPost(props.dream._id, { edit: true })
       break
     case 'privacy':
       await dreamStore.changePrivacy(
@@ -336,34 +410,15 @@ async function handleMenuSelect(item: DropdownOption) {
         props.dream.privacy === 'private' ? 'public' : 'private'
       )
       break
+    case 'ai-toggle':
+      await toggleAiAnalysis()
+      break
+    case 'reanalyze':
+      await retryAnalysis(props.dream._id)
+      break
     case 'delete':
       showDeleteConfirm.value = true
       break
-  }
-}
-
-// ── Inline edit ───────────────────────────────────────────────────────────────
-
-const editMode    = ref(false)
-const editContent = ref('')
-const isSaving    = ref(false)
-
-function startEdit() {
-  editContent.value = props.dream.content
-  editMode.value    = true
-}
-function cancelEdit() {
-  editMode.value    = false
-  editContent.value = ''
-}
-async function saveEdit() {
-  if (!editContent.value.trim() || isSaving.value) return
-  isSaving.value = true
-  try {
-    await dreamStore.editDream(props.dream._id, editContent.value)
-    editMode.value = false
-  } finally {
-    isSaving.value = false
   }
 }
 
@@ -371,6 +426,38 @@ async function saveEdit() {
 
 const showDeleteConfirm = ref(false)
 const isDeleting        = ref(false)
+const showDisableAiConfirm = ref(false)
+const isUpdatingAi = ref(false)
+
+async function toggleAiAnalysis() {
+  if (isUpdatingAi.value) return
+  if (props.dream.ai_analysis_enabled === false) {
+    isUpdatingAi.value = true
+    try {
+      await dreamStore.setAiAnalysis(props.dream._id, true)
+    } finally {
+      isUpdatingAi.value = false
+    }
+    return
+  }
+
+  if (analysis.value) {
+    showDisableAiConfirm.value = true
+    return
+  }
+  await disableAiAnalysis('delete')
+}
+
+async function disableAiAnalysis(resultPolicy: 'keep' | 'delete') {
+  if (isUpdatingAi.value) return
+  isUpdatingAi.value = true
+  try {
+    await dreamStore.setAiAnalysis(props.dream._id, false, resultPolicy)
+    showDisableAiConfirm.value = false
+  } finally {
+    isUpdatingAi.value = false
+  }
+}
 
 async function confirmDelete() {
   if (isDeleting.value) return
@@ -472,24 +559,6 @@ async function confirmDelete() {
   font-style: italic;
 }
 
-/* Mood tag */
-.dream-card__mood {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  border: 1px solid transparent;
-  white-space: nowrap;
-  background: var(--color-bg-elevated);
-  color: var(--color-text-secondary);
-}
-.dream-card__mood--lucid         { background: #112136; color: #5b9cf6; border-color: #1e3a5f; }
-.dream-card__mood--nightmare     { background: #2d1010; color: #ed4956; border-color: #3d1515; }
-.dream-card__mood--calm          { background: #0e2a1c; color: #4ade80; border-color: #1a3d2e; }
-.dream-card__mood--prophetic     { background: #1e1230; color: #a78bfa; border-color: #2d1f4a; }
-.dream-card__mood--euphoric      { background: #2a1e08; color: #f59e0b; border-color: #3d2d10; }
-.dream-card__mood--uncategorized { background: var(--color-bg-elevated); color: var(--color-text-muted); border-color: var(--color-border); }
-
 /* 3-dot button */
 .dream-card__menu-btn {
   width: 30px;
@@ -537,67 +606,60 @@ async function confirmDelete() {
   transition: color var(--transition-fast);
 }
 .dream-card__see-more:hover { color: var(--color-text-secondary); }
-
-/* ── Inline edit ── */
-.dream-card__edit-textarea {
-  width: 100%;
-  min-height: 100px;
-  background: var(--color-bg-elevated);
-  border: 1px solid #3a3a3a;
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  font-size: var(--font-size-base);
-  font-family: var(--font-family-base);
+.dream-card__highlight {
+  border-radius: 2px;
+  background: #5a5127;
   color: var(--color-text-primary);
-  line-height: var(--line-height-relaxed);
-  resize: vertical;
-  transition: border-color var(--transition-fast);
-  box-sizing: border-box;
+  box-decoration-break: clone;
+  padding: 0 1px;
 }
-.dream-card__edit-textarea:focus { border-color: #555; outline: none; }
-
-.dream-card__edit-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  justify-content: flex-end;
+.dream-card__search-comments {
+  display: grid;
+  gap: 8px;
+  margin: 0 var(--space-5) var(--space-3);
+  padding: 10px 12px;
+  border-left: 2px solid #3a3a3a;
+  background: #151515;
 }
-.dream-card__edit-count {
-  font-size: var(--font-size-xs);
+.dream-card__search-comments-label {
   color: var(--color-text-muted);
-  margin-right: auto;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
 }
-
-.dream-card__edit-btn {
-  height: 30px;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  font-family: var(--font-family-base);
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: background var(--transition-fast);
+.dream-card__search-comment {
+  display: grid;
+  gap: 2px;
 }
-.dream-card__edit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-.dream-card__edit-btn--cancel {
-  background: #222;
+.dream-card__search-comment-author {
   color: var(--color-text-secondary);
-  border-color: #333;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
-.dream-card__edit-btn--cancel:hover:not(:disabled) { background: #2a2a2a; }
-
-.dream-card__edit-btn--save {
-  background: #ffffff;
-  color: #101010;
+.dream-card__search-comment p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
 }
-.dream-card__edit-btn--save:hover:not(:disabled) { background: #e0e0e0; }
+.dream-card__search-comments-more {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
 
 /* ── Oracle status ── */
 .dream-card__oracle-wrap {
   margin: 0 var(--space-5) var(--space-3);
+}
+.dream-card__ai-disabled {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 .dream-card__status-pending {
   display: flex;
@@ -691,4 +753,63 @@ async function confirmDelete() {
 /* Liked state — solid red, no blur/gradient */
 .dream-card__action--liked       { color: #EF4444; }
 .dream-card__action--liked:hover { background: rgba(239, 68, 68, 0.08); color: #EF4444; }
+
+@media (max-width: 600px) {
+  .dream-card {
+    border-radius: 14px;
+  }
+
+  .dream-card__header {
+    gap: 10px;
+    padding: 13px 13px 0;
+  }
+
+  .dream-card__body {
+    padding: 11px 13px;
+  }
+
+  .dream-card__search-comments,
+  .dream-card__oracle-wrap {
+    margin-right: 13px;
+    margin-left: 13px;
+  }
+
+  .dream-card__name-row {
+    gap: 5px 8px;
+  }
+
+  .dream-card__name {
+    max-width: min(44vw, 180px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dream-card__badges {
+    gap: 5px;
+  }
+
+  .dream-card__footer {
+    justify-content: space-around;
+    padding: 7px 8px 9px;
+  }
+
+  .dream-card__action {
+    min-width: 44px;
+    min-height: 40px;
+    justify-content: center;
+    padding: 7px 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .dream-card__username {
+    display: none;
+  }
+
+  .dream-card__action {
+    gap: 5px;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+}
 </style>

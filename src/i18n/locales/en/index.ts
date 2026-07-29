@@ -10,6 +10,7 @@ import home from './home.js'
 import library from './library.js'
 import rules from './rules.js'
 import oracle from './oracle.js'
+import messages from './messages.js'
 
 export default {
   common,
@@ -24,4 +25,5 @@ export default {
   library,
   rules,
   oracle,
+  messages,
 }

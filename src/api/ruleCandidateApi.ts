@@ -55,12 +55,6 @@ export interface RuleCandidate {
   sourceYear?: number
   sourceTitle?: string
   sourceDoi?: string
-  mergeCluster?: {
-    clusterId: string
-    memberIds: string[]
-    memberCount: number
-    reasons: Array<'same_canonical_paragraph' | 'equivalent_subject_and_outcome' | 'same_meaningful_subject' | 'same_meaningful_outcome' | 'same_question_and_semantics'>
-  }
   isComposite?: boolean
   compositeComponents?: Array<{
     sourceRuleId: string
@@ -99,6 +93,16 @@ export interface RuleCandidate {
   legitimacyLevel?: 'weak' | 'moderate' | 'strong' | 'mixed'
   legitimacyReason?: string
   evidenceCredibilityScore?: number
+  sourceEvidenceScore?: number
+  userValidationAdjustment?: number
+  validationStats?: {
+    supports: number
+    weakens: number
+    unsure: number
+    directResponses: number
+    sharedQuoteResponses: number
+    netAdjustment: number
+  }
   oracleUsefulnessScore?: number
   claimTypeV3?: string
   effectPolarityV3?: string
@@ -168,6 +172,17 @@ export interface CandidateDetailResponse {
   candidate: RuleCandidate
   evidenceChunks: EvidenceChunkPreview[]
   evidenceExcerpts?: EvidenceExcerpt[]
+  evidenceGapMatches?: Array<{
+    gapId: string
+    claim: { key: string; vi: string; en: string }
+    status: 'unresolved' | 'candidate_found' | 'resolved'
+    occurrenceCount: number
+    similarity: number
+    linkedAsCandidate: boolean
+    resolvedByRule: boolean
+    resolutionReady: boolean
+    blockers: Array<'similarity'>
+  }>
   ruleRelationships?: Array<{
     ruleId: string
     ruleCode: string
@@ -199,14 +214,15 @@ export interface CandidateDetailResponse {
 export const getRuleCandidates = async (params: {
   status?: string
   academicSourceId?: string
-}): Promise<{
+  q?: string
+}, signal?: AbortSignal): Promise<{
   success: boolean
   data: RuleCandidate[]
 }> => {
   const { data } = await apiClient.get<{
     success: boolean
     data: RuleCandidate[]
-  }>('/moderation/rules-v3/candidates', { params })
+  }>('/moderation/rules-v3/candidates', { params, signal })
   return data
 }
 
@@ -214,7 +230,8 @@ export const getRuleCandidates = async (params: {
  * Lấy chi tiết lập luận ứng viên (kèm chunk previews).
  */
 export const getRuleCandidateDetail = async (
-  id: string
+  id: string,
+  signal?: AbortSignal,
 ): Promise<{
   success: boolean
   data: CandidateDetailResponse
@@ -222,7 +239,7 @@ export const getRuleCandidateDetail = async (
   const { data } = await apiClient.get<{
     success: boolean
     data: CandidateDetailResponse
-  }>(`/moderation/rules-v3/candidates/${id}`)
+  }>(`/moderation/rules-v3/candidates/${id}`, { signal })
   return data
 }
 
@@ -263,16 +280,6 @@ export const rejectRuleCandidate = async (
   return data
 }
 
-export const mergeRuleCandidateGroup = async (id: string): Promise<{
-  success: true
-  data: { primaryRuleId: string; retiredRuleIds: string[]; componentCount: number; requiresReview: boolean }
-}> => {
-  const { data } = await apiClient.post(`/moderation/rules-v3/candidates/${id}/merge`, {
-    confirmation: 'MERGE_COMPATIBLE_RULES',
-  })
-  return data
-}
-
 export type RuleV3BulkAction = 'approve_pending' | 'reject_pending' | 'restore_rejected' | 'delete_rejected'
 
 export const runRuleV3BulkAction = async (
@@ -287,7 +294,8 @@ export const runRuleV3BulkAction = async (
 export interface RuleV3ExtractionRun {
   _id: string
   status: 'pending' | 'success' | 'failed' | 'cancelled'
-  currentStage: 'initializing' | 'extracting_candidates' | 'saving_candidates' | 'completed' | 'failed' | 'cancelled'
+  currentStage: 'queued' | 'initializing' | 'extracting_candidates' | 'saving_candidates' | 'merging_candidates' | 'completed' | 'failed' | 'cancelled'
+  queuePosition?: number
   totalBatches: number
   processedBatches: number
   rawCandidateCount: number
@@ -343,6 +351,25 @@ export interface RuleV3SourceAnalysisSummary {
     rejected: number
     retired: number
   }
+  evidenceGapMatches: {
+    candidateFound: number
+    resolved: number
+  }
+  evidenceGapDetails: Array<{
+    gapId: string
+    claim: string
+    localizedClaim?: { key: string; vi: string; en: string }
+    status: 'unresolved' | 'candidate_found' | 'resolved'
+    occurrenceCount: number
+    rules: Array<{
+      ruleId: string
+      ruleCode: string
+      statement: string
+      status: 'pending' | 'verified' | 'rejected' | 'retired'
+      evidenceScore: number
+      resolutionRole: 'candidate' | 'resolved'
+    }>
+  }>
   totalRuleCount: number
   runHistory: RuleV3SourceRunSummary[]
   latestRun: RuleV3SourceRunSummary | null

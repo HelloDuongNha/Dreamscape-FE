@@ -1,7 +1,12 @@
 <template>
-  <div class="app-dropdown" @click.stop>
+  <div ref="rootRef" class="app-dropdown" @click.stop>
     <!-- Trigger slot (the 3-dot button or whatever the parent provides) -->
-    <slot name="trigger" :toggle="toggle" :isOpen="isOpen" />
+    <slot
+      name="trigger"
+      :toggle="toggle"
+      :isOpen="isOpen"
+      :panelId="panelId"
+    />
 
     <!-- Dropdown panel -->
     <Transition name="dropdown-fade">
@@ -12,6 +17,7 @@
         :class="`app-dropdown__panel--${align}`"
         role="menu"
         :aria-label="label"
+        @keydown="handleMenuKeydown"
       >
         <template v-for="(item, i) in options" :key="i">
           <!-- Divider -->
@@ -40,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { nextTick, ref, onMounted, onUnmounted } from 'vue'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -82,9 +88,23 @@ const emit = defineEmits<{
 // ── State ─────────────────────────────────────────────────────────────────────
 
 const isOpen = ref(false)
+const rootRef = ref<HTMLElement | null>(null)
+const triggerRef = ref<HTMLElement | null>(null)
 
-function toggle() { isOpen.value = !isOpen.value }
-function close()  { isOpen.value = false }
+async function toggle(event?: Event) {
+  if (event?.currentTarget instanceof HTMLElement) {
+    triggerRef.value = event.currentTarget
+  }
+  isOpen.value = !isOpen.value
+  if (!isOpen.value) return
+  await nextTick()
+  enabledMenuItems()[0]?.focus()
+}
+
+function close(restoreFocus = false) {
+  isOpen.value = false
+  if (restoreFocus) triggerRef.value?.focus()
+}
 
 function handleClick(item: DropdownItem) {
   if ('divider' in item && item.divider) return
@@ -94,12 +114,44 @@ function handleClick(item: DropdownItem) {
   close()
 }
 
+function enabledMenuItems(): HTMLButtonElement[] {
+  if (!rootRef.value) return []
+  return Array.from(
+    rootRef.value.querySelectorAll<HTMLButtonElement>('.app-dropdown__item:not(:disabled)'),
+  )
+}
+
+function handleMenuKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    close(true)
+    return
+  }
+
+  const items = enabledMenuItems()
+  if (!items.length) return
+  const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement)
+  let nextIndex: number | null = null
+
+  if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % items.length
+  if (event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + items.length) % items.length
+  if (event.key === 'Home') nextIndex = 0
+  if (event.key === 'End') nextIndex = items.length - 1
+  if (nextIndex === null) return
+
+  event.preventDefault()
+  items[nextIndex]?.focus()
+}
+
 // ── Click-outside to close ────────────────────────────────────────────────────
 
-function onClickOutside() { close() }
+function onPointerDown(event: PointerEvent) {
+  if (rootRef.value && !rootRef.value.contains(event.target as Node)) close()
+}
 
-onMounted(()  => document.addEventListener('click', onClickOutside))
-onUnmounted(() => document.removeEventListener('click', onClickOutside))
+onMounted(() => document.addEventListener('pointerdown', onPointerDown, true))
+onUnmounted(() => document.removeEventListener('pointerdown', onPointerDown, true))
 </script>
 
 <style scoped>

@@ -12,13 +12,16 @@ export default {
   profile: 'Profile',
   settings: 'Settings',
   logout: 'Log out',
+  more: 'More',
+  mobileNav: 'Mobile navigation',
+  adminTools: 'Admin tools',
   // Sidebar controls
   expandSidebar: 'Expand sidebar',
   collapseSidebar: 'Collapse sidebar',
   collapseLabel: 'Collapse',
   // Badge aria-label — {count} is interpolated
   unreadCount: '{count} unread',
-  // Moderation (moderator-only nav items)
+  // Moderation (administrator-only nav items)
   moderationSources: 'Source review',
   ruleReview: 'Argument review',
   // Header page titles — keyed by Vue Router route name
@@ -37,6 +40,8 @@ export default {
   titleLogin: 'Sign in — DreamScape',
   titleRegister: 'Create Account — DreamScape',
   titleVerifyOtp: 'Verify OTP — DreamScape',
+  titleForgotPassword: 'Recover Password — DreamScape',
+  titleResetPassword: 'Reset Password — DreamScape',
   titleHome: 'Home — DreamScape',
   titleOracle: 'Oracle — DreamScape',
   titleMessages: 'Messages — DreamScape',

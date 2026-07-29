@@ -160,4 +160,52 @@ const menuItems = computed(() => [
 /* Section fade transition */
 .section-fade-enter-active, .section-fade-leave-active { transition: opacity 0.15s; }
 .section-fade-enter-from, .section-fade-leave-to { opacity: 0; }
+
+@media (max-width: 640px) {
+  .settings-layout {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .settings-menu {
+    width: 100%;
+    min-width: 0;
+    padding: var(--space-3);
+    gap: var(--space-2);
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .settings-menu__title {
+    display: none;
+  }
+
+  .settings-menu nav {
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .settings-menu__list {
+    flex-direction: row;
+    min-width: max-content;
+    gap: var(--space-1);
+  }
+
+  .settings-menu__item {
+    min-height: 44px;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .settings-menu__chevron {
+    display: none;
+  }
+
+  .settings-content {
+    width: 100%;
+    overflow: visible;
+  }
+}
 </style>

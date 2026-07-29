@@ -5,11 +5,17 @@ export interface ApiUser {
   _id:            string
   username:       string
   display_name:   string
+  role?:           'admin' | 'user'
   avatar:         string
   bio:            string
   follower_count: number
   followers?:     string[]
   following?:     string[]
+  followRequests?: ApiUser[]
+  followRequestCount?: number
+  followStatus?: 'none' | 'pending' | 'following'
+  statsVisible?: boolean
+  canViewPrivateContent?: boolean
   isPrivateAccount?: boolean;
   dmPrivacy?:     'everyone' | 'following' | 'friends';
   followersPrivacy?: 'everyone' | 'following' | 'only_me';
@@ -108,13 +114,18 @@ export interface AiRealLifeHypothesis {
   ruleCode?: string
   ruleStatement?: string
   hypothesis:            string
+  localizedHypothesis?:  { vi?: string; en?: string }
   evidenceFromDream:     string[]
   confidence:            number
   needsUserConfirmation: boolean
   followUpQuestion:      string
+  localizedFollowUpQuestion?: { vi?: string; en?: string }
   reasonForAsking?:      string
+  localizedReasonForAsking?: { vi?: string; en?: string }
   ifYesMeaning?:         string
+  localizedIfYesMeaning?: { vi?: string; en?: string }
   ifNoMeaning?:          string
+  localizedIfNoMeaning?: { vi?: string; en?: string }
   questionType?:         'past' | 'present' | 'future'
   verificationKey?:      string
   questionBasis?:        'academic_rule' | 'dream_sequence' | 'sleep_context'
@@ -133,13 +144,21 @@ export interface AiRealLifeHypothesis {
     journal?: string
     doi?: string
     chunkIds?: string[]
+    sourceType?: 'academic_source'
+    publisher?: string
   }[]
   userFeedback?:         'yes' | 'no' | 'unsure' | null
+  ruleScore?:             number
+  ruleScoreDelta?:        number
+  ruleVoteDelta?:         number
+  validationSourceId?:    string
+  validationExactQuote?:  string
 }
 
 export interface AiDreamAnalysisResult {
   title:                     string
   emotional_tone:            string
+  emotional_valence?:        -2 | -1 | 0 | 1 | 2
   emotional_tone_key?:       'urgent_conflicted' | 'anxious' | 'fearful' | 'sad' | 'calm' | 'mixed' | 'neutral'
   summary:                   string
   core_analysis:             string
@@ -155,9 +174,11 @@ export interface AiDreamAnalysisResult {
       dreamId: string
       title: string
       similarity: number
-      matchedOn: string[]
     }>
   }
+  creative_continuation_history?: Array<NonNullable<AiDreamAnalysisResult['creative_continuation']>>
+  creative_continuation_index?: number
+  continuationMetadata?: ApiDream['continuationMetadata']
   case_conclusion?: {
     status: 'preliminary' | 'clarified'
     headline: string
@@ -226,7 +247,6 @@ export interface AiDreamAnalysisResult {
     authorDisplayName: string
     sameAuthor: boolean
     similarity: number
-    matchedOn: string[]
   }[]
   feedback_revision?: {
     hypothesis: string
@@ -234,6 +254,30 @@ export interface AiDreamAnalysisResult {
     interpretation: string
     ruleId?: string
   }[]
+  citations?: Array<{
+    index: number
+    sourceType: 'academic_source'
+    sourceId: string
+    title: string
+    year?: number
+    excerpt: string
+    detail?: string
+    doi?: string
+  }>
+  claim_bindings?: Array<{
+    claimId: string
+    claimText: string
+    contentPath: string
+    status: 'unresolved' | 'resolved'
+    citationIndex?: number
+    source?: {
+      sourceId?: string
+      doi?: string
+    }
+    ruleId?: string
+    evidenceId?: string
+    verificationKey?: string
+  }>
 }
 
 export interface ApiDream {
@@ -243,30 +287,49 @@ export interface ApiDream {
   mood_tag:       string
   is_public:      boolean
   privacy:        'public' | 'private'
+  ai_analysis_enabled: boolean
   likes:          string[]           // array of userId strings who liked this post
   likes_count:    number
   comments_count: number
+  comments_enabled?: boolean
   created_at:     string             // ISO-8601 — used as pagination cursor
-  ai_status:      'pending' | 'sensing' | 'completed' | 'failed' | 'cancelled'
+  ai_status:      'pending' | 'sensing' | 'completed' | 'failed' | 'cancelled' | 'disabled'
   ai_result:      AiDreamAnalysisResult | null
   aiAnalysis?:    AiDreamAnalysisResult | null
   analysisMetadata?: {
-    currentStage?: 'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing' | 'completed'
+    currentStage?: 'queued' | 'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing' | 'completed' | 'failed' | 'cancelled'
+    failedAtStage?: 'queued' | 'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing'
     progress?: number
     statusMessage?: string
     currentMiniStep?: string
-    stageResults?: Partial<Record<'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing', string>>
+    stageResults?: Partial<Record<'queued' | 'preparing' | 'retrieving_context' | 'retrieving_rules' | 'generating_analysis' | 'finalizing', string>>
+    queuePosition?: number
+    enqueuedAt?: string
     startedAt?: string
+    processingStartedAt?: string
+    processingDurationMs?: number
     generatedAt?: string
     durationMs?: number
     estimatedDurationSeconds?: number
     timingDeltaSeconds?: number
     cancelledAt?: string
     lastReplacementOutcome?: 'cancelled' | 'failed'
-    lastReplacementTrigger?: 'retry' | 'dream_addition' | 'addition_retry'
+    lastReplacementTrigger?: 'retry' | 'dream_addition' | 'addition_retry' | 'content_edit' | 'addition_edit'
     replacementEndedAt?: string
     replacementDurationMs?: number
     hasUnanalyzedAdditions?: boolean
+  } | null
+  continuationMetadata?: {
+    runId?: string
+    status?: 'queued' | 'running' | 'completed' | 'failed'
+    progress?: number
+    statusMessage?: string
+    queuePosition?: number
+    enqueuedAt?: string
+    startedAt?: string
+    completedAt?: string
+    durationMs?: number
+    estimatedDurationSeconds?: number
   } | null
   edit_history:   { content: string; editedAt: string }[]
   additions:      {
@@ -276,6 +339,18 @@ export interface ApiDream {
     analysisState?: 'pending' | 'analyzed' | 'unanalyzed'
     analysisRunId?: string
     analyzedAt?: string
+  }[]
+  versions?: {
+    version: number
+    content: string
+    additions: ApiDream['additions']
+    ai_status: ApiDream['ai_status']
+    ai_result: AiDreamAnalysisResult | null
+    mood_tag: string
+    analysisMetadata?: ApiDream['analysisMetadata']
+    editedAt: string
+    isCurrent: boolean
+    isLegacyPartial: boolean
   }[]
 }
 
@@ -290,6 +365,33 @@ export interface DreamFeedResponse {
   success:    boolean
   data:       ApiDream[]
   limit:      number
+  nextCursor: string | null
+}
+
+export interface SearchTextRange {
+  start: number
+  end: number
+}
+
+export interface DreamSearchCommentMatch {
+  _id: string
+  content: string
+  created_at: string
+  user: Pick<ApiUser, '_id' | 'username' | 'display_name' | 'avatar'> | null
+  ranges: SearchTextRange[]
+}
+
+export interface DreamSearchItem {
+  dream: ApiDream
+  dreamRanges: SearchTextRange[]
+  matchedComments: DreamSearchCommentMatch[]
+  matchedCommentCount: number
+}
+
+export interface DreamSearchResponse {
+  success: boolean
+  data: DreamSearchItem[]
+  limit: number
   nextCursor: string | null
 }
 
@@ -318,7 +420,15 @@ export interface ApiComment {
   _id:        string
   dreamId:    string | ApiDream  // populated when fetched via GET /comments/user/:id
   userId:     ApiUser    // always populated by the server
+  parentCommentId?: string
+  replyToCommentId?: string
+  replyToUserId?: ApiUser
   content:    string
+  edit_history?: Array<{
+    content: string
+    editedAt: string
+  }>
+  updated_at?: string
   created_at: string     // ISO-8601
 }
 
@@ -335,6 +445,7 @@ export interface ApiConversation {
   last_message:    string
   updated_at:      string      // ISO-8601
   unread_count:    number      // messages from partner with status !== 'seen'
+  preview_unavailable?: boolean
 }
 
 export interface ApiMessage {
@@ -344,6 +455,7 @@ export interface ApiMessage {
   content:        string
   timestamp:      string            // ISO-8601
   status?:        'sent' | 'delivered' | 'seen'  // delivery receipt
+  content_unavailable?: boolean
 }
 
 /** Payload emitted by the server's receive_message socket event */
@@ -364,15 +476,53 @@ export interface SocketStatusUpdate {
   status:           'sent' | 'delivered' | 'seen'
 }
 
+export interface SocketPresenceUpdate {
+  userId:       string
+  isOnline:     boolean
+  lastActiveAt: string
+}
+
+export interface MessagingConversationSearchResult {
+  user:           ApiUser
+  conversationId: string | null
+  last_message:   string
+  updated_at:     string | null
+  source:         'conversation' | 'following'
+}
+
+export interface MessagingMessageSearchResult {
+  message:        ApiMessage
+  conversationId: string
+  partner:        ApiUser
+}
+
+export interface MessagingSearchResponse {
+  conversations: MessagingConversationSearchResult[]
+  messages:      MessagingMessageSearchResult[]
+}
+
 export interface ApiNotification {
   _id:         string
   recipientId: string
   senderId:    ApiUser
-  type:        'like' | 'comment' | 'follow' | 'dream_analysis'
-  postId?:     string | Pick<ApiDream, '_id' | 'content'>
+  type:        'like' | 'comment' | 'comment_reply' | 'follow' | 'dream_analysis'
+  postId?:     string
+  commentId?:  string
+  replyId?:    string
   isRead:      boolean
   timestamp:   string
 }
+
+export type ApiNotificationTarget =
+  | {
+      kind: 'dream' | 'dream_analysis'
+      dream: ApiDream
+      commentId?: string
+    }
+  | {
+      kind: 'profile'
+      userId: string
+    }
 
 // ─── Smart Reader I18N Interfaces ──────────────────────────────────────────
 

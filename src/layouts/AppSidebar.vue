@@ -6,10 +6,17 @@
   >
     <!-- Logo mark -->
     <div class="sidebar__logo">
-      <div class="sidebar__logo-icon-container">
-        <div class="sidebar__logo-icon" aria-label="DreamScape">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+        <div class="sidebar__logo-icon-container">
+          <div class="sidebar__logo-icon" aria-label="DreamScape">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <path
+              d="M22.7 4.8a11.8 11.8 0 1 0 4.5 16.6A10.2 10.2 0 1 1 22.7 4.8Z"
+              fill="currentColor"
+            />
+            <path
+              d="m24.8 6.2.9 2.4 2.5.9-2.5.9-.9 2.5-.9-2.5-2.5-.9 2.5-.9.9-2.4Z"
+              fill="currentColor"
+            />
           </svg>
         </div>
       </div>
@@ -30,7 +37,9 @@
         >
           <!-- Icon Container -->
           <div class="sidebar__nav-icon-container">
-            <span class="sidebar__nav-icon" aria-hidden="true" v-html="item.icon" />
+            <span class="sidebar__nav-icon" aria-hidden="true">
+              <NavigationIcon :name="item.icon" />
+            </span>
           </div>
 
           <!-- Label -->
@@ -148,6 +157,9 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useChatStore } from '@/store/useChatStore'
+import { isAdminUser } from '@/utils/adminAccess'
+import NavigationIcon from './navigation/NavigationIcon.vue'
+import { buildNavigationModel } from './navigation/navigation.config'
 
 withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
 defineEmits<{ toggle: [] }>()
@@ -157,7 +169,7 @@ const route     = useRoute()
 const router    = useRouter()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
-const isActive  = (path: string) => route.path === path
+const isActive  = (path: string) => route.path === path || (path !== '/' && route.path.startsWith(`${path}/`))
 const isSettingsActive = computed(() => route.path.startsWith('/settings'))
 
 async function handleLogout() {
@@ -165,69 +177,15 @@ async function handleLogout() {
   router.push('/login')
 }
 
-// SVG icons as strings (no external icon library needed)
-const navItems = computed(() => {
-  const items = [
-    {
-      id:    'home',
-      to:    '/',
-      label: t('navigation.home'),
-      badge: undefined as number | undefined,
-      icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
-    },
-    {
-      id:    'oracle',
-      to:    '/oracle',
-      label: t('navigation.oracle'),
-      badge: undefined as number | undefined,
-      icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
-    },
-    {
-      id:    'messages',
-      to:    '/messages',
-      label: t('navigation.messages'),
-      badge: chatStore.totalUnread > 0 ? chatStore.totalUnread : undefined,
-      icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
-    },
-    {
-      id:    'achievements',
-      to:    '/achievements',
-      label: t('navigation.achievements'),
-      badge: undefined as number | undefined,
-      icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>`,
-    },
-    {
-      id:    'library',
-      to:    '/library',
-      label: t('navigation.library'),
-      badge: undefined as number | undefined,
-      icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
-    },
-  ]
-
-  const allowlist = (import.meta.env.VITE_MODERATOR_USER_IDS || '').split(',')
-  const myId = authStore.user?._id
-  const isMod = myId && allowlist.map((id: string) => id.trim().toLowerCase()).includes(myId.toLowerCase())
-
-  if (isMod) {
-    items.push({
-      id:    'moderation-sources',
-      to:    '/moderation/sources',
-      label: t('navigation.moderationSources'),
-      badge: undefined,
-      icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
-    })
-    items.push({
-      id:    'moderation-rule-candidates',
-      to:    '/moderation/rule-candidates',
-      label: t('navigation.ruleReview'),
-      badge: undefined,
-      icon:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
-    })
-  }
-
-  return items
-})
+const navItems = computed(() =>
+  buildNavigationModel({
+    isAdmin: isAdminUser(authStore.user),
+    unreadMessages: chatStore.totalUnread,
+  }).desktopPrimary.map((item) => ({
+    ...item,
+    label: t(item.labelKey),
+  }))
+)
 </script>
 
 <style scoped>
@@ -250,6 +208,12 @@ const navItems = computed(() => {
 }
 .sidebar--collapsed {
   width: var(--sidebar-collapsed);
+}
+
+@media (max-width: 767px) {
+  .sidebar {
+    display: none;
+  }
 }
 
 /* ── Logo ──────────────────────────────────────────────────────── */

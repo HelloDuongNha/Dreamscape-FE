@@ -42,7 +42,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
+import { getInitials, getAvatarBg } from '@/utils/avatar'
 
 interface MessageToastProps {
   message: {

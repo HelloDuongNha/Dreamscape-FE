@@ -507,4 +507,59 @@ watch(
     transition-duration: 1ms;
   }
 }
+
+@media (max-width: 767px) {
+  .pinned-task-toast {
+    margin-bottom: 8px;
+  }
+
+  .pinned-task-toast__surface {
+    min-height: 76px;
+    padding: 12px 12px 11px;
+    border-radius: 12px;
+  }
+
+  .pinned-task-toast__header {
+    padding-right: 72px;
+  }
+
+  .pinned-task-toast__title {
+    font-size: 10px;
+  }
+
+  .pinned-task-toast__body {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .pinned-task-toast__view-tab {
+    z-index: 5;
+    top: 8px;
+    right: 38px;
+    left: auto;
+    width: 48px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    clip-path: none;
+    transform: none;
+  }
+
+  .pinned-task-toast__view-tab span {
+    font-size: 9px;
+  }
+
+  .pinned-task-toast--collapsed .pinned-task-toast__view-tab {
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .pinned-task-toast__edge-handle {
+    width: 34px;
+    height: 30px;
+  }
+}
 </style>

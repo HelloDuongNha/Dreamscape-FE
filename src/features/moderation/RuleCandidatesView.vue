@@ -48,39 +48,69 @@
       </nav>
       <div class="review-layout">
         <aside class="candidate-sidebar">
+          <div class="candidate-search">
+            <label for="rule-name-search" class="sr-only">{{ t('rules.searchLabel') }}</label>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              id="rule-name-search"
+              v-model="nameQuery"
+              type="search"
+              maxlength="120"
+              autocomplete="off"
+              :placeholder="t('rules.searchPlaceholder')"
+            />
+            <button
+              v-if="nameQuery"
+              type="button"
+              :aria-label="t('rules.clearSearch')"
+              @click="nameQuery = ''"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
           <div v-if="isLoadingList" class="loading-state">
             <span class="spinner"></span>
-            <span>{{ t('rules.loadingRules') }}</span>
+            <span>{{ nameQuery.trim() ? t('rules.searchingRules') : t('rules.loadingRules') }}</span>
+          </div>
+          <div v-else-if="listError" class="empty-panel compact" role="alert">
+            <h3>{{ t('rules.searchErrorTitle') }}</h3>
+            <p>{{ t('rules.searchErrorDescription') }}</p>
+            <button type="button" class="retry-button" @click="fetchCandidates">{{ t('rules.retrySearch') }}</button>
           </div>
           <div v-else-if="candidates.length === 0" class="empty-panel compact">
             <h3>{{ t('rules.noData') }}</h3>
-            <p>{{ sourceIdFilter ? t('rules.noRulesForSource') : t('rules.noRules') }}</p>
+            <p>{{ nameQuery.trim() ? t('rules.noSearchResults') : sourceIdFilter ? t('rules.noRulesForSource') : t('rules.noRules') }}</p>
           </div>
           <div v-else class="candidate-list">
             <section v-for="(items, sourceTitle) in groupedCandidates" :key="sourceTitle" class="source-group" :style="sourceGroupStyle(String(sourceTitle))">
               <h2><span translate="no">{{ sourceTitle }}</span><small>{{ t('rules.ruleCount', { count: items.length }) }}</small></h2>
               <div class="source-rule-list">
-                <div v-for="cluster in candidateSections(items)" :key="cluster.key" class="concept-cluster">
-                  <div v-if="cluster.mergeable" class="concept-cluster__heading">
-                    <span>{{ t('rules.mergeableCluster') }}</span>
-                    <small>{{ t('rules.claimCount', { count: cluster.items.length }) }} · {{ mergeReasonList(cluster.reasons) }}</small>
-                  </div>
-                  <button
-                    v-for="candidate in cluster.items"
-                    :key="candidate._id"
-                    type="button"
-                    :class="['candidate-card', { selected: selectedId === candidate._id }]"
-                    @click="selectCandidate(candidate._id)"
-                  >
-                    <span class="candidate-title">{{ ruleText(candidate, 'label', candidate.label) }}</span>
-                    <span class="candidate-card-meta">
-                      <span v-if="candidate.isComposite" class="composite-list-chip">{{ t('rules.compositeRule', { count: candidate.compositeComponents?.length || 0 }) }}</span>
-                      <span :class="['status-chip', `status-${candidate.status}`]">{{ statusLabel(candidate.status) }}</span>
-                      <span class="score-chip" :style="{ color: scoreColor(candidate.evidenceCredibilityScore) }">{{ candidate.evidenceCredibilityScore ?? 0 }}/100</span>
-                      <span>{{ t('rules.evidenceGroupCount', { count: candidate.exactCitationCount ?? 0 }) }}</span>
-                    </span>
-                  </button>
-                </div>
+                <button
+                  v-for="candidate in items"
+                  :key="candidate._id"
+                  type="button"
+                  :class="['candidate-card', { selected: selectedId === candidate._id }]"
+                  @click="selectCandidate(candidate._id)"
+                >
+                  <span class="candidate-title">
+                    <template v-for="(segment, index) in candidateNameSegments(candidate)" :key="`${candidate._id}-${index}`">
+                      <mark v-if="segment.highlighted">{{ segment.text }}</mark>
+                      <template v-else>{{ segment.text }}</template>
+                    </template>
+                  </span>
+                  <span class="candidate-card-meta">
+                    <span v-if="candidate.isComposite" class="composite-list-chip">{{ t('rules.compositeRule', { count: candidate.compositeComponents?.length || 0 }) }}</span>
+                    <span :class="['status-chip', `status-${candidate.status}`]">{{ statusLabel(candidate.status) }}</span>
+                    <span class="score-chip" :style="{ color: scoreColor(candidate.evidenceCredibilityScore) }">{{ candidate.evidenceCredibilityScore ?? 0 }}/100</span>
+                    <span>{{ t('rules.evidenceGroupCount', { count: candidate.exactCitationCount ?? 0 }) }}</span>
+                  </span>
+                </button>
               </div>
             </section>
           </div>
@@ -103,7 +133,6 @@
               </div>
               <h2>{{ ruleText(selectedCandidate, 'label', selectedCandidate.label) }}</h2>
               <span v-if="selectedCandidate.isComposite" class="composite-badge">{{ t('rules.compositeRule', { count: selectedCandidate.compositeComponents?.length || 0 }) }}</span>
-              <p class="source-line" translate="no">{{ formattedSource }}</p>
               <div v-if="selectedCandidate.qualityAccepted === false" class="quality-blocked">
                 <strong>{{ t('rules.qualityFailed') }}</strong>
                 <span>{{ ruleText(selectedCandidate, 'qualitySummary', selectedCandidate.qualitySummary || '') }}</span>
@@ -176,7 +205,25 @@
                   <span :style="{ width: `${selectedCandidate.evidenceCredibilityScore ?? 0}%`, backgroundColor: scoreColor(selectedCandidate.evidenceCredibilityScore) }"></span>
                 </div>
                 <p class="score-conclusion">{{ evidenceScoreConclusion }}</p>
+                <p class="score-formula">
+                  {{ t('rules.scoreFormula', {
+                    source: selectedCandidate.sourceEvidenceScore ?? selectedCandidate.evidenceCredibilityScore ?? 0,
+                    feedback: signedScore(selectedCandidate.userValidationAdjustment),
+                    total: selectedCandidate.evidenceCredibilityScore ?? 0,
+                  }) }}
+                </p>
                 <p class="score-note">{{ t('rules.scoreNote') }}</p>
+                <dl v-if="selectedCandidate.validationStats" class="validation-stats">
+                  <div><dt>{{ t('rules.validationSupports') }}</dt><dd>{{ selectedCandidate.validationStats.supports }}</dd></div>
+                  <div><dt>{{ t('rules.validationWeakens') }}</dt><dd>{{ selectedCandidate.validationStats.weakens }}</dd></div>
+                  <div><dt>{{ t('rules.validationUnsure') }}</dt><dd>{{ selectedCandidate.validationStats.unsure }}</dd></div>
+                  <div>
+                    <dt>{{ t('rules.validationAdjustment') }}</dt>
+                    <dd :class="selectedCandidate.validationStats.netAdjustment >= 0 ? 'is-positive' : 'is-negative'">
+                      {{ selectedCandidate.validationStats.netAdjustment > 0 ? '+' : '' }}{{ selectedCandidate.validationStats.netAdjustment }}
+                    </dd>
+                  </div>
+                </dl>
                 <p v-if="selectedCandidate.scoreAggregation" class="score-aggregation-note">
                   <strong>{{ selectedCandidate.scoreAggregation.method === 'pooled_equivalent_evidence' ? t('rules.pooledScoreMethod') : t('rules.compositeScoreMethod', { code: selectedCandidate.scoreAggregation.weakestRuleCode || '' }) }}</strong>
                   {{ selectedCandidate.scoreAggregation.method === 'pooled_equivalent_evidence' ? t('rules.pooledScoreExplanation') : t('rules.minimumScoreExplanation') }}
@@ -202,34 +249,48 @@
 
             </section>
 
-            <section v-if="ruleRelationships.length" class="content-card relationship-card">
+            <section v-if="resolvedEvidenceGapMatches.length" class="content-card evidence-gap-card">
+              <div class="section-heading">
+                <div>
+                  <h3>{{ t('rules.evidenceGapMatches') }}</h3>
+                  <p class="section-description">{{ t('rules.evidenceGapMatchesDescription') }}</p>
+                </div>
+                <span class="evidence-gap-count">{{ resolvedEvidenceGapMatches.length }}</span>
+              </div>
+              <div class="evidence-gap-list">
+                <article v-for="match in resolvedEvidenceGapMatches" :key="match.gapId" class="evidence-gap-item">
+                  <div class="evidence-gap-item__heading">
+                    <span :class="['evidence-gap-state', {
+                      'evidence-gap-state--resolved': match.resolvedByRule,
+                      'evidence-gap-state--ready': !match.resolvedByRule && match.blockers.length === 0,
+                    }]">
+                      {{ evidenceGapStateLabel(match) }}
+                    </span>
+                    <span>{{ t('rules.evidenceGapOccurrences', { count: match.occurrenceCount }) }}</span>
+                  </div>
+                  <strong>{{ localizedEvidenceGapClaim(match) }}</strong>
+                  <div class="evidence-gap-match-meter">
+                    <span :style="{ width: `${Math.round(match.similarity * 100)}%` }"></span>
+                  </div>
+                  <p>{{ evidenceGapExplanation(match) }}</p>
+                  <ul v-if="!match.resolvedByRule && match.blockers.length" class="evidence-gap-blockers">
+                    <li v-for="blocker in match.blockers" :key="blocker">{{ evidenceGapBlockerLabel(blocker) }}</li>
+                  </ul>
+                </article>
+              </div>
+            </section>
+
+            <section v-if="visibleRelationships.length" class="content-card relationship-card">
               <div class="section-heading">
                 <div>
                   <h3>{{ t('rules.relationships') }}</h3>
                   <p class="section-description">{{ t('rules.relationshipsDescription') }}</p>
                 </div>
-                <AppButton
-                  v-if="canMergeSelectedRule"
-                  variant="secondary"
-                  :loading="isMerging"
-                  @click="showMergeModal = true"
-                >
-                  {{ t('rules.mergeCompatible') }}
-                </AppButton>
               </div>
-              <div v-if="mergeableRelationships.length" class="relationship-group relationship-group--mergeable">
-                <strong class="relationship-group__title">{{ t('rules.canMergeSection') }}</strong>
-                <p>{{ t('rules.canMergeSectionDescription') }}</p>
-                <button v-for="item in mergeableRelationships" :key="item.ruleId" type="button" class="related-rule" @click="selectCandidate(item.ruleId)">
-                  <span class="relation-kind relation-kind--equivalent">{{ relationshipBadge(item) }}</span>
-                  <span class="related-rule__content"><strong>{{ relatedRuleText(item) }}</strong><small>{{ relationshipWhyShown(item) }}</small><small>{{ ruleText(selectedCandidate, `related:${item.ruleId}:flow`, `${item.subject} → ${item.outcome}`) }}</small></span>
-                  <small>{{ item.evidenceScore }}/100</small>
-                </button>
-              </div>
-              <div v-if="nonMergeableRelationships.length" class="relationship-group">
+              <div class="relationship-group">
                 <strong class="relationship-group__title">{{ t('rules.keepSeparateSection') }}</strong>
                 <p>{{ t('rules.keepSeparateSectionDescription') }}</p>
-                <button v-for="item in nonMergeableRelationships" :key="item.ruleId" type="button" class="related-rule" @click="selectCandidate(item.ruleId)">
+                <button v-for="item in visibleRelationships" :key="item.ruleId" type="button" class="related-rule" @click="selectCandidate(item.ruleId)">
                   <span :class="['relation-kind', `relation-kind--${item.relationship}`]">{{ relationshipBadge(item) }}</span>
                   <span class="related-rule__content"><strong>{{ relatedRuleText(item) }}</strong><small>{{ relationshipWhyShown(item) }}</small><small>{{ ruleText(selectedCandidate, `related:${item.ruleId}:flow`, `${item.subject} → ${item.outcome}`) }}</small></span>
                   <small>{{ item.evidenceScore }}/100</small>
@@ -335,29 +396,6 @@
 
     <Teleport to="body">
       <Transition name="modal-fade">
-        <div v-if="showMergeModal" class="modal-overlay" role="dialog" aria-modal="true" @click.self="showMergeModal = false">
-          <div class="modal-container">
-            <div class="modal-header"><h3>{{ t('rules.mergeModalTitle') }}</h3><button @click="showMergeModal = false">×</button></div>
-            <div class="modal-body">
-              <p>{{ t('rules.mergeModalMessage', { count: mergeableRelationships.length + 1 }) }}</p>
-              <ul class="merge-preview-list">
-                <li v-if="selectedCandidate">{{ ruleText(selectedCandidate, 'label', selectedCandidate.label) }}</li>
-                <li v-for="item in mergeableRelationships" :key="item.ruleId">{{ relatedRuleText(item) }}</li>
-              </ul>
-              <p>{{ t('rules.mergeAuditNote') }}</p>
-              <p v-if="selectedCandidate?.status === 'approved'" class="merge-review-warning">{{ t('rules.approvedMergeReviewWarning') }}</p>
-            </div>
-            <div class="modal-footer">
-              <AppButton variant="secondary" :disabled="isMerging" @click="showMergeModal = false">{{ t('rules.cancel') }}</AppButton>
-              <AppButton variant="smart" :loading="isMerging" @click="confirmMerge">{{ t('rules.mergeCompatible') }}</AppButton>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
-    <Teleport to="body">
-      <Transition name="modal-fade">
         <div v-if="bulkAction" class="modal-overlay" role="dialog" aria-modal="true" @click.self="bulkAction = null">
           <div class="modal-container">
             <div class="modal-header"><h3>{{ bulkActionCopy.title }}</h3><button @click="bulkAction = null">×</button></div>
@@ -395,6 +433,9 @@ import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/common/AppButton.vue'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { getApiErrorCode, getApiErrorMessage } from '@/utils/apiError'
+import { isAdminUser } from '@/utils/adminAccess'
+import { createHighlightedExcerpt, findLiteralTextRanges } from '@/utils/highlightText'
 import {
   createBrowserTranslator,
   translateBrowserText,
@@ -404,7 +445,6 @@ import {
   approveRuleCandidate,
   getRuleCandidateDetail,
   getRuleCandidates,
-  mergeRuleCandidateGroup,
   rejectRuleCandidate,
   runRuleV3BulkAction,
   type RuleV3BulkAction,
@@ -421,8 +461,7 @@ const settingsStore = useSettingsStore()
 const { t, locale } = useI18n({ useScope: 'global' })
 
 const isUnauthorized = computed(() => {
-  const ids = (import.meta.env.VITE_MODERATOR_USER_IDS || '').split(',').map((id: string) => id.trim().toLowerCase())
-  return !authStore.user?._id || !ids.includes(authStore.user._id.toLowerCase())
+  return !isAdminUser(authStore.user)
 })
 
 const statusTabs = computed(() => [
@@ -432,35 +471,39 @@ const statusTabs = computed(() => [
 ])
 const activeStatus = ref('pending')
 const sourceIdFilter = computed(() => route.query.sourceId ? String(route.query.sourceId) : null)
+const focusedRuleId = computed(() => route.query.ruleId ? String(route.query.ruleId) : null)
 const candidates = ref<RuleCandidate[]>([])
+const nameQuery = ref('')
+const listError = ref(false)
 const selectedId = ref<string | null>(null)
 const selectedCandidate = ref<RuleCandidate | null>(null)
 const evidenceChunks = ref<EvidenceChunkPreview[]>([])
 const evidenceExcerpts = ref<EvidenceExcerpt[]>([])
 type RuleRelationshipRow = NonNullable<CandidateDetailResponse['ruleRelationships']>[number]
+type EvidenceGapMatchRow = NonNullable<CandidateDetailResponse['evidenceGapMatches']>[number]
 const ruleRelationships = ref<RuleRelationshipRow[]>([])
+const evidenceGapMatches = ref<EvidenceGapMatchRow[]>([])
+const resolvedEvidenceGapMatches = computed(() =>
+  evidenceGapMatches.value.filter((match) => match.resolvedByRule),
+)
 const visibleContexts = ref<Record<string, boolean>>({})
 const isLoadingList = ref(false)
 const isLoadingDetail = ref(false)
 const isApproving = ref(false)
 const isRejecting = ref(false)
-const isMerging = ref(false)
 const showApproveModal = ref(false)
 const showRejectModal = ref(false)
-const showMergeModal = ref(false)
 const openCriterionKey = ref<string | null>(null)
 const bulkAction = ref<RuleV3BulkAction | null>(null)
 const isBulkRunning = ref(false)
+let listRequestId = 0
+let listController: AbortController | null = null
+let detailRequestId = 0
+let detailController: AbortController | null = null
+let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const activeTabLabel = computed(() => statusTabs.value.find(tab => tab.value === activeStatus.value)?.label || '')
-const mergeableRelationships = computed(() => ruleRelationships.value.filter(item => item.mergeEligibility?.canMerge))
-const nonMergeableRelationships = computed(() => ruleRelationships.value.filter(item => !item.mergeEligibility?.canMerge))
-const canMergeSelectedRule = computed(() => Boolean(
-  selectedCandidate.value
-  && !selectedCandidate.value.isComposite
-  && ['pending', 'approved'].includes(selectedCandidate.value.status)
-  && mergeableRelationships.value.length > 0,
-))
+const visibleRelationships = computed(() => ruleRelationships.value.filter(item => !item.mergeEligibility?.canMerge))
 const bulkActionCopy = computed(() => ({
   approve_pending: { title: t('rules.bulk.approveTitle'), message: t('rules.bulk.approveMessage'), confirm: t('rules.approveAll'), danger: false },
   reject_pending: { title: t('rules.bulk.rejectTitle'), message: t('rules.bulk.rejectMessage'), confirm: t('rules.rejectAll'), danger: true },
@@ -477,32 +520,15 @@ const groupedCandidates = computed(() => {
   return groups
 })
 
-function candidateSections(items: RuleCandidate[]) {
-  const groups = new Map<string, RuleCandidate[]>()
-  for (const candidate of items) {
-    const key = candidate.mergeCluster?.clusterId || `single:${candidate._id}`
-    const members = groups.get(key) || []
-    members.push(candidate)
-    groups.set(key, members)
-  }
-  return [...groups.entries()].map(([key, clusterItems]) => ({
-    key,
-    items: clusterItems,
-    mergeable: Boolean(clusterItems[0]?.mergeCluster && clusterItems.length > 1),
-    reasons: clusterItems[0]?.mergeCluster?.reasons || [],
-  })).sort((left, right) => Number(left.mergeable) - Number(right.mergeable)
-    || left.items[0].label.localeCompare(right.items[0].label))
-}
-
-function mergeReasonList(reasons: string[] = []) {
-  const labels: Record<string, string> = {
-    same_canonical_paragraph: t('rules.mergeReasons.same_canonical_paragraph'),
-    equivalent_subject_and_outcome: t('rules.mergeReasons.equivalent_subject_and_outcome'),
-    same_meaningful_subject: t('rules.mergeReasons.same_meaningful_subject'),
-    same_meaningful_outcome: t('rules.mergeReasons.same_meaningful_outcome'),
-    same_question_and_semantics: t('rules.mergeReasons.same_question_and_semantics'),
-  }
-  return reasons.map(reason => labels[reason] || reason).join(', ')
+function candidateNameSegments(candidate: RuleCandidate) {
+  const label = nameQuery.value.trim()
+    ? candidate.label
+    : ruleText(candidate, 'label', candidate.label)
+  return createHighlightedExcerpt(
+    label,
+    findLiteralTextRanges(label, nameQuery.value),
+    Math.max(label.length, 1),
+  ).segments
 }
 
 function relationshipSignalList(item: RuleRelationshipRow) {
@@ -535,7 +561,6 @@ function relationshipWhyShown(item: RuleRelationshipRow) {
   const similarity = signals.length
     ? t('rules.relatedBecause', { signals: signals.join(', ') })
     : t('rules.relatedBecauseFallback')
-  if (item.mergeEligibility?.canMerge) return similarity
   const differences: Record<string, string> = {
     equivalent: t('rules.relationshipDifferences.equivalent'),
     overlapping: t('rules.relationshipDifferences.overlapping'),
@@ -553,16 +578,6 @@ function relationshipWhyShown(item: RuleRelationshipRow) {
       : ''
   return `${similarity} ${t('rules.keptSeparateBecause', { difference })}${boundary}`
 }
-
-const formattedSource = computed(() => {
-  const candidate = selectedCandidate.value
-  if (!candidate) return ''
-  const authors = candidate.sourceAuthors?.length ? candidate.sourceAuthors.join(', ') : t('rules.unknownAuthor')
-  const year = candidate.sourceYear ? ` (${candidate.sourceYear})` : ''
-  const title = candidate.sourceTitle || t('rules.untitledSource')
-  const doi = candidate.sourceDoi ? ` · DOI ${candidate.sourceDoi}` : ''
-  return `${authors}${year} · ${title}${doi}`
-})
 
 const translatedRuleFields = ref(new Map<string, string>())
 const translatorPromises = new Map<string, Promise<BrowserTranslatorInstance>>()
@@ -733,6 +748,11 @@ function punctuatedList(items: string[], separator: string) {
   return /[.!?]$/u.test(value) ? value : `${value}.`
 }
 
+function signedScore(value?: number) {
+  const score = Number(value) || 0
+  return score > 0 ? `+${score}` : String(score)
+}
+
 const evidenceScoreConclusion = computed(() => {
   const candidate = selectedCandidate.value
   const score = candidate?.evidenceCredibilityScore || 0
@@ -745,10 +765,24 @@ const evidenceScoreConclusion = computed(() => {
 })
 
 watch(
-  [() => route.query.sourceId, () => authStore.user?._id],
-  () => { if (!isUnauthorized.value) void fetchCandidates() },
-  { immediate: true }
+  [() => route.query.sourceId, () => route.query.ruleId, () => authStore.user?._id],
+  () => { if (!isUnauthorized.value) void loadRequestedCandidates() },
+  { immediate: true },
 )
+
+watch(nameQuery, scheduleCandidateSearch)
+
+async function loadRequestedCandidates() {
+  if (focusedRuleId.value) {
+    try {
+      const response = await getRuleCandidateDetail(focusedRuleId.value)
+      activeStatus.value = response.data.candidate.status
+    } catch {
+      settingsStore.showToast(t('rules.toasts.detailFailed'), 'error')
+    }
+  }
+  await fetchCandidates()
+}
 
 function clearSourceFilter() {
   void router.push({ path: route.path })
@@ -774,8 +808,8 @@ async function confirmBulkAction() {
       : t('rules.toasts.bulkDone', { processed: response.data.processed }), failed ? 'error' : 'success')
     bulkAction.value = null
     await fetchCandidates()
-  } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.bulkFailed'), 'error')
+  } catch (error: unknown) {
+    settingsStore.showToast(getApiErrorMessage(error, t('rules.toasts.bulkFailed')), 'error')
   } finally {
     isBulkRunning.value = false
   }
@@ -789,15 +823,30 @@ function changeTab(status: string) {
 }
 
 async function fetchCandidates() {
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+    searchTimer = null
+  }
+  listController?.abort()
+  listController = new AbortController()
+  const requestId = ++listRequestId
   isLoadingList.value = true
+  listError.value = false
   try {
     const response = await getRuleCandidates({
       status: activeStatus.value,
-      academicSourceId: sourceIdFilter.value || undefined
-    })
+      academicSourceId: sourceIdFilter.value || undefined,
+      q: nameQuery.value.trim() || undefined,
+    }, listController.signal)
+    if (requestId !== listRequestId) return
     candidates.value = response.data || []
     if (candidates.value.length > 0) {
-      const nextId = candidates.value.some(item => item._id === selectedId.value) ? selectedId.value! : candidates.value[0]._id
+      const requestedId = focusedRuleId.value
+      const nextId = requestedId && candidates.value.some(item => item._id === requestedId)
+        ? requestedId
+        : candidates.value.some(item => item._id === selectedId.value)
+          ? selectedId.value!
+          : candidates.value[0]._id
       await selectCandidate(nextId)
     } else {
       selectedId.value = null
@@ -805,30 +854,53 @@ async function fetchCandidates() {
       evidenceChunks.value = []
       evidenceExcerpts.value = []
       ruleRelationships.value = []
+      evidenceGapMatches.value = []
     }
-  } catch {
-    settingsStore.showToast(t('rules.toasts.listFailed'), 'error')
+  } catch (error: unknown) {
+    if (requestId !== listRequestId || getApiErrorCode(error) === 'ERR_CANCELED') return
+    listError.value = true
   } finally {
-    isLoadingList.value = false
+    if (requestId === listRequestId) isLoadingList.value = false
   }
 }
 
+function scheduleCandidateSearch() {
+  listController?.abort()
+  detailController?.abort()
+  listRequestId += 1
+  detailRequestId += 1
+  listError.value = false
+  isLoadingList.value = true
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    searchTimer = null
+    void fetchCandidates()
+  }, 300)
+}
+
 async function selectCandidate(id: string) {
+  detailController?.abort()
+  detailController = new AbortController()
+  const requestId = ++detailRequestId
   selectedId.value = id
   isLoadingDetail.value = true
   try {
-    const response = await getRuleCandidateDetail(id)
+    const response = await getRuleCandidateDetail(id, detailController.signal)
+    if (requestId !== detailRequestId) return
     selectedCandidate.value = response.data.candidate
     evidenceChunks.value = response.data.evidenceChunks || []
     evidenceExcerpts.value = (response.data.evidenceExcerpts || []).filter(item => item.excerpt?.trim())
     ruleRelationships.value = response.data.ruleRelationships || []
+    evidenceGapMatches.value = response.data.evidenceGapMatches || []
     visibleContexts.value = {}
-  } catch {
+  } catch (error: unknown) {
+    if (requestId !== detailRequestId || getApiErrorCode(error) === 'ERR_CANCELED') return
     selectedCandidate.value = null
     ruleRelationships.value = []
+    evidenceGapMatches.value = []
     settingsStore.showToast(t('rules.toasts.detailFailed'), 'error')
   } finally {
-    isLoadingDetail.value = false
+    if (requestId === detailRequestId) isLoadingDetail.value = false
   }
 }
 
@@ -836,12 +908,18 @@ async function confirmApproval() {
   if (!selectedCandidate.value) return
   isApproving.value = true
   try {
-    await approveRuleCandidate(selectedCandidate.value._id)
+    const response = await approveRuleCandidate(selectedCandidate.value._id)
     showApproveModal.value = false
-    settingsStore.showToast(t('rules.toasts.approved'), 'success')
+    const reconciliationFailed = response.data?.evidenceReconciliation === 'failed'
+    settingsStore.showToast(
+      t(reconciliationFailed
+        ? 'rules.toasts.approvedReconciliationPending'
+        : 'rules.toasts.approved'),
+      reconciliationFailed ? 'error' : 'success',
+    )
     await fetchCandidates()
-  } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.approveFailed'), 'error')
+  } catch (error: unknown) {
+    settingsStore.showToast(getApiErrorMessage(error, t('rules.toasts.approveFailed')), 'error')
   } finally {
     isApproving.value = false
   }
@@ -855,27 +933,10 @@ async function confirmRejection() {
     showRejectModal.value = false
     settingsStore.showToast(t('rules.toasts.rejected'), 'success')
     await fetchCandidates()
-  } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.rejectFailed'), 'error')
+  } catch (error: unknown) {
+    settingsStore.showToast(getApiErrorMessage(error, t('rules.toasts.rejectFailed')), 'error')
   } finally {
     isRejecting.value = false
-  }
-}
-
-async function confirmMerge() {
-  if (!selectedCandidate.value || !canMergeSelectedRule.value) return
-  isMerging.value = true
-  try {
-    const result = await mergeRuleCandidateGroup(selectedCandidate.value._id)
-    showMergeModal.value = false
-    settingsStore.showToast(t('rules.toasts.merged', { count: result.data.componentCount }), 'success')
-    if (result.data.requiresReview) activeStatus.value = 'pending'
-    await fetchCandidates()
-    if (candidates.value.some(item => item._id === result.data.primaryRuleId)) await selectCandidate(result.data.primaryRuleId)
-  } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.mergeFailed'), 'error')
-  } finally {
-    isMerging.value = false
   }
 }
 
@@ -916,6 +977,9 @@ function closeCriterionHelp() {
 onMounted(() => document.addEventListener('click', closeCriterionHelp))
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeCriterionHelp)
+  if (searchTimer) clearTimeout(searchTimer)
+  listController?.abort()
+  detailController?.abort()
   for (const pending of translatorPromises.values()) void pending.then(translator => translator.destroy?.()).catch(() => undefined)
   translatorPromises.clear()
 })
@@ -963,6 +1027,29 @@ function scoreLevelClass(score?: number) {
   return value >= 80 ? 'level-good' : value >= 60 ? 'level-moderate' : 'level-caution'
 }
 
+function localizedEvidenceGapClaim(match: EvidenceGapMatchRow) {
+  return locale.value === 'vi' ? match.claim.vi : match.claim.en
+}
+
+function evidenceGapStateLabel(match: EvidenceGapMatchRow) {
+  if (match.resolvedByRule) return t('rules.evidenceGapResolved')
+  if (match.blockers.length === 0) return t('rules.evidenceGapReady')
+  return t('rules.evidenceGapCandidate')
+}
+
+function evidenceGapExplanation(match: EvidenceGapMatchRow) {
+  if (match.resolvedByRule) return t('rules.evidenceGapResolvedDescription')
+  if (match.blockers.length === 0) return t('rules.evidenceGapReadyDescription')
+  return t('rules.evidenceGapCandidateDescription')
+}
+
+function evidenceGapBlockerLabel(blocker: EvidenceGapMatchRow['blockers'][number]) {
+  const labels = {
+    similarity: t('rules.evidenceGapBlockers.similarity'),
+  }
+  return labels[blocker]
+}
+
 function scoreColor(score?: number) {
   const value = Math.max(0, Math.min(100, Number(score) || 0))
   const hue = Math.round(value * 1.2)
@@ -971,7 +1058,7 @@ function scoreColor(score?: number) {
 </script>
 
 <style scoped>
-.rule-review-page { display: flex; flex-direction: column; gap: var(--space-4); height: calc(100dvh - 92px); min-height: 0; overflow: hidden; }
+.rule-review-page { box-sizing: border-box; display: flex; flex: 1; flex-direction: column; gap: clamp(10px, 1.2vh, var(--space-4)); width: 100%; height: 100%; min-height: 0; padding: clamp(14px, 1.8vw, var(--space-6)); overflow: hidden; }
 .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); }
 .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .page-header h1 { margin: 2px 0 6px; font-size: 1.75rem; color: var(--color-text-primary); }
@@ -981,31 +1068,37 @@ function scoreColor(score?: number) {
 .header-count strong { display: block; font-size: 1.45rem; }.header-count span { color: var(--color-text-muted); font-size: .76rem; }
 .source-filter { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; border: 1px solid rgba(59,130,246,.28); border-radius: var(--radius-md); background: rgba(59,130,246,.06); font-size: .82rem; }
 .source-filter button { border: 0; background: transparent; color: var(--accent); cursor: pointer; font-weight: 650; }
-.status-tabs { display: flex; gap: 6px; padding: 4px; width: fit-content; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-elevated); }
+.status-tabs { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-self: flex-start; gap: 6px; max-width: 100%; padding: 4px; overflow: visible; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-elevated); scrollbar-width: none; }
+.status-tabs::-webkit-scrollbar { display: none; }
 .status-tabs button { padding: 8px 14px; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--color-text-secondary); cursor: pointer; }
 .status-tabs button.active { background: var(--color-bg-active); color: var(--color-text-primary); box-shadow: inset 0 0 0 1px var(--color-border); }
 .bulk-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.review-layout { display: grid; grid-template-columns: minmax(290px, 340px) minmax(0, 1fr); gap: var(--space-4); flex: 1; min-height: 0; }
-.candidate-sidebar, .candidate-detail { min-height: 0; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-elevated); overflow: hidden; }
+.review-layout { display: grid; grid-template-columns: minmax(260px, clamp(290px, 25vw, 340px)) minmax(0, 1fr); gap: clamp(10px, 1.2vw, var(--space-4)); flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
+.candidate-sidebar, .candidate-detail { height: 100%; min-width: 0; min-height: 0; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-elevated); overflow: hidden; }
 .candidate-sidebar { display: flex; flex-direction: column; padding: var(--space-3); }.candidate-detail { min-width: 0; display: flex; flex-direction: column; }
+.candidate-search { position: relative; display: flex; align-items: center; flex: 0 0 auto; margin: 0 3px 8px; }
+.candidate-search > svg { position: absolute; left: 11px; color: var(--color-text-muted); pointer-events: none; }
+.candidate-search input { width: 100%; height: 38px; padding: 0 36px 0 34px; border: 1px solid var(--color-border-input); border-radius: var(--radius-lg); outline: none; background: var(--color-bg-base); color: var(--color-text-primary); font-size: .82rem; }
+.candidate-search input::placeholder { color: var(--color-text-muted); }.candidate-search input:focus { border-color: #4a4a4a; }.candidate-search input::-webkit-search-cancel-button { display: none; }
+.candidate-search button { position: absolute; right: 8px; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--radius-full); background: var(--color-bg-active); color: var(--color-text-muted); cursor: pointer; }
+.candidate-search button:hover { color: var(--color-text-primary); background: var(--color-bg-hover); }
 .candidate-list, .rule-document { flex: 1; height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .source-group { margin: 8px 3px 14px; padding: 8px; border: 1px solid hsl(var(--source-group-hue) 42% 62% / .14); border-radius: var(--radius-lg); background: hsl(var(--source-group-hue) 45% 52% / .028); }
 .source-group h2 { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin: 2px 3px 9px; color: var(--color-text-secondary); font-size: .72rem; line-height: 1.4; letter-spacing: .035em; }
 .source-group h2 span { min-width: 0; }.source-group h2 small { flex: 0 0 auto; color: var(--color-text-muted); font-size: .66rem; font-weight: 600; white-space: nowrap; }
 .source-rule-list { display: flex; flex-direction: column; gap: 6px; }
-.concept-cluster { display: flex; flex-direction: column; gap: 6px; }.concept-cluster + .concept-cluster { margin-top: 5px; }
-.concept-cluster__heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; border-left: 2px solid hsl(var(--source-group-hue) 55% 64% / .7); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: hsl(var(--source-group-hue) 45% 55% / .07); color: var(--color-text-secondary); font-size: .67rem; font-weight: 700; }.concept-cluster__heading small { color: var(--color-text-muted); font-size: .63rem; font-weight: 600; }
 .candidate-card { width: 100%; display: flex; flex-direction: column; gap: 9px; padding: 12px; margin: 0; text-align: left; border: 1px solid transparent; border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-bg-base) 98%, hsl(var(--source-group-hue) 45% 55%)); color: inherit; cursor: pointer; }
 .candidate-card:hover { border-color: var(--color-border); background: var(--color-bg-hover); }.candidate-card.selected { border-color: var(--accent); background: rgba(59,130,246,.07); }
 .candidate-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; font-size: .9rem; font-weight: 650; line-height: 1.4; color: var(--color-text-primary); }
+.candidate-title mark { border-radius: 2px; background: rgba(250, 204, 21, .22); color: inherit; }
 .candidate-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: var(--color-text-muted); font-size: .7rem; }
-.composite-badge { display: inline-flex; width: fit-content; margin-top: 8px; padding: 4px 8px; border-radius: 999px; background: rgba(99,102,241,.12); color: #a5b4fc; font-size: .68rem; font-weight: 700; }.composite-claims { display: grid; gap: 12px; margin-top: 16px; }.composite-claim { padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.composite-claim__header { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: var(--color-text-secondary); font-size: .7rem; }.composite-claim__header span { color: var(--color-text-muted); }.composite-claim .relationship-flow { margin-top: 0; }.composite-claim .rule-explanation { margin-top: 10px; }.merge-preview-list { display: grid; gap: 8px; margin: 12px 0; padding-left: 20px; }.merge-preview-list li { color: var(--color-text-secondary); line-height: 1.45; }
+.composite-badge { display: inline-flex; width: fit-content; margin-top: 8px; padding: 4px 8px; border-radius: 999px; background: rgba(99,102,241,.12); color: #a5b4fc; font-size: .68rem; font-weight: 700; }.composite-claims { display: grid; gap: 12px; margin-top: 16px; }.composite-claim { padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.composite-claim__header { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: var(--color-text-secondary); font-size: .7rem; }.composite-claim__header span { color: var(--color-text-muted); }.composite-claim .relationship-flow { margin-top: 0; }.composite-claim .rule-explanation { margin-top: 10px; }
 .score-aggregation-note { margin: 10px 0 0; padding: 10px 12px; border: 1px solid rgba(245,158,11,.25); border-radius: var(--radius-sm); background: rgba(245,158,11,.06); color: var(--color-text-secondary); font-size: .74rem; line-height: 1.5; }.score-aggregation-note strong { color: #fbbf24; }
-.merge-review-warning { margin-top: 12px !important; padding: 10px 12px; border-radius: var(--radius-sm); background: rgba(245,158,11,.08); color: #fbbf24; font-size: .75rem; }
 .score-chip { color: #93c5fd; font-weight: 700; }.status-chip { display: inline-flex; width: fit-content; padding: 3px 8px; border-radius: 999px; font-size: .68rem; font-weight: 700; }
 .composite-list-chip { color: #a5b4fc; font-weight: 700; }
 .status-pending { color: #fbbf24; background: rgba(245,158,11,.12); }.status-approved { color: #34d399; background: rgba(16,185,129,.12); }.status-rejected { color: #f87171; background: rgba(239,68,68,.12); }
 .loading-state, .empty-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; min-height: 180px; padding: var(--space-5); text-align: center; color: var(--color-text-muted); }
+.retry-button { min-height: 36px; padding: 7px 13px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-active); color: var(--color-text-primary); cursor: pointer; }
 .empty-panel h3, .empty-panel p { margin: 0; }.empty-panel.compact { min-height: 320px; }.detail-empty, .detail-loading { height: 100%; min-height: 650px; }
 .spinner { width: 22px; height: 22px; border: 2px solid var(--color-border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
 .rule-document { padding: clamp(16px, 2.5vw, 30px); }
@@ -1013,14 +1106,15 @@ function scoreColor(score?: number) {
 .hero-topline, .section-heading, .score-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
 .rule-code, .formula-version { color: var(--color-text-muted); font: 600 .68rem var(--font-family-mono), monospace; }
 .rule-hero h2 { margin: 14px 0 10px; color: var(--color-text-primary); font-size: clamp(1.3rem, 2vw, 1.75rem); line-height: 1.35; }
-.source-line { margin: 0; color: var(--color-text-secondary); font-size: .85rem; line-height: 1.5; }
 .content-card { margin-top: var(--space-4); padding: clamp(16px, 2vw, 22px); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-base); }
 .section-heading h3 { margin: 0; color: var(--color-text-primary); }.section-description { margin: 5px 0 0; color: var(--color-text-muted); font-size: .76rem; line-height: 1.45; }.rule-explanation { margin: 16px 0 0; padding: 13px 14px; border-left: 3px solid #818cf8; border-radius: 0 var(--radius-md) var(--radius-md) 0; background: rgba(49,46,129,.16); color: var(--color-text-primary); line-height: 1.6; }.relationship-flow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: stretch; margin-top: 18px; }
 .relationship-flow > div:not(.relationship-arrow) { padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.relationship-flow span { display: block; margin-bottom: 6px; color: var(--color-text-muted); font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }.relationship-flow strong { color: var(--color-text-primary); line-height: 1.45; }.relationship-arrow { align-self: center; color: var(--accent); font-size: 1.4rem; }
 .rule-reading-guide { display: grid; gap: 8px; margin: 15px 0 0; padding: 0; list-style: none; color: var(--color-text-secondary); font-size: .82rem; line-height: 1.5; }.rule-reading-guide li { padding-left: 15px; position: relative; }.rule-reading-guide li::before { content: '•'; position: absolute; left: 0; color: #818cf8; }.rule-reading-guide strong { color: var(--color-text-primary); }
 .assessment-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }.assessment-card h3 { font-size: 1.45rem; }.level-badge { padding: 5px 9px; border-radius: 999px; font-size: .7rem; font-weight: 750; }.level-good { color: #34d399; background: rgba(16,185,129,.12); }.level-moderate { color: #60a5fa; background: rgba(59,130,246,.12); }.level-caution { color: #fbbf24; background: rgba(245,158,11,.12); }
 .assessment-title { font-size: .95rem !important; }.score-number { display: block; margin-top: 5px; font-size: 1.65rem; line-height: 1; }.score-track { width: 100%; height: 9px; margin: 14px 0; border: 1px solid rgba(148,163,184,.16); border-radius: 999px; overflow: hidden; background: #111827; }.score-track span { display: block; min-width: 2px; height: 100%; border-radius: inherit; transition: width .25s ease; }.score-conclusion { margin: 0 0 7px; color: var(--color-text-primary); font-size: .8rem; line-height: 1.5; }.score-note { color: var(--color-text-muted); font-size: .76rem; line-height: 1.5; }
+.validation-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:14px 0 0}.validation-stats div{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg-elevated);font-size:.74rem}.validation-stats dt{color:var(--color-text-muted)}.validation-stats dd{margin:0;color:var(--color-text-primary);font-weight:750}.validation-stats dd.is-positive{color:#79d6a3}.validation-stats dd.is-negative{color:#ef8a8a}
 .criteria-list { display: flex; flex-direction: column; margin: 16px 0 0; border-top: 1px solid var(--color-border); }.criterion-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }.criterion-row dt { display: flex; align-items: center; gap: 7px; color: var(--color-text-secondary); }.criterion-row dd { margin: 0; color: var(--color-text-primary); font-weight: 700; }.criterion-help { position: relative; }.criterion-help button { display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid var(--color-border); border-radius: 50%; background: transparent; color: var(--color-text-muted); cursor: pointer; font-size: .68rem; font-weight: 700; }.criterion-help > div { position: absolute; z-index: 20; top: 25px; left: 0; width: min(350px, 72vw); padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); box-shadow: 0 12px 30px rgba(0,0,0,.24); color: var(--color-text-secondary); font-size: .75rem; line-height: 1.45; }.criterion-help > div strong { color: var(--color-text-primary); }.criterion-help > div p { margin: 5px 0 0; }.criterion-help > div ul { margin: 7px 0 12px; padding-left: 20px; list-style: disc outside; }.criterion-help > div li { margin: 5px 0; padding-left: 2px; }.quality-blocked { display: flex; flex-direction: column; gap: 3px; margin-top: 15px; padding: 11px 13px; border: 1px solid rgba(239,68,68,.32); border-radius: var(--radius-md); color: #fca5a5; font-size: .78rem; }.quality-blocked span { color: var(--color-text-secondary); }
+.evidence-gap-card { border-color: rgba(59,130,246,.28); background: color-mix(in srgb, var(--color-bg-base) 96%, #2563eb); }.evidence-gap-count { display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 8px; border-radius: 999px; background: rgba(59,130,246,.14); color: #93c5fd; font-size: .75rem; font-weight: 750; }.evidence-gap-list { display: grid; gap: 10px; margin-top: 16px; }.evidence-gap-item { padding: 13px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.evidence-gap-item__heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; color: var(--color-text-muted); font-size: .68rem; }.evidence-gap-item > strong { display: block; color: var(--color-text-primary); font-size: .84rem; line-height: 1.5; }.evidence-gap-state { padding: 3px 7px; border-radius: 999px; background: rgba(245,158,11,.1); color: #fbbf24; font-weight: 750; }.evidence-gap-state--ready { background: rgba(59,130,246,.12); color: #93c5fd; }.evidence-gap-state--resolved { background: rgba(16,185,129,.12); color: #6ee7b7; }.evidence-gap-match-meter { height: 4px; margin: 11px 0 9px; overflow: hidden; border-radius: 999px; background: rgba(148,163,184,.12); }.evidence-gap-match-meter span { display: block; height: 100%; border-radius: inherit; background: #60a5fa; }.evidence-gap-item > p { margin: 0; color: var(--color-text-secondary); font-size: .74rem; line-height: 1.5; }.evidence-gap-blockers { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }.evidence-gap-blockers li { padding: 4px 7px; border-radius: var(--radius-sm); background: rgba(148,163,184,.08); color: var(--color-text-muted); font-size: .68rem; }
 .citation-list { display: flex; flex-direction: column; gap: 12px; margin-top: 17px; }.citation-item { padding: 15px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.citation-meta { display: flex; justify-content: space-between; gap: 10px; color: var(--color-text-muted); font-size: .7rem; }.citation-item blockquote { margin: 12px 0; padding-left: 14px; border-left: 3px solid var(--accent); color: var(--color-text-primary); font-size: .9rem; line-height: 1.65; }.context-button { padding: 0; border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: .76rem; }.context-text { margin: 12px 0 0; padding: 12px; border-radius: var(--radius-md); background: var(--color-bg-base); color: var(--color-text-secondary); font-size: .78rem; line-height: 1.55; white-space: pre-wrap; }
 .relationship-card { display: grid; gap: 9px; }.related-rule { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); color: inherit; text-align: left; cursor: pointer; }.related-rule:hover { border-color: rgba(129,140,248,.42); }.related-rule strong { min-width: 0; color: var(--color-text-primary); font-size: .8rem; line-height: 1.4; }.related-rule small { color: var(--color-text-muted); white-space: nowrap; }.relation-kind { padding: 3px 7px; border-radius: 999px; color: #a5b4fc; background: rgba(99,102,241,.1); font-size: .65rem; font-weight: 700; }.relation-kind--contradictory { color: #fca5a5; background: rgba(239,68,68,.1); }.relation-kind--reverse_direction { color: #fcd34d; background: rgba(245,158,11,.1); }
 .relationship-group { display: grid; gap: 8px; padding: 11px; border: 1px solid var(--color-border); border-radius: var(--radius-md); }.relationship-group--mergeable { border-color: rgba(52,211,153,.25); background: rgba(16,185,129,.035); }.relationship-group__title { color: var(--color-text-primary); font-size: .78rem; }.relationship-group > p { margin: -3px 0 2px; color: var(--color-text-muted); font-size: .7rem; line-height: 1.45; }.related-rule__content { display: grid; min-width: 0; gap: 3px; }.related-rule__content small { overflow: hidden; text-overflow: ellipsis; white-space: normal; line-height: 1.35; }
@@ -1031,5 +1125,28 @@ function scoreColor(score?: number) {
 .action-bar { position: sticky; bottom: -30px; display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: var(--space-5) -30px -30px; padding: 14px 30px; border-top: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-bg-elevated) 94%, transparent); backdrop-filter: blur(10px); }.action-bar strong, .action-bar span { display: block; }.action-bar span { margin-top: 3px; color: var(--color-text-muted); font-size: .72rem; }.action-buttons { display: flex; gap: 10px; }
 .modal-overlay { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.64); }.modal-container { width: min(440px,100%); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-elevated); box-shadow: 0 20px 60px rgba(0,0,0,.35); }.modal-header, .modal-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 18px; }.modal-header { border-bottom: 1px solid var(--color-border); }.modal-header h3 { margin: 0; }.modal-header button { border: 0; background: transparent; color: var(--color-text-muted); font-size: 1.5rem; cursor: pointer; }.modal-body { padding: 18px; color: var(--color-text-secondary); }.modal-body p { margin: 0; line-height: 1.55; }.modal-footer { justify-content: flex-end; border-top: 1px solid var(--color-border); }
 @media (max-width: 1050px) { .review-layout { grid-template-columns: 280px minmax(0,1fr); }.assessment-grid { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .rule-review-page { height: auto; min-height: calc(100dvh - 72px); overflow: visible; }.page-header { align-items: flex-start; flex-direction: column; }.header-actions { width: 100%; justify-content: flex-start; }.bulk-actions { justify-content: flex-start; }.header-count { display: none; }.review-layout { grid-template-columns: 1fr; }.candidate-list { height: 300px; min-height: 300px; }.rule-document { height: auto; min-height: 620px; }.relationship-flow, .probe-facts, .probe-validation-contract { grid-template-columns: 1fr; }.relationship-arrow { transform: rotate(90deg); justify-self: center; }.action-bar { position: static; flex-direction: column; align-items: stretch; margin: var(--space-5) 0 0; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); }.action-buttons { justify-content: flex-end; } }
+@media (max-width: 760px) { .rule-review-page { height: 100%; min-height: 0; padding: var(--space-3); overflow: hidden; }.page-header { align-items: flex-start; }.page-header > div > p:last-child, .eyebrow { display: none; }.page-header h1 { margin: 0; font-size: 1.3rem; }.header-actions { min-width: 0; justify-content: flex-end; }.bulk-actions { justify-content: flex-end; }.header-count { display: none; }.status-tabs { align-self: stretch; }.status-tabs button { flex: 1 1 120px; }.review-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(150px, 32%) minmax(0, 1fr); }.candidate-list, .rule-document { height: 100%; min-height: 0; }.detail-empty, .detail-loading { min-height: 0; }.relationship-flow, .probe-facts, .probe-validation-contract { grid-template-columns: 1fr; }.relationship-arrow { transform: rotate(90deg); justify-self: center; }.action-bar { position: static; flex-direction: column; align-items: stretch; margin: var(--space-5) 0 0; padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); }.action-buttons { justify-content: flex-end; } }
+@media (max-width: 420px) {
+  .rule-review-page { padding: 8px; }
+  .page-header { gap: 8px; }
+  .page-header h1 { font-size: 1.12rem; }
+  .header-actions, .bulk-actions { gap: 6px; }
+  .status-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .status-tabs::-webkit-scrollbar { display: none; }
+  .status-tabs button { flex: 0 0 auto; min-height: 40px; padding-inline: 11px; }
+  .review-layout { gap: 8px; grid-template-rows: minmax(165px, 36%) minmax(0, 1fr); }
+  .rule-document { padding: 10px; }
+  .rule-hero, .content-card { padding: 13px; }
+  .rule-hero h2 { font-size: 1.14rem; }
+  .validation-stats { grid-template-columns: 1fr; }
+  .criterion-row, .citation-meta, .section-heading, .score-header { align-items: flex-start; flex-direction: column; }
+  .related-rule { grid-template-columns: minmax(0, 1fr) auto; }
+  .related-rule .relation-kind { grid-column: 1 / -1; }
+  .probe-question-pattern dl div { grid-template-columns: 1fr; }
+  .action-buttons { display: grid; grid-template-columns: 1fr 1fr; }
+  .action-buttons :deep(button) { min-height: 44px; }
+  .modal-overlay { align-items: stretch; padding: 0; }
+  .modal-container { width: 100%; min-height: 100dvh; border: 0; border-radius: 0; }
+  .modal-footer { margin-top: auto; padding-bottom: calc(15px + var(--safe-area-bottom)); }
+}
 </style>

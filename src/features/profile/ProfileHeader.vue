@@ -7,13 +7,26 @@
     <!-- Avatar row -->
     <div class="profile-header__avatar-row">
       <div class="profile-header__avatar-container">
+        <AvatarEditor
+          v-if="isMe"
+          :avatar="currentAvatar"
+          :display-name="user.display_name"
+          :user-id="user._id"
+        />
         <div
+          v-else
           class="profile-header__avatar"
           :style="{ background: avatarBg }"
           :aria-label="user.display_name"
           translate="no"
         >
-          {{ initials }}
+          <img
+            v-if="currentAvatar"
+            :src="currentAvatar"
+            :alt="user.display_name"
+            class="profile-header__avatar-image"
+          />
+          <span v-else>{{ initials }}</span>
         </div>
 
         <!-- Streak Flame Icon -->
@@ -34,6 +47,11 @@
           </svg>
           <span class="profile-header__streak-count">{{ streak }}</span>
         </div>
+        <span
+          v-if="isProfileOnline"
+          class="profile-header__online-indicator"
+          :aria-label="t('messages.activeNow')"
+        />
       </div>
 
       <!-- Action buttons (top-right) -->
@@ -59,12 +77,12 @@
         <template v-else>
           <AppButton
             id="follow-btn"
-            :variant="isFollowing ? 'secondary' : 'primary'"
+            :variant="followStatus === 'none' ? 'primary' : 'secondary'"
             size="sm"
             :disabled="isTogglingFollow"
             @click="toggleFollow"
           >
-            {{ isFollowing ? t('profile.followingLabel') : t('profile.followBtn') }}
+            {{ followButtonLabel }}
           </AppButton>
           <AppButton
             id="message-btn"
@@ -111,7 +129,19 @@
 
       <!-- Read-only -->
       <template v-else>
-        <h1 class="profile-header__name" translate="no">{{ user.display_name }}</h1>
+        <div class="profile-header__name-row">
+          <h1 class="profile-header__name" translate="no">{{ user.display_name }}</h1>
+          <svg
+            v-if="user.isPrivateAccount"
+            class="profile-header__private-icon"
+            viewBox="0 0 24 24"
+            :aria-label="t('profile.privateTitle')"
+            role="img"
+          >
+            <rect x="5" y="10" width="14" height="10" rx="2" />
+            <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+          </svg>
+        </div>
         <span class="profile-header__handle" translate="no">{{ user.username }}</span>
       </template>
     </div>
@@ -136,7 +166,8 @@
     </div>
 
     <!-- Stats row -->
-    <div class="profile-header__stats">
+    <div v-if="statsVisible || isMe" class="profile-header__stats">
+      <template v-if="statsVisible">
       <div class="profile-header__stat">
         <span class="profile-header__stat-value">{{ dreamCount }}</span>
         <span class="profile-header__stat-label">{{ t('profile.dreamsLabel') }}</span>
@@ -163,11 +194,25 @@
         <span class="profile-header__stat-value">{{ user.following ? user.following.length : 0 }}</span>
         <span class="profile-header__stat-label">{{ t('profile.followingLabel') }}</span>
       </div>
+      </template>
+      <template v-if="isMe">
+      <div class="profile-header__stat-divider" aria-hidden="true" />
+      <div
+        class="profile-header__stat profile-header__stat--clickable"
+        role="button"
+        tabindex="0"
+        @click="emit('open-followers', 'pending')"
+        @keydown.enter="emit('open-followers', 'pending')"
+      >
+        <span class="profile-header__stat-value">{{ pendingFollowCount }}</span>
+        <span class="profile-header__stat-label">{{ t('profile.pendingRequestsLabel') }}</span>
+      </div>
       <div class="profile-header__stat-divider" aria-hidden="true" />
       <div class="profile-header__stat">
         <span class="profile-header__stat-value">{{ approvedSourceCount || 0 }}</span>
         <span class="profile-header__stat-label">{{ t('profile.contributionsLabel') }}</span>
       </div>
+      </template>
     </div>
 
   </div>
@@ -178,29 +223,39 @@ import { ref, computed, watch } from 'vue'
 import { useRouter }     from 'vue-router'
 import { useI18n }       from 'vue-i18n'
 import AppButton         from '@/components/common/AppButton.vue'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
-import type { User }     from '@/data/mockUsers'
+import type { ApiUser }  from '@/api/types'
+import { getInitials, getAvatarBg } from '@/utils/avatar'
+import { getStreakColor } from '@/utils/streak'
 import { useAuthStore }  from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import {
+  getApiErrorDataString,
+  getApiErrorMessage,
+  getApiErrorStatus,
+} from '@/utils/apiError'
+import { useChatStore } from '@/store/useChatStore'
+import AvatarEditor from './AvatarEditor.vue'
 import { useLocaleStore }   from '@/store/useLocaleStore'
 import apiClient from '@/api/client'
 
 const props = defineProps<{
-  user:       User
+  user:       ApiUser
   isMe:       boolean
   dreamCount: number
   approvedSourceCount?: number
+  pendingFollowCount?: number
 }>()
 
 const emit = defineEmits<{
-  (e: 'updated', patch: Partial<User>): void
-  (e: 'open-followers', tab: 'followers' | 'following'): void
+  (e: 'updated', patch: Partial<ApiUser>): void
+  (e: 'open-followers', tab: 'followers' | 'following' | 'pending'): void
 }>()
 
 const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const chatStore = useChatStore()
 const localeStore = useLocaleStore()
 
 const formattedJoinedDate = computed(() => {
@@ -212,6 +267,12 @@ const formattedJoinedDate = computed(() => {
 // ── Computed ──────────────────────────────────────────────────────
 const initials  = computed(() => getInitials(props.user.display_name))
 const avatarBg  = computed(() => getAvatarBg(props.user._id))
+const currentAvatar = computed(() => (
+  props.isMe ? (authStore.myUser?.avatar || props.user.avatar) : props.user.avatar
+))
+const isProfileOnline = computed(() => (
+  props.isMe || chatStore.isUserOnline(props.user._id, props.user.lastHeartbeatAt)
+))
 
 const streak = computed(() => {
   if (props.isMe) {
@@ -275,12 +336,7 @@ const rankColor = computed(() => {
 })
 
 const flameColor = computed(() => {
-  const s = streak.value
-  if (s >= 15) return '#06B6D4' // Cyber Cyan/Blue
-  if (s >= 8)  return '#A855F7' // Deep Purple
-  if (s >= 4)  return '#EF4444' // Crimson Red
-  if (s >= 1)  return '#F97316' // Matte Orange
-  return ''
+  return getStreakColor(streak.value)
 })
 
 const isFollowing = computed(() => {
@@ -288,6 +344,15 @@ const isFollowing = computed(() => {
   const followersList = props.user.followers || []
   return followersList.includes(myId)
 })
+const followStatus = computed(() => (
+  props.user.followStatus || (isFollowing.value ? 'following' : 'none')
+))
+const followButtonLabel = computed(() => {
+  if (followStatus.value === 'pending') return t('profile.followPendingBtn')
+  if (followStatus.value === 'following') return t('profile.followingLabel')
+  return t('profile.followBtn')
+})
+const statsVisible = computed(() => props.user.statsVisible !== false)
 
 // ── Edit mode (my profile) ─────────────────────────────────────────
 const editing = ref(false)
@@ -370,23 +435,21 @@ async function saveEdit() {
       editing.value = false
       settingsStore.showToastKey('toasts.profileSavedSuccess', undefined, 'success')
     }
-  } catch (err: any) {
-    const response = err.response
-    if (response) {
-      const status = response.status
-      const msg = response.data?.message || 'Failed to update profile.'
-      const field = response.data?.field
-
+  } catch (error: unknown) {
+    const status = getApiErrorStatus(error)
+    if (status) {
+      const message = getApiErrorMessage(error, 'Failed to update profile.')
+      const field = getApiErrorDataString(error, 'field')
       if (status === 409 || status === 400) {
         if (field === 'username') {
-          backendUsernameError.value = msg
+          backendUsernameError.value = message
         } else if (field === 'display_name') {
-          backendNameError.value = msg
+          backendNameError.value = message
         } else {
-          backendUsernameError.value = msg
+          backendUsernameError.value = message
         }
       } else {
-        backendUsernameError.value = msg
+        backendUsernameError.value = message
       }
     } else {
       usernameError.value = { key: 'errors.networkError' }
@@ -405,13 +468,20 @@ const isTogglingFollow = ref(false)
 
 async function toggleFollow() {
   if (isTogglingFollow.value) return
+  const previousStatus = followStatus.value
   isTogglingFollow.value = true
   try {
     const { data } = await apiClient.post(`/users/${props.user._id}/follow`)
     if (data.success) {
       emit('updated', data.user)
       settingsStore.showToastKey(
-        data.following ? 'toasts.followSuccess' : 'toasts.unfollowSuccess',
+        data.followStatus === 'pending'
+          ? 'toasts.followRequestSent'
+          : previousStatus === 'pending'
+            ? 'toasts.followRequestCancelled'
+          : data.following
+            ? 'toasts.followSuccess'
+            : 'toasts.unfollowSuccess',
         { name: props.user.display_name },
         'success'
       )
@@ -462,6 +532,19 @@ function openMessage() {
   flex-shrink: 0;
 }
 
+.profile-header__online-indicator {
+  position: absolute;
+  left: 1px;
+  bottom: 1px;
+  z-index: 11;
+  width: 15px;
+  height: 15px;
+  border: 3px solid var(--color-bg-base);
+  border-radius: var(--radius-full);
+  background: #22c55e;
+  box-sizing: border-box;
+}
+
 .profile-header__streak-flame {
   position: absolute;
   top: -6px;
@@ -504,6 +587,13 @@ function openMessage() {
   color: #fff;
   border: 3px solid var(--color-bg-base);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.profile-header__avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .profile-header__actions {
@@ -526,6 +616,23 @@ function openMessage() {
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
   letter-spacing: var(--letter-spacing-tight);
+}
+
+.profile-header__name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.profile-header__private-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--color-text-secondary);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
 }
 
 .profile-header__handle {
@@ -697,6 +804,98 @@ function openMessage() {
   }
   100% {
     transform: skewX(-25deg) translateX(150px);
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-header {
+    gap: 10px;
+  }
+
+  .profile-header__cover {
+    height: 68px;
+    border-radius: 0;
+  }
+
+  .profile-header__avatar-row {
+    padding: 0 var(--space-4);
+    margin-top: -32px;
+  }
+
+  .profile-header__avatar {
+    width: 64px;
+    height: 64px;
+    font-size: var(--font-size-xl);
+  }
+
+  .profile-header__actions {
+    max-width: calc(100% - 76px);
+    padding-top: 34px;
+  }
+
+  .profile-header__actions :deep(button) {
+    min-height: 40px;
+  }
+
+  .profile-header__info,
+  .profile-header__bio,
+  .profile-header__joined,
+  .profile-header__rank-badge-container,
+  .profile-header__stats {
+    padding-inline: var(--space-4);
+  }
+
+  .profile-header__name {
+    overflow-wrap: anywhere;
+    font-size: var(--font-size-lg);
+  }
+
+  .profile-header__bio {
+    font-size: var(--font-size-sm);
+  }
+
+  .profile-header__stats {
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .profile-header__stats::-webkit-scrollbar {
+    display: none;
+  }
+
+  .profile-header__stat {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 0 10px;
+  }
+
+  .profile-header__stat:first-child {
+    padding-left: 0;
+  }
+
+  .profile-header__stat-divider {
+    flex: 0 0 1px;
+  }
+
+  .profile-header__stat-label {
+    font-size: var(--font-size-xs);
+  }
+
+  .profile-header__edit-field,
+  .profile-header__edit-input {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .profile-header__actions :deep(button) {
+    padding-inline: 10px;
+    font-size: var(--font-size-xs);
+  }
+
+  .profile-header__stat {
+    padding-inline: 8px;
   }
 }
 </style>

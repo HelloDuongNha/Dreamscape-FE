@@ -2,39 +2,43 @@
   <div class="oracle-content">
     <template v-for="(block, blockIndex) in blocks" :key="blockIndex">
       <h3 v-if="block.kind === 'heading'" class="oracle-content__heading">
-        <template v-for="(part, partIndex) in inlineParts(textOf(block))" :key="partIndex">
+        <template v-for="(part, partIndex) in splitOracleInlineParts(textOf(block))" :key="partIndex">
           <button v-if="part.citationIndex" class="oracle-content__citation" @click="$emit('open-citation', part.citationIndex)">[{{ part.citationIndex }}]</button>
           <span v-else-if="part.unsupported" class="oracle-content__unsupported" :title="t('oracle.unsupportedClaimHelp')">[?]</span>
           <strong v-else-if="part.strong">{{ part.text }}</strong>
+          <em v-else-if="part.emphasis">{{ part.text }}</em>
           <template v-else>{{ part.text }}</template>
         </template>
       </h3>
       <ol v-else-if="block.kind === 'ordered'" class="oracle-content__list">
         <li v-for="(item, itemIndex) in block.items" :key="itemIndex">
-          <template v-for="(part, partIndex) in inlineParts(item)" :key="partIndex">
+          <template v-for="(part, partIndex) in splitOracleInlineParts(item)" :key="partIndex">
             <button v-if="part.citationIndex" class="oracle-content__citation" @click="$emit('open-citation', part.citationIndex)">[{{ part.citationIndex }}]</button>
             <span v-else-if="part.unsupported" class="oracle-content__unsupported" :title="t('oracle.unsupportedClaimHelp')">[?]</span>
             <strong v-else-if="part.strong">{{ part.text }}</strong>
+            <em v-else-if="part.emphasis">{{ part.text }}</em>
             <template v-else>{{ part.text }}</template>
           </template>
         </li>
       </ol>
       <ul v-else-if="block.kind === 'unordered'" class="oracle-content__list">
         <li v-for="(item, itemIndex) in block.items" :key="itemIndex">
-          <template v-for="(part, partIndex) in inlineParts(item)" :key="partIndex">
+          <template v-for="(part, partIndex) in splitOracleInlineParts(item)" :key="partIndex">
             <button v-if="part.citationIndex" class="oracle-content__citation" @click="$emit('open-citation', part.citationIndex)">[{{ part.citationIndex }}]</button>
             <span v-else-if="part.unsupported" class="oracle-content__unsupported" :title="t('oracle.unsupportedClaimHelp')">[?]</span>
             <strong v-else-if="part.strong">{{ part.text }}</strong>
+            <em v-else-if="part.emphasis">{{ part.text }}</em>
             <template v-else>{{ part.text }}</template>
           </template>
         </li>
       </ul>
       <hr v-else-if="block.kind === 'divider'" class="oracle-content__divider" />
       <p v-else class="oracle-content__paragraph">
-        <template v-for="(part, partIndex) in inlineParts(textOf(block))" :key="partIndex">
+        <template v-for="(part, partIndex) in splitOracleInlineParts(textOf(block))" :key="partIndex">
           <button v-if="part.citationIndex" class="oracle-content__citation" @click="$emit('open-citation', part.citationIndex)">[{{ part.citationIndex }}]</button>
           <span v-else-if="part.unsupported" class="oracle-content__unsupported" :title="t('oracle.unsupportedClaimHelp')">[?]</span>
           <strong v-else-if="part.strong">{{ part.text }}</strong>
+          <em v-else-if="part.emphasis">{{ part.text }}</em>
           <template v-else>{{ part.text }}</template>
         </template>
       </p>
@@ -45,6 +49,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { splitOracleInlineParts } from '@/features/oracle/services/oracleInlineContent.service'
 
 const props = defineProps<{ content: string }>()
 const { t } = useI18n()
@@ -105,22 +110,6 @@ const blocks = computed<Block[]>(() => {
   flushList()
   return result
 })
-
-function inlineParts(text: string): Array<{ text: string; strong: boolean; citationIndex?: number; unsupported?: boolean }> {
-  const parts: Array<{ text: string; strong: boolean; citationIndex?: number; unsupported?: boolean }> = []
-  const pattern = /\*\*(.+?)\*\*|\[(\d+|\?)\]/g
-  let cursor = 0
-  for (const match of text.matchAll(pattern)) {
-    const index = match.index ?? 0
-    if (index > cursor) parts.push({ text: text.slice(cursor, index), strong: false })
-    if (match[1]) parts.push({ text: match[1], strong: true })
-    else if (match[2] === '?') parts.push({ text: match[0], strong: false, unsupported: true })
-    else parts.push({ text: match[0], strong: false, citationIndex: Number(match[2]) })
-    cursor = index + match[0].length
-  }
-  if (cursor < text.length) parts.push({ text: text.slice(cursor), strong: false })
-  return parts.length ? parts : [{ text, strong: false }]
-}
 
 function textOf(block: Block): string {
   return 'text' in block ? block.text : ''

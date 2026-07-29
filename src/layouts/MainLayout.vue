@@ -19,7 +19,12 @@
     <div class="main-layout__body">
 
       <!-- Sticky top header -->
-      <header id="app-header" class="main-layout__header" role="banner">
+      <header
+        id="app-header"
+        class="main-layout__header"
+        :class="{ 'main-layout__header--with-search': route.path === '/' }"
+        role="banner"
+      >
         <div class="main-layout__header-inner">
 
           <!-- Left: burger (mobile) + page title -->
@@ -79,16 +84,16 @@
             </div>
 
             <slot name="header-actions">
-              <!-- Locale switch — immediately left of bell -->
               <button
                 id="locale-switch-btn"
-                class="main-layout__icon-btn locale-switch"
+                class="locale-switch"
                 :aria-label="localeStore.currentLocale === 'vi' ? t('common.switchToEnglish') : t('common.switchToVietnamese')"
                 :title="localeStore.currentLocale === 'vi' ? t('common.switchToEnglish') : t('common.switchToVietnamese')"
                 @click="localeStore.toggleLocale()"
               >
-                <span class="locale-switch__label" aria-hidden="true">
-                  {{ localeStore.currentLocale === 'vi' ? 'EN' : 'VI' }}
+                <span class="locale-switch__track" aria-hidden="true">
+                  <span :class="{ 'is-active': localeStore.currentLocale === 'en' }">En</span>
+                  <span :class="{ 'is-active': localeStore.currentLocale === 'vi' }">Vi</span>
                 </span>
               </button>
 
@@ -118,7 +123,8 @@
                     <button
                       v-if="notificationStore.unreadCount > 0"
                       class="notifications-dropdown__mark-all"
-                      @click="notificationStore.markAllRead"
+                      :disabled="notificationActionId === 'mark-all'"
+                      @click="handleMarkAllNotificationsRead"
                     >
                       {{ t('notifications.markAllRead') }}
                     </button>
@@ -127,6 +133,12 @@
                     <div v-if="notificationStore.isLoading" class="notifications-dropdown__loading">
                       {{ t('notifications.loading') }}
                     </div>
+                    <div v-else-if="notificationStore.hasLoadError" class="notifications-dropdown__empty">
+                      <span>{{ t('notifications.loadError') }}</span>
+                      <button type="button" @click="notificationStore.fetchNotifications">
+                        {{ t('notifications.retry') }}
+                      </button>
+                    </div>
                     <div v-else-if="notificationStore.notifications.length === 0" class="notifications-dropdown__empty">
                       {{ t('notifications.empty') }}
                     </div>
@@ -134,8 +146,19 @@
                       <div
                         v-for="notif in notificationStore.notifications"
                         :key="notif._id"
-                        :class="['notifications-dropdown__item', { 'notifications-dropdown__item--unread': !notif.isRead }]"
+                        :class="[
+                          'notifications-dropdown__item',
+                          {
+                            'notifications-dropdown__item--unread': !notif.isRead,
+                            'notifications-dropdown__item--viewable': hasNotificationTarget(notif),
+                            'notifications-dropdown__item--busy': notificationActionId === notif._id,
+                          },
+                        ]"
+                        :role="hasNotificationTarget(notif) ? 'button' : undefined"
+                        :tabindex="hasNotificationTarget(notif) ? 0 : undefined"
                         @click="handleNotificationClick(notif)"
+                        @keydown.enter.prevent="handleNotificationClick(notif)"
+                        @keydown.space.prevent="handleNotificationClick(notif)"
                       >
                         <div
                           class="notifications-dropdown__avatar"
@@ -151,11 +174,36 @@
                             </template>
                             <span v-if="notif.type === 'like'"> {{ t('notifications.liked') }}</span>
                             <span v-else-if="notif.type === 'comment'"> {{ t('notifications.commented') }}</span>
+                            <span v-else-if="notif.type === 'comment_reply'"> {{ t('notifications.replied') }}</span>
                             <span v-else-if="notif.type === 'follow'"> {{ t('notifications.followed') }}</span>
                           </p>
                           <span class="notifications-dropdown__time">{{ timeAgo(notif.timestamp, localeStore.currentLocale) }}</span>
                         </div>
-                        <span v-if="!notif.isRead" class="notifications-dropdown__unread-badge" />
+                        <span v-if="!notif.isRead" class="notifications-dropdown__unread-badge" aria-hidden="true" />
+                        <AppDropdown
+                          class="notifications-dropdown__menu"
+                          :options="notificationMenuOptions(notif)"
+                          align="right"
+                          :label="t('notifications.options')"
+                          @select="handleNotificationMenuSelect(notif, $event)"
+                        >
+                          <template #trigger="{ toggle, isOpen, panelId }">
+                            <button
+                              type="button"
+                              class="notifications-dropdown__menu-btn"
+                              :aria-label="t('notifications.options')"
+                              aria-haspopup="menu"
+                              :aria-expanded="isOpen"
+                              :aria-controls="isOpen ? panelId : undefined"
+                              :disabled="notificationActionId === notif._id"
+                              @click.stop="toggle"
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/>
+                              </svg>
+                            </button>
+                          </template>
+                        </AppDropdown>
                       </div>
                     </div>
                   </div>
@@ -207,10 +255,22 @@
       </RouterView>
 
     </div><!-- /main-layout__body -->
+    <MobilePullToRefresh />
+    <MobileNavigation />
     <PostDetailModal />
     <OraclePendingModal />
     <ExtractionPendingModal />
     <SourceProgressModal />
+    <AppConfirm
+      v-model="showDeleteNotificationConfirm"
+      :title="t('notifications.deleteTitle')"
+      :message="t('notifications.deleteMessage')"
+      :confirm-label="t('notifications.delete')"
+      :cancel-label="t('notifications.cancel')"
+      :loading="isDeletingNotification"
+      danger
+      @confirm="confirmDeleteNotification"
+    />
   </div>
 </template>
 
@@ -219,17 +279,23 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
+import MobilePullToRefresh from './MobilePullToRefresh.vue'
+import MobileNavigation from './MobileNavigation.vue'
 import PostDetailModal from '@/features/home/PostDetailModal.vue'
 import OraclePendingModal from '@/components/common/OraclePendingModal.vue'
 import ExtractionPendingModal from '@/components/common/ExtractionPendingModal.vue'
 import SourceProgressModal from '@/components/common/SourceProgressModal.vue'
+import AppConfirm from '@/components/common/AppConfirm.vue'
+import AppDropdown from '@/components/common/AppDropdown.vue'
 import { useDreamStore } from '@/store/useDreamStore'
 import { useNotificationStore } from '@/store/useNotificationStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useOracleStore } from '@/store/useOracleStore'
 import { useLocaleStore } from '@/store/useLocaleStore'
-import type { ApiDream, ApiNotification } from '@/api/types'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
+import { usePostStore } from '@/store/usePostStore'
+import { useSettingsStore } from '@/store/useSettingsStore'
+import type { ApiNotification, ApiNotificationTarget } from '@/api/types'
+import { getInitials, getAvatarBg } from '@/utils/avatar'
 import { timeAgo } from '@/utils/timeAgo'
 import apiClient from '@/api/client'
 
@@ -241,7 +307,9 @@ const dreamStore = useDreamStore()
 const notificationStore = useNotificationStore()
 const authStore = useAuthStore()
 const oracleStore = useOracleStore()
+const postStore = usePostStore()
 const localeStore = useLocaleStore()
+const settingsStore = useSettingsStore()
 
 const avatarBg = computed(() => {
   return authStore.user?._id ? getAvatarBg(authStore.user._id) : '#262626'
@@ -263,6 +331,10 @@ let heartbeatInterval: any = null
 
 
 const showNotifications = ref(false)
+const notificationActionId = ref<string | null>(null)
+const notificationToDelete = ref<ApiNotification | null>(null)
+const showDeleteNotificationConfirm = ref(false)
+const isDeletingNotification = ref(false)
 
 function toggleNotifications() {
   showNotifications.value = !showNotifications.value
@@ -272,31 +344,104 @@ function toggleNotifications() {
 }
 
 async function handleNotificationClick(notif: ApiNotification) {
-  showNotifications.value = false
-  if (notif.type === 'dream_analysis') {
-    const targetPostId = notif.postId && typeof notif.postId === 'object' ? notif.postId._id : notif.postId
-    if (targetPostId) {
-      try {
-        const { data } = await apiClient.get<{ success: boolean; data: ApiDream }>(`/dreams/${targetPostId}`)
-        if (data.success && data.data.ai_status === 'completed') {
-          oracleStore.openCompletedDialog(data.data)
-        }
-      } catch (error) {
-        console.error('Failed to open completed Oracle analysis:', error)
-      }
-    }
-  } else if (notif.type === 'follow') {
-    const userId = notif.senderId?._id || notif.senderId
-    if (userId) {
-      router.push(`/profile/${userId}`)
-    }
-  } else {
-    const targetPostId = notif.postId && typeof notif.postId === 'object' ? notif.postId._id : notif.postId
-    if (targetPostId) {
-      router.push({ path: '/', query: { openPostId: String(targetPostId) } })
-    }
+  if (!hasNotificationTarget(notif) || notificationActionId.value) return
+  await openNotificationTarget(notif)
+}
+
+function hasNotificationTarget(notif: ApiNotification): boolean {
+  return notif.type === 'follow'
+    ? Boolean(notif.senderId?._id)
+    : Boolean(notif.postId)
+}
+
+function notificationMenuOptions(notif: ApiNotification) {
+  return [
+    ...(hasNotificationTarget(notif)
+      ? [{ label: t('notifications.view'), value: 'view' }]
+      : []),
+    ...(hasNotificationTarget(notif) ? [{ divider: true as const }] : []),
+    { label: t('notifications.delete'), value: 'delete', danger: true },
+  ]
+}
+
+async function handleNotificationMenuSelect(
+  notif: ApiNotification,
+  option: { value?: string },
+) {
+  if (option.value === 'view') {
+    await openNotificationTarget(notif)
+    return
   }
-  await notificationStore.markAllRead()
+  if (option.value === 'delete') {
+    notificationToDelete.value = notif
+    showDeleteNotificationConfirm.value = true
+  }
+}
+
+async function openNotificationTarget(notif: ApiNotification) {
+  if (notificationActionId.value) return
+  notificationActionId.value = notif._id
+  try {
+    const target = await notificationStore.openNotification(notif._id)
+    showNotifications.value = false
+    await presentNotificationTarget(target)
+  } catch (error: any) {
+    if (error?.response?.data?.code === 'notification_target_unavailable') {
+      if (notif.type === 'dream_analysis' && notif.postId) {
+        oracleStore.stopTracking(notif.postId)
+      }
+      settingsStore.showToastKey('notifications.targetUnavailable', undefined, 'error')
+    } else {
+      settingsStore.showToastKey('notifications.openError', undefined, 'error')
+    }
+  } finally {
+    notificationActionId.value = null
+  }
+}
+
+async function presentNotificationTarget(target: ApiNotificationTarget) {
+  if (target.kind === 'dream_analysis') {
+    oracleStore.openCompletedDialog(target.dream)
+    return
+  }
+  if (target.kind === 'profile') {
+    await router.push(`/profile/${target.userId}`)
+    return
+  }
+  if (route.path !== '/') await router.push('/')
+  await postStore.openPost(target.dream._id, {
+    ...(target.commentId ? { commentId: target.commentId } : {}),
+  })
+}
+
+async function handleMarkAllNotificationsRead() {
+  if (notificationActionId.value) return
+  notificationActionId.value = 'mark-all'
+  const succeeded = await notificationStore.markAllRead()
+  settingsStore.showToastKey(
+    succeeded ? 'notifications.markAllSuccess' : 'notifications.markAllError',
+    undefined,
+    succeeded ? 'success' : 'error',
+  )
+  notificationActionId.value = null
+}
+
+async function confirmDeleteNotification() {
+  const notification = notificationToDelete.value
+  if (!notification || isDeletingNotification.value) return
+  isDeletingNotification.value = true
+  notificationActionId.value = notification._id
+  try {
+    await notificationStore.deleteNotification(notification._id)
+    showDeleteNotificationConfirm.value = false
+    notificationToDelete.value = null
+    settingsStore.showToastKey('notifications.deleteSuccess', undefined, 'success')
+  } catch {
+    settingsStore.showToastKey('notifications.deleteError', undefined, 'error')
+  } finally {
+    isDeletingNotification.value = false
+    notificationActionId.value = null
+  }
 }
 
 async function sendHeartbeat() {
@@ -305,7 +450,8 @@ async function sendHeartbeat() {
     if (data.success && authStore.user) {
       authStore.updateCurrentUser({
         ...authStore.user,
-        timeOnlineToday: data.timeOnlineToday
+        timeOnlineToday: data.timeOnlineToday,
+        role: data.role,
       })
     }
   } catch (err) {
@@ -354,7 +500,7 @@ onUnmounted(() => {
 })
 
 /** Routes that need edge-to-edge layout (no max-width, no padding) */
-const FULL_BLEED_ROUTES = ['/messages', '/oracle']
+const FULL_BLEED_ROUTES = ['/messages', '/oracle', '/moderation/rule-candidates']
 
 const isFullBleed = computed(() => {
   return FULL_BLEED_ROUTES.includes(route.path) || 
@@ -398,6 +544,7 @@ defineProps<{ title?: string }>()
 .main-layout__body {
   margin-left: var(--sidebar-width);
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
@@ -479,13 +626,41 @@ defineProps<{ title?: string }>()
 }
 
 /* ── Locale switch label ────────────────────────────────────────── */
-.locale-switch__label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.06em;
+.locale-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 3px 6px 3px 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.locale-switch:hover {
+  border-color: var(--color-text-muted);
+  background: var(--color-bg-hover);
+}
+.locale-switch__track {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1;
-  pointer-events: none;
-  user-select: none;
+}
+.locale-switch__track span {
+  min-width: 25px;
+  padding: 5px 4px;
+  border-radius: 999px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+.locale-switch__track span.is-active {
+  background: var(--color-primary);
+  color: var(--color-bg-base);
 }
 
 /* Notification dot — solid red, no glow */
@@ -604,6 +779,69 @@ defineProps<{ title?: string }>()
 @media (max-width: 600px) {
   .main-layout__content-inner { padding: var(--space-3); }
 }
+
+@media (max-width: 767px) {
+  .main-layout {
+    overscroll-behavior-y: contain;
+  }
+
+  .main-layout__body,
+  .main-layout--collapsed .main-layout__body {
+    margin-left: 0;
+    padding-right: var(--safe-area-right);
+    padding-left: var(--safe-area-left);
+  }
+
+  .main-layout__burger {
+    display: none;
+  }
+
+  .main-layout__content {
+    padding-bottom: var(--mobile-nav-height);
+  }
+
+  .main-layout__content-inner {
+    max-width: 100%;
+    padding: var(--mobile-page-padding);
+  }
+
+  .main-layout__content-inner--full {
+    padding: 0;
+  }
+
+  .main-layout__header-inner {
+    padding-right: var(--mobile-page-padding);
+    padding-left: var(--mobile-page-padding);
+  }
+
+  .main-layout__header-right {
+    gap: 4px;
+  }
+
+  .main-layout__page-title {
+    font-size: var(--font-size-md);
+  }
+
+  .main-layout__icon-btn,
+  .main-layout__avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  .main-layout__avatar {
+    display: none;
+  }
+
+  .locale-switch {
+    height: 28px;
+    padding: 2px 4px;
+  }
+
+  .locale-switch__track span {
+    min-width: 23px;
+    padding: 4px 3px;
+  }
+}
 /* ── Header search bar (Home route only) ───────────────────────── */
 .header-search {
   display: flex;
@@ -681,7 +919,24 @@ defineProps<{ title?: string }>()
   .header-search__bar:focus-within { width: 200px; }
 }
 @media (max-width: 600px) {
-  .header-search { display: none; }
+  .main-layout__header--with-search {
+    height: calc(var(--header-height) + 52px);
+  }
+  .main-layout__header--with-search .main-layout__header-inner {
+    height: var(--header-height);
+  }
+  .header-search {
+    position: absolute;
+    right: var(--space-3);
+    bottom: 8px;
+    left: var(--space-3);
+    display: flex;
+    margin: 0;
+  }
+  .header-search__bar,
+  .header-search__bar:focus-within {
+    width: 100%;
+  }
 }
 
 /* ── Notifications Dropdown ─────────────────────────────────── */
@@ -734,6 +989,11 @@ defineProps<{ title?: string }>()
   color: var(--color-primary-hover, #60a5fa);
 }
 
+.notifications-dropdown__mark-all:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .notifications-dropdown__body {
   overflow-y: auto;
   flex: 1;
@@ -747,6 +1007,21 @@ defineProps<{ title?: string }>()
   font-size: var(--font-size-sm);
 }
 
+.notifications-dropdown__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.notifications-dropdown__empty button {
+  background: transparent;
+  border: 0;
+  color: var(--color-primary);
+  cursor: pointer;
+  font: inherit;
+}
+
 .notifications-dropdown__list {
   display: flex;
   flex-direction: column;
@@ -757,7 +1032,7 @@ defineProps<{ title?: string }>()
   gap: var(--space-3);
   padding: var(--space-3);
   border-bottom: 1px solid #202020;
-  cursor: pointer;
+  cursor: default;
   transition: background var(--transition-fast);
   align-items: flex-start;
 }
@@ -766,8 +1041,17 @@ defineProps<{ title?: string }>()
   border-bottom: none;
 }
 
-.notifications-dropdown__item:hover {
+.notifications-dropdown__item--viewable {
+  cursor: pointer;
+}
+
+.notifications-dropdown__item--viewable:hover {
   background: var(--color-bg-hover);
+}
+
+.notifications-dropdown__item--busy {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .notifications-dropdown__item--unread {
@@ -820,6 +1104,58 @@ defineProps<{ title?: string }>()
   background: var(--color-danger);
   margin-top: 6px;
   flex-shrink: 0;
+}
+
+.notifications-dropdown__menu {
+  flex-shrink: 0;
+}
+
+.notifications-dropdown__menu-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.notifications-dropdown__menu-btn:hover:not(:disabled),
+.notifications-dropdown__menu-btn:focus-visible {
+  background: #262626;
+  color: var(--color-text-primary);
+}
+
+.notifications-dropdown__menu-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.notifications-dropdown__item:nth-last-child(-n + 2) :deep(.app-dropdown__panel) {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+@media (max-width: 600px) {
+  .notifications-dropdown {
+    position: fixed;
+    top: 56px;
+    right: var(--space-2);
+    left: var(--space-2);
+    width: auto;
+    max-height: min(520px, calc(100dvh - 72px));
+  }
+
+  .main-layout__header--with-search .notifications-dropdown {
+    top: calc(var(--header-height) + 48px);
+  }
+
+  .notifications-dropdown__item {
+    padding: var(--space-3) var(--space-2);
+  }
 }
 
 /* Full bleed locks and overrides */

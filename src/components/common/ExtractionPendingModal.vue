@@ -13,10 +13,11 @@
     :step-text="localizedStepText"
     :detail-text="localizedStageDetail"
     :elapsed-seconds="extractionStore.elapsedSeconds"
-    :processed-label="extractionStore.processedLabel"
+    :processed-label="processedLabel"
     :estimated-remaining-seconds="extractionStore.estimatedRemainingSeconds"
     :timing-delta-seconds="extractionStore.timingDeltaSeconds"
     :completed="extractionStore.status !== 'pending'"
+    :hide-elapsed="extractionStore.currentStage === 'queued'"
     :cancelable="extractionStore.status === 'pending'"
     :cancel-loading="extractionStore.isCancelling"
     :cancel-label="t('common.longTask.cancel')"
@@ -42,11 +43,14 @@ const stages = computed(() => [
   { key: 'initializing', label: t('rules.extraction.steps.prepare'), detail: t('rules.extraction.stepDetails.prepare') },
   { key: 'extracting_candidates', label: t('rules.extraction.steps.extract'), detail: t('rules.extraction.stepDetails.extract') },
   { key: 'saving_candidates', label: t('rules.extraction.steps.save'), detail: t('rules.extraction.stepDetails.save') },
+  { key: 'merging_candidates', label: t('rules.extraction.steps.merge'), detail: t('rules.extraction.stepDetails.merge') },
 ])
-const stageOrder = ['initializing', 'extracting_candidates', 'saving_candidates', 'completed'] as const
+const stageOrder = ['initializing', 'extracting_candidates', 'saving_candidates', 'merging_candidates', 'completed'] as const
 const currentStageIndex = computed(() => extractionStore.currentStage === 'completed'
   ? stages.value.length
-  : Math.max(0, stageOrder.indexOf(extractionStore.currentStage)))
+  : extractionStore.currentStage === 'queued'
+    ? 0
+    : Math.max(0, stageOrder.indexOf(extractionStore.currentStage)))
 const renderedStages = computed<LongRunningTaskStage[]>(() => stages.value.map((stage, index) => ({
   ...stage,
   activeDetail: localizedStageDetail.value,
@@ -57,6 +61,7 @@ const renderedStages = computed<LongRunningTaskStage[]>(() => stages.value.map((
       : 'pending',
 })))
 const localizedStepText = computed(() => {
+  if (extractionStore.currentStage === 'queued') return t('rules.extraction.queued')
   if (extractionStore.currentStage === 'extracting_candidates') {
     return t('rules.extraction.extracting', {
       processed: extractionStore.processedBatches,
@@ -64,10 +69,12 @@ const localizedStepText = computed(() => {
     })
   }
   if (extractionStore.currentStage === 'saving_candidates') return t('rules.extraction.saving')
+  if (extractionStore.currentStage === 'merging_candidates') return t('rules.extraction.merging')
   if (extractionStore.currentStage === 'completed') return t('rules.extraction.completed')
   return t('rules.extraction.preparing')
 })
 const localizedStageDetail = computed(() => {
+  if (extractionStore.currentStage === 'queued') return t('rules.extraction.queuedDetail')
   if (extractionStore.currentStage === 'extracting_candidates') {
     return t('rules.extraction.candidateCounts', {
       raw: extractionStore.rawCandidateCount,
@@ -75,7 +82,14 @@ const localizedStageDetail = computed(() => {
     })
   }
   if (extractionStore.currentStage === 'saving_candidates') return t('rules.extraction.stepDetails.save')
+  if (extractionStore.currentStage === 'merging_candidates') return t('rules.extraction.stepDetails.merge')
   if (extractionStore.currentStage === 'completed') return t('rules.extraction.stepDetails.completed')
   return t('rules.extraction.stepDetails.prepare')
 })
+const processedLabel = computed(() => extractionStore.totalBatches > 0
+  ? t('rules.extraction.batchProgress', {
+      processed: extractionStore.processedBatches,
+      total: extractionStore.totalBatches,
+    })
+  : '')
 </script>

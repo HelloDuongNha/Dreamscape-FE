@@ -66,7 +66,7 @@
           type="submit"
           variant="primary"
           size="lg"
-          :disabled="loading || !username || !displayName || !email || password.length < 6"
+          :disabled="loading || !username || !displayName || !email || password.length < 8"
           style="width: 100%; margin-top: var(--space-2);"
         >
           {{ loading ? t('auth.creatingAccount') : t('auth.createAccountBtn') }}
@@ -123,8 +123,12 @@ async function handleRegister() {
     localError.value = { key: 'errors.passwordRequired' }
     return
   }
-  if (password.value.length < 6) {
+  if (password.value.length < 8) {
     localError.value = { key: 'errors.passwordTooShort' }
+    return
+  }
+  if (!/[a-z]/.test(password.value) || !/[A-Z]/.test(password.value) || !/\d/.test(password.value)) {
+    localError.value = { key: 'errors.passwordComplexity' }
     return
   }
 
@@ -139,7 +143,11 @@ async function handleRegister() {
     if (data.status === 'pending') {
       router.push({
         path: '/verify-otp',
-        query: { email: email.value.trim(), purpose: 'register' }
+        query: {
+          email: email.value.trim(),
+          purpose: 'register',
+          resendAvailableAt: data.resendAvailableAt,
+        }
       })
     } else {
       router.push('/')

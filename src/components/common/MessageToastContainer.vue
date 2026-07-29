@@ -1,5 +1,9 @@
 <template>
-  <div class="message-toast-container" role="log" aria-live="polite">
+  <div
+    :class="['message-toast-container', { 'message-toast-container--home': isHomeRoute }]"
+    role="log"
+    aria-live="polite"
+  >
     <TransitionGroup
       name="pinned-task-list"
       tag="div"
@@ -17,21 +21,21 @@
       />
 
       <PinnedTaskToast
-        v-if="oracleStore.isPinnedVisible && oracleStore.trackedDream"
-        key="dream-analysis-run"
+        v-for="entry in dreamPinnedTasks"
+        :key="`${entry.kind}-${entry.task.dreamId}`"
         kind="dream-analysis"
-        :title="`Oracle: ${oracleTitle}`"
-        :message="oracleMessage"
-        :progress="oracleStore.trackedDream.ai_status === 'pending' && !oracleStore.completedDream && !oracleStore.failedDream ? oracleStore.progress : 100"
-        :terminal="Boolean(oracleStore.completedDream || oracleStore.failedDream || oracleStore.cancelledDream)"
-        @open="handleOraclePinnedClick"
+        :title="dreamPinnedTitle(entry)"
+        :message="dreamPinnedMessage(entry)"
+        :progress="entry.task.status === 'pending' ? entry.task.progress : 100"
+        :terminal="entry.task.status !== 'pending'"
+        @open="openDreamPinnedTask(entry)"
       />
 
       <PinnedTaskToast
         v-if="extractionStore.isPinnedVisible && extractionStore.sourceId"
         key="rule-analysis-run"
         kind="rule-analysis"
-        :title="`Phân tích Rule: ${extractionTitle}`"
+        :title="`${t('rules.extraction.pin.prefix')}: ${extractionTitle}`"
         :message="extractionMessage"
         :progress="extractionStore.status === 'pending' ? extractionStore.progress : 100"
         :terminal="extractionStore.status !== 'pending'"
@@ -54,10 +58,9 @@
         v-for="(job, index) in academicQueue.queuedJobs"
         :key="job.id"
         kind="queue"
-        :title="`Đang chờ #${index + 1}`"
+        :title="t('rules.extraction.pin.waiting', { position: index + 1 })"
         :message="`${queueKindLabel(job.kind)} · ${job.title}`"
-        hint="Sẽ tự chạy khi tác vụ phía trước hoàn tất."
-        @open="openQueuedJob(job)"
+        :hint="t('rules.extraction.pin.waitingHint')"
       />
     </TransitionGroup>
 
@@ -97,6 +100,13 @@ import { useAcademicJobQueueStore } from '@/store/useAcademicJobQueueStore'
 import MessageToast             from './MessageToast.vue'
 import PinnedTaskToast from './PinnedTaskToast.vue'
 import { useOracleChatStore } from '@/store/useOracleChatStore'
+import type { DreamAnalysisTask } from '@/store/useOracleStore'
+import { useDreamContinuationStore, type DreamContinuationTask } from '@/store/useDreamContinuationStore'
+import { usePostStore } from '@/store/usePostStore'
+import { useNotificationStore } from '@/store/useNotificationStore'
+import { useSettingsStore } from '@/store/useSettingsStore'
+import apiClient from '@/api/client'
+import type { ApiDream } from '@/api/types'
 
 const toastStore = useMessageToastStore()
 const chatStore  = useChatStore()
@@ -106,9 +116,31 @@ const extractionStore = useExtractionStore()
 const sourceProgressStore = useSourceProgressStore()
 const academicQueue = useAcademicJobQueueStore()
 const oracleChatStore = useOracleChatStore()
+const continuationStore = useDreamContinuationStore()
+const notificationStore = useNotificationStore()
+const settingsStore = useSettingsStore()
 const { t } = useI18n()
+const isHomeRoute = computed(() => router.currentRoute.value.path === '/')
 const oracleClock = ref(Date.now())
 let oracleClockTimer: ReturnType<typeof setInterval> | null = null
+
+type DreamPinnedEntry =
+  | { kind: 'dream-analysis'; task: DreamAnalysisTask }
+  | { kind: 'dream-continuation'; task: DreamContinuationTask }
+
+function isQueuedDreamEntry(entry: DreamPinnedEntry) {
+  return entry.kind === 'dream-analysis'
+    ? entry.task.dream.analysisMetadata?.currentStage === 'queued'
+    : entry.task.dream.continuationMetadata?.status === 'queued'
+}
+
+const dreamPinnedTasks = computed<DreamPinnedEntry[]>(() => [
+  ...oracleStore.pinnedTasks.map(task => ({ kind: 'dream-analysis' as const, task })),
+  ...continuationStore.pinnedTasks.map(task => ({ kind: 'dream-continuation' as const, task })),
+].sort((left, right) => {
+  const queueOrder = Number(isQueuedDreamEntry(left)) - Number(isQueuedDreamEntry(right))
+  return queueOrder || left.task.createdAt - right.task.createdAt
+}))
 
 function syncOracleClock(active: boolean) {
   if (active && !oracleClockTimer) {
@@ -192,9 +224,73 @@ onMounted(() => {
   syncOracleClock(Boolean(oracleChatStore.backgroundRun))
   void oracleChatStore.loadThreads().catch(() => undefined)
   void oracleStore.restoreTracking()
+  void continuationStore.restoreTracking()
   void extractionStore.restoreTracking()
   sourceProgressStore.restoreTracking()
 })
+
+function formatElapsed(seconds: number) {
+  if (seconds < 60) return t('oracle.continuationElapsedSeconds', { seconds })
+  return t('oracle.continuationElapsedMinutes', {
+    minutes: Math.floor(seconds / 60),
+    seconds: seconds % 60,
+  })
+}
+
+function formatDuration(seconds: number) {
+  if (seconds < 60) return t('oracle.durationSeconds', { seconds })
+  return t('oracle.durationMinutes', {
+    minutes: Math.floor(seconds / 60),
+    seconds: seconds % 60,
+  })
+}
+
+function continuationTaskTitle(task: DreamContinuationTask) {
+  if (task.status === 'completed') return t('oracle.continuationPinCompletedTitle')
+  if (task.status === 'failed') return t('oracle.continuationPinFailedTitle')
+  if (task.dream.continuationMetadata?.status === 'queued') {
+    return t('oracle.continuationWaitingTitle')
+  }
+  return t('oracle.continuationPinTitle')
+}
+
+function continuationTaskMessage(task: DreamContinuationTask) {
+  if (task.status === 'completed') return t('oracle.continuationRegenerated')
+  if (task.status === 'failed') return t('oracle.continuationRegenerateFailed')
+  const metadata = task.dream.continuationMetadata
+  const stage = metadata?.status === 'queued'
+    ? t('oracle.continuationQueued', { position: metadata.queuePosition || 1 })
+    : task.progress < 40
+      ? t('oracle.continuationReturning')
+      : task.progress < 80
+        ? t('oracle.continuationWriting')
+        : t('oracle.continuationFinalizing')
+  const timing = metadata?.status === 'queued'
+    ? t('oracle.dreamAnalysisWaited', { duration: formatDuration(task.elapsedSeconds) })
+    : formatElapsed(task.elapsedSeconds)
+  return `${stage} · ${task.progress}% · ${timing}`
+}
+
+function dreamPinnedTitle(entry: DreamPinnedEntry) {
+  return entry.kind === 'dream-analysis'
+    ? `Oracle: ${oracleTaskTitle(entry.task)}`
+    : continuationTaskTitle(entry.task)
+}
+
+function dreamPinnedMessage(entry: DreamPinnedEntry) {
+  return entry.kind === 'dream-analysis'
+    ? oracleTaskMessage(entry.task)
+    : continuationTaskMessage(entry.task)
+}
+
+async function openDreamPinnedTask(entry: DreamPinnedEntry) {
+  if (entry.kind === 'dream-analysis') {
+    await handleOraclePinnedClick(entry.task)
+    return
+  }
+  continuationStore.showInDialog(entry.task.dreamId)
+  await usePostStore().openPost(entry.task.dreamId)
+}
 
 watch(
   () => Boolean(oracleChatStore.backgroundRun),
@@ -213,18 +309,10 @@ async function openOracleChatRun() {
 }
 
 function queueKindLabel(kind: string) {
-  if (kind === 'pdf') return 'Dựng bản đọc từ PDF'
-  if (kind === 'structured') return 'Nhập lại từ DOI / HTML / XML'
-  if (kind === 'rules') return 'Phân tích luật'
-  return 'Xử lý nguồn'
-}
-
-function openQueuedJob(job: { sourceId: string; kind: string }) {
-  if (job.kind === 'rules') {
-    void router.push({ path: '/moderation/rule-candidates', query: { sourceId: job.sourceId } })
-    return
-  }
-  void router.push(`/library/sources/${job.sourceId}`)
+  if (kind === 'pdf') return t('rules.extraction.pin.queuePdf')
+  if (kind === 'structured') return t('rules.extraction.pin.queueStructured')
+  if (kind === 'rules') return t('rules.extraction.pin.queueRules')
+  return t('rules.extraction.pin.queueSource')
 }
 
 const sourceTitle = computed(() => {
@@ -234,7 +322,18 @@ const sourceTitle = computed(() => {
   return t('common.sourceProgress.pin.runningTitle')
 })
 
-const localizedPdfStep = computed(() => {
+const localizedSourceStep = computed(() => {
+  if (sourceProgressStore.pipelineKind === 'structured') {
+    if (sourceProgressStore.progress >= 90) return t('common.sourceProgress.structuredCompile')
+    if (sourceProgressStore.progress >= 35) return t('common.sourceProgress.structuredRetrieve')
+    return t('common.sourceProgress.structuredPrepare')
+  }
+  if (sourceProgressStore.pipelineKind === 'submission') {
+    if (sourceProgressStore.progress >= 75) return t('common.sourceProgress.importFinish')
+    if (sourceProgressStore.progress >= 45) return t('common.sourceProgress.importOriginal')
+    if (sourceProgressStore.progress >= 20) return t('common.sourceProgress.importReader')
+    return t('common.sourceProgress.importPrepare')
+  }
   if (sourceProgressStore.pipelineKind !== 'pdf') return sourceProgressStore.stepText
   const keys: Record<string, string> = {
     received: 'receivePdf',
@@ -266,7 +365,7 @@ function compactProgressDuration(totalSeconds: number): string {
 
 const sourceTimingMessage = computed(() => {
   const estimate = sourceProgressStore.estimatedRemainingSeconds
-  if (typeof estimate !== 'number') return t('common.progress.measuring')
+  if (typeof estimate !== 'number') return t('common.progress.estimateUnavailable')
   if (estimate < 0) {
     return t('common.progress.overdue', {
       duration: compactProgressDuration(Math.abs(estimate)),
@@ -279,7 +378,7 @@ const sourceTimingMessage = computed(() => {
 
 const sourceMessage = computed(() => {
   if (sourceProgressStore.status === 'pending') {
-    return `${localizedPdfStep.value} (${sourceProgressStore.progress}%) · ${sourceTimingMessage.value}`
+    return `${localizedSourceStep.value} (${sourceProgressStore.progress}%) · ${sourceTimingMessage.value}`
   }
   if (sourceProgressStore.status === 'cancelled') {
     return t('common.sourceProgress.pin.cancelledMessage')
@@ -398,90 +497,168 @@ function handleSourcePinnedClick() {
   }
 }
 
-const oracleTitle = computed(() => {
-  if (oracleStore.completedDream) return 'Hoàn thành'
-  if (oracleStore.failedDream) return 'Thất bại'
-  if (oracleStore.cancelledDream) return 'Đã hủy'
-  return 'Phân tích...'
-})
+function oracleTaskTitle(task: DreamAnalysisTask) {
+  if (task.status === 'completed') return t('oracle.dreamAnalysisCompletedTitle')
+  if (task.status === 'failed') return t('oracle.dreamAnalysisFailedTitle')
+  if (task.status === 'cancelled') return t('oracle.dreamAnalysisCancelledTitle')
+  if (task.dream.analysisMetadata?.currentStage === 'queued') {
+    const position = Number(task.dream.analysisMetadata?.queuePosition)
+    return Number.isFinite(position) && position > 0
+      ? t('oracle.dreamAnalysisQueuedTitle', { position })
+      : t('oracle.dreamAnalysisWaitingTitle')
+  }
+  return t('oracle.dreamAnalysisRunningTitle')
+}
 
-const oracleMessage = computed(() => {
-  if (oracleStore.completedDream) {
-    return 'Oracle đã phân tích xong giấc mơ.'
+function oracleTaskMessage(task: DreamAnalysisTask) {
+  if (task.status === 'completed') {
+    return t('oracle.dreamAnalysisCompletedMessage')
   }
-  if (oracleStore.failedDream) {
-    return 'Oracle chưa thể phân tích giấc mơ này. Vui lòng thử lại sau.'
+  if (task.status === 'failed') {
+    return t('oracle.dreamAnalysisFailedMessage')
   }
-  if (oracleStore.cancelledDream) {
-    return 'Hủy tác vụ thành công.'
+  if (task.status === 'cancelled') {
+    return t('oracle.dreamAnalysisCancelledMessage')
   }
-  const minutes = Math.floor(oracleStore.elapsedSeconds / 60)
-  const seconds = oracleStore.elapsedSeconds % 60
-  const elapsed = minutes > 0 ? `${minutes} phút ${seconds} giây` : `${seconds} giây`
-  return `${oracleStore.statusMessage} · ${oracleStore.progress}% · đã chạy ${elapsed}`
-})
+  const elapsed = formatDuration(task.elapsedSeconds)
+  if (task.dream.analysisMetadata?.currentStage === 'queued') {
+    const position = Number(task.dream.analysisMetadata?.queuePosition) || 1
+    return `${t('oracle.dreamAnalysisQueuedMessage', { position })} · ${t('oracle.dreamAnalysisWaited', { duration: elapsed })}`
+  }
+  return `${oracleTaskStageMessage(task)} · ${task.progress}% · ${t('oracle.dreamAnalysisRan', { duration: elapsed })}`
+}
 
-function handleOraclePinnedClick() {
-  if (oracleStore.completedDream) {
-    oracleStore.openDialog()
-  } else if (oracleStore.failedDream) {
-    oracleStore.stopTracking()
-  } else if (oracleStore.cancelledDream) {
-    oracleStore.openDialog()
-  } else {
-    oracleStore.openDialog()
+function oracleTaskStageMessage(task: DreamAnalysisTask) {
+  const stage = task.dream.analysisMetadata?.currentStage
+  const keyByStage: Partial<Record<NonNullable<typeof stage>, string>> = {
+    preparing: 'oracle.dreamAnalysisStages.preparing',
+    retrieving_context: 'oracle.dreamAnalysisStages.retrievingContext',
+    retrieving_rules: 'oracle.dreamAnalysisStages.retrievingRules',
+    generating_analysis: 'oracle.dreamAnalysisStages.generatingAnalysis',
+    finalizing: 'oracle.dreamAnalysisStages.finalizing',
+    completed: 'oracle.dreamAnalysisStages.completed',
+    failed: 'oracle.dreamAnalysisStages.failed',
+    cancelled: 'oracle.dreamAnalysisStages.cancelled',
+  }
+  return t(keyByStage[stage || 'preparing'] || 'oracle.dreamAnalysisStages.preparing')
+}
+
+async function handleOraclePinnedClick(task: DreamAnalysisTask) {
+  if (task.status === 'failed') {
+    oracleStore.stopTracking(task.dreamId)
+    return
+  }
+  if (task.status === 'pending') {
+    oracleStore.openTask(task.dreamId)
+    return
+  }
+
+  try {
+    let notification = notificationStore.notifications.find(item =>
+      item.type === 'dream_analysis' && item.postId === task.dreamId
+    )
+    if (!notification) {
+      await notificationStore.fetchNotifications()
+      notification = notificationStore.notifications.find(item =>
+        item.type === 'dream_analysis' && item.postId === task.dreamId
+      )
+    }
+
+    if (notification) {
+      const target = await notificationStore.openNotification(notification._id)
+      if (target.kind !== 'dream_analysis') throw new Error('Unexpected notification target.')
+      oracleStore.openCompletedDialog(target.dream)
+      return
+    }
+
+    // Legacy local tasks may predate persisted completion notifications. The
+    // normal Dream read endpoint still applies the same owner/public policy.
+    const response = await apiClient.get<{ success: boolean; data: ApiDream }>(
+      `/dreams/${task.dreamId}`,
+    )
+    if (!response.data.success || response.data.data.ai_status !== 'completed') {
+      throw new Error('Completed analysis is unavailable.')
+    }
+    oracleStore.openCompletedDialog(response.data.data)
+  } catch (error: any) {
+    const status = error?.response?.status
+    if (status === 404 || status === 410) {
+      oracleStore.stopTracking(task.dreamId)
+      settingsStore.showToastKey('notifications.targetUnavailable', undefined, 'error')
+      return
+    }
+    settingsStore.showToastKey('notifications.openError', undefined, 'error')
   }
 }
 
 const extractionTitle = computed(() => {
   if (extractionStore.status === 'success') {
-    if (extractionStore.outcome === 'success_with_existing_candidates') {
-      return 'Kết quả Rule V3 đã có sẵn'
+    if (['success_with_existing_candidates', 'success_reused_candidates'].includes(
+      extractionStore.outcome || '',
+    )) {
+      return t('rules.extraction.pin.existing')
     }
-    if (extractionStore.outcome === 'success_no_verified_candidates') return 'Không có candidate đạt kiểm chứng'
-    return 'Phân tích hoàn thành'
+    if (extractionStore.outcome === 'success_no_verified_candidates') return t('rules.extraction.pin.noVerified')
+    return t('rules.extraction.pin.completed')
   }
   if (extractionStore.status === 'stopped') {
-    if (extractionStore.outcome === 'user_cancelled') return 'Đã hủy phân tích'
-    if (extractionStore.outcome === 'stopped_domain_irrelevant') return 'Tài liệu không phù hợp'
-    if (extractionStore.outcome === 'stopped_no_eligible_chunks') return 'Chưa có dữ liệu học thuật hợp lệ'
-    if (extractionStore.outcome === 'stopped_llm_returned_zero') return 'Chưa rút ra được luật rõ ràng'
-    if (extractionStore.outcome === 'stopped_all_weak_evidence') return 'Bằng chứng chưa đủ mạnh'
-    if (extractionStore.outcome === 'stopped_all_duplicate') return 'Không có luật mới'
-    return 'Tài liệu không phù hợp'
+    return t(`rules.extraction.pin.stoppedTitles.${extractionStore.outcome || 'default'}`)
   }
-  if (extractionStore.status === 'failed') return 'Thất bại'
-  return 'Đang chạy'
+  if (extractionStore.status === 'failed') return t('rules.extraction.pin.failed')
+  return t('rules.extraction.pin.running')
 })
 
 const extractionMessage = computed(() => {
   if (extractionStore.status === 'success') {
-    return extractionStore.message || 'Hoàn tất phân tích Rule V3.'
+    if (extractionStore.outcome === 'success_reused_candidates') {
+      return t('rules.extraction.pin.reusedMessage')
+    }
+    if (extractionStore.outcome === 'success_with_existing_candidates') {
+      return t('rules.extraction.pin.existingMessage', {
+        merged: extractionStore.mergedCount,
+      })
+    }
+    if (extractionStore.outcome === 'success_no_verified_candidates') {
+      return t('rules.extraction.pin.noVerifiedMessage', {
+        rejected: extractionStore.rejectedCount,
+      })
+    }
+    return t('rules.extraction.pin.completedMessage', {
+      created: extractionStore.createdCount,
+      merged: extractionStore.mergedCount,
+    })
   }
   if (extractionStore.status === 'stopped') {
-    if (extractionStore.outcome === 'user_cancelled') return 'Phần lập luận chưa hoàn tất không được lưu.'
-    if (extractionStore.outcome === 'stopped_domain_irrelevant') {
-      return 'Tài liệu này không thuộc phạm vi giấc mơ, giấc ngủ hoặc tâm lý học nên hệ thống không tạo luật từ tài liệu này.'
-    }
-    if (extractionStore.outcome === 'stopped_no_eligible_chunks') {
-      return 'Không tạo được luật vì chưa có chunk học thuật hợp lệ.'
-    }
-    if (extractionStore.outcome === 'stopped_llm_returned_zero') {
-      return 'LLM không rút ra được kết luận đủ rõ từ tài liệu này.'
-    }
-    if (extractionStore.outcome === 'stopped_all_weak_evidence') {
-      return 'Các kết luận bị loại vì không có đoạn bằng chứng đủ rõ.'
-    }
-    if (extractionStore.outcome === 'stopped_all_duplicate') {
-      return 'Các luật tương tự đã tồn tại, không tạo bản trùng.'
-    }
-    return extractionStore.message || 'Phân tích dừng lại.'
+    return t(`rules.extraction.pin.stoppedMessages.${extractionStore.outcome || 'default'}`)
   }
   if (extractionStore.status === 'failed') {
-    return extractionStore.errorMessage || 'Phân tích tài liệu thất bại.'
+    return extractionFailureMessage(extractionStore.outcome)
   }
-  return `${extractionStore.stepText} (${extractionStore.progress}%)`
+  const stageKey = extractionStore.currentStage === 'extracting_candidates'
+    ? 'extracting'
+    : extractionStore.currentStage === 'saving_candidates'
+      ? 'saving'
+      : extractionStore.currentStage === 'merging_candidates'
+        ? 'merging'
+        : 'preparing'
+  return `${t(`rules.extraction.pin.${stageKey}`)} (${extractionStore.progress}%)`
 })
+
+function extractionFailureMessage(outcome: string | null) {
+  const keys: Record<string, string> = {
+    all_verified_candidates_rejected: 'rejected',
+    candidate_persistence_incomplete: 'incomplete',
+    replacement_persistence_incomplete: 'incomplete',
+    provider_unavailable: 'unavailable',
+    provider_timeout: 'timeout',
+    provider_schema_invalid: 'invalid',
+    input_too_large: 'tooLarge',
+  }
+  const key = keys[outcome || '']
+  return key
+    ? t(`rules.failure.${key}`)
+    : t('rules.extraction.pin.failedMessage')
+}
 
 function handleExtractionPinnedClick() {
   if (extractionStore.status === 'success') {
@@ -583,5 +760,28 @@ async function handleToastClick(conversationId: string) {
 .card-pile-leave-to {
   opacity: 0;
   transform: translate3d(calc(100% + 12px), 0, 0) !important;
+}
+
+@media (max-width: 767px) {
+  .message-toast-container {
+    top: calc(var(--header-height) + 8px);
+    right: max(8px, var(--safe-area-right));
+    left: max(8px, var(--safe-area-left));
+    width: auto;
+    max-height: calc(100dvh - var(--header-height) - var(--mobile-nav-height) - 16px);
+  }
+
+  .message-toast-container--home {
+    top: calc(var(--header-height) + 56px);
+    max-height: calc(100dvh - var(--header-height) - var(--mobile-nav-height) - 64px);
+  }
+
+  .pinned-task-lane {
+    margin-top: 0;
+  }
+
+  .stack-list-wrapper {
+    gap: 12px;
+  }
 }
 </style>

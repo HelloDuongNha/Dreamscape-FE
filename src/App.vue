@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/store/useAuthStore'
@@ -64,6 +64,8 @@ watch(
 )
 
 onMounted(async () => {
+  registerZoomGuards()
+
   // Only fetch if the user is authenticated — avoids pointless 401 calls
   if (authStore.isLoggedIn) {
     try {
@@ -73,6 +75,36 @@ onMounted(async () => {
     }
   }
 })
+
+onUnmounted(() => {
+  unregisterZoomGuards()
+})
+
+function registerZoomGuards(): void {
+  document.addEventListener('gesturestart', preventBrowserZoom, { passive: false })
+  document.addEventListener('gesturechange', preventBrowserZoom, { passive: false })
+  document.addEventListener('touchmove', preventMultiTouchZoom, { passive: false })
+  window.addEventListener('wheel', preventTrackpadZoom, { passive: false })
+}
+
+function unregisterZoomGuards(): void {
+  document.removeEventListener('gesturestart', preventBrowserZoom)
+  document.removeEventListener('gesturechange', preventBrowserZoom)
+  document.removeEventListener('touchmove', preventMultiTouchZoom)
+  window.removeEventListener('wheel', preventTrackpadZoom)
+}
+
+function preventBrowserZoom(event: Event): void {
+  if (event.cancelable) event.preventDefault()
+}
+
+function preventMultiTouchZoom(event: TouchEvent): void {
+  if (event.touches.length > 1 && event.cancelable) event.preventDefault()
+}
+
+function preventTrackpadZoom(event: WheelEvent): void {
+  if ((event.ctrlKey || event.metaKey) && event.cancelable) event.preventDefault()
+}
 </script>
 
 <style>
@@ -113,5 +145,17 @@ onMounted(async () => {
 .toast-slide-leave-to {
   opacity: 0;
   transform: translateX(-50%) translateY(-8px);
+}
+
+@media (max-width: 767px) {
+  .global-toast {
+    top: max(8px, var(--safe-area-top));
+    width: calc(100vw - max(24px, var(--safe-area-left) + var(--safe-area-right) + 16px));
+    max-width: 420px;
+    justify-content: center;
+    padding: 10px 14px;
+    text-align: center;
+    white-space: normal;
+  }
 }
 </style>

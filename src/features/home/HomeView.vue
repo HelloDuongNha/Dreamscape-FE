@@ -4,63 +4,14 @@
     <!-- ══════════════════════════════════════════
          ① POST COMPOSER
     ═══════════════════════════════════════════ -->
-    <div v-if="!dreamStore.searchQuery" class="composer">
-      <!-- Left: current user avatar -->
-      <div
-        class="composer__avatar"
-        :style="{ background: currentAvatarBg }"
-        aria-hidden="true"
-        translate="no"
-      >
-        {{ currentInitials }}
-      </div>
-
-      <!-- Right: input area -->
-      <div class="composer__body">
-        <textarea
-          id="composer-textarea"
-          v-model="composerText"
-          class="composer__textarea"
-          :placeholder="t('home.composerPlaceholder')"
-          rows="3"
-          :aria-label="t('home.composerAria')"
-          translate="no"
-        />
-
-
-        <!-- Composer footer: visibility toggle + post button -->
-        <div class="composer__footer">
-          <button
-            id="visibility-toggle-btn"
-            class="composer__visibility"
-            :class="{ 'composer__visibility--private': !isPublic }"
-            :aria-pressed="isPublic"
-            :aria-label="isPublic ? t('home.visibilityPublicAria') : t('home.visibilityPrivateAria')"
-            @click="isPublic = !isPublic"
-          >
-            <!-- Globe (public) -->
-            <svg v-if="isPublic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-            </svg>
-            <!-- Lock (private) -->
-            <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            {{ isPublic ? t('home.public') : t('home.private') }}
-          </button>
-
-          <AppButton
-            id="post-dream-btn"
-            size="sm"
-            variant="primary"
-            :disabled="composerText.trim().length === 0 || isPosting"
-            @click="handlePost"
-          >
-            {{ isPosting ? t('home.posting') : t('home.post') }}
-          </AppButton>
-        </div>
-      </div>
-    </div>
+    <DreamComposer
+      v-model:text="composerText"
+      v-model:public="isPublic"
+      v-model:ai-analysis="aiAnalysisEnabled"
+      :user="currentUser"
+      :posting="isPosting"
+      @submit="handlePost"
+    />
 
     <!-- Divider -->
     <div class="home-divider" role="separator" />
@@ -68,39 +19,118 @@
     <!-- ══════════════════════════════════════════
          ② SEARCH RESULT LABEL
     ═══════════════════════════════════════════ -->
-    <div v-if="dreamStore.searchQuery" class="search-results-label">
-      <span class="search-results-label__count">
-        {{ t('home.resultsCount', filteredDreams.length) }}
-      </span>
-      <span class="search-results-label__query">
-        {{ t('home.resultsFor') }} <span translate="no">“{{ dreamStore.searchQuery }}”</span>
-      </span>
+    <div
+      v-if="!isSearchMode || searchTab === 'posts'"
+      class="home-mood-row"
+    >
+      <DreamMoodFilter v-model="dreamStore.searchMood" />
     </div>
+
+    <div
+      v-if="isSearchMode"
+      class="search-context"
+    >
+      <div class="search-results-label" aria-live="polite">
+        <span class="search-results-label__count">
+          {{ t('home.resultsCount', searchTab === 'users' ? userSearchResults.length : displayedItems.length) }}
+        </span>
+        <span v-if="dreamStore.searchQuery.trim()" class="search-results-label__query">
+          {{ t('home.resultsFor') }} <span translate="no">“{{ dreamStore.searchQuery }}”</span>
+        </span>
+        <span v-if="dreamStore.searchMood" class="search-results-label__query">
+          · {{ t(`home.moodScale.label.${dreamStore.searchMood}`) }}
+        </span>
+      </div>
+
+      <div class="search-tabs" role="tablist" :aria-label="t('home.searchTabsAria')">
+        <button
+          type="button"
+          class="search-tabs__tab"
+          :class="{ 'search-tabs__tab--active': searchTab === 'posts' }"
+          role="tab"
+          :aria-selected="searchTab === 'posts'"
+          @click="searchTab = 'posts'"
+        >{{ t('home.searchPostsTab') }}</button>
+        <button
+          type="button"
+          class="search-tabs__tab"
+          :class="{ 'search-tabs__tab--active': searchTab === 'users' }"
+          role="tab"
+          :aria-selected="searchTab === 'users'"
+          @click="searchTab = 'users'"
+        >{{ t('home.searchUsersTab') }}</button>
+      </div>
+    </div>
+
+    <section
+      v-if="isSearchMode && searchTab === 'users'"
+      class="user-search-results"
+      :aria-label="t('home.searchUsersTab')"
+    >
+      <template v-if="isSearchingUsers">
+        <AppSkeleton v-for="i in 3" :key="`user-${i}`" type="list" />
+      </template>
+      <div v-else-if="userSearchError" class="feed-empty" role="alert">
+        <AppIcon class="feed-empty__icon" name="warning" :size="24" />
+        <p class="feed-empty__text">{{ t('home.searchError') }}</p>
+      </div>
+      <div v-else-if="userSearchResults.length === 0" class="feed-empty">
+        <span class="feed-empty__icon" aria-hidden="true">◌</span>
+        <p class="feed-empty__text">{{ t('home.noUserSearchResults') }}</p>
+      </div>
+      <div v-else class="user-search-results__list">
+        <RouterLink
+          v-for="user in userSearchResults"
+          :key="user._id"
+          :to="`/profile/${user._id}`"
+          class="user-search-row"
+        >
+          <UserAvatar :user="user" size="md" />
+          <span class="user-search-row__info">
+            <strong>{{ user.display_name }}</strong>
+            <span>{{ formatUsername(user.username) }}</span>
+            <small v-if="user.bio">{{ user.bio }}</small>
+          </span>
+          <span class="user-search-row__arrow" aria-hidden="true">›</span>
+        </RouterLink>
+      </div>
+    </section>
 
     <!-- ══════════════════════════════════════════
          ③ DREAM FEED
     ═══════════════════════════════════════════ -->
-    <section class="dream-feed" :aria-label="t('home.feedAria')">
+    <section v-else class="dream-feed" :aria-label="t('home.feedAria')">
       <!-- Initial loading skeletons -->
-      <template v-if="dreamStore.isLoading">
+      <template v-if="isInitialLoading">
         <AppSkeleton v-for="i in 3" :key="i" type="card" />
       </template>
 
       <template v-else>
+        <div v-if="isSearchMode && dreamStore.searchError" class="feed-empty" role="alert">
+        <AppIcon class="feed-empty__icon" name="warning" :size="24" />
+          <p class="feed-empty__text">{{ t('home.searchError') }}</p>
+          <AppButton size="sm" variant="secondary" @click="dreamStore.searchDreams()">
+            {{ t('home.retrySearch') }}
+          </AppButton>
+        </div>
+
         <!-- Empty state -->
-        <div v-if="filteredDreams.length === 0" class="feed-empty">
+        <div v-else-if="displayedItems.length === 0" class="feed-empty">
           <span class="feed-empty__icon" aria-hidden="true">◈</span>
           <p class="feed-empty__text">
-            {{ dreamStore.searchQuery ? t('home.noSearchResults') : t('home.noDreams') }}
+            {{ isSearchMode ? t('home.noSearchResults') : t('home.noDreams') }}
           </p>
         </div>
 
         <!-- Dream cards -->
         <DreamCard
-          v-for="item in filteredDreams"
+          v-for="item in displayedItems"
           :key="item.dream._id"
-          :dream="item.dream as any"
-          :user="item.user as any"
+          :dream="item.dream"
+          :user="item.user"
+          :content-highlights="item.dreamRanges"
+          :matched-comments="item.matchedComments"
+          :matched-comment-count="item.matchedCommentCount"
           class="feed-card"
         />
 
@@ -108,13 +138,13 @@
         <div ref="sentinel" class="feed-sentinel" aria-hidden="true" />
 
         <!-- Load more skeletons -->
-        <template v-if="dreamStore.isLoadingMore">
+        <template v-if="isLoadingMoreResults">
           <AppSkeleton v-for="i in 2" :key="`more-${i}`" type="card" />
         </template>
 
         <!-- End of feed -->
-        <div v-if="!dreamStore.hasMore && filteredDreams.length > 0" class="feed-end">
-          <span>{{ t('home.feedEnd') }}</span>
+        <div v-if="!hasMoreResults && displayedItems.length > 0" class="feed-end">
+          <span>{{ isSearchMode ? t('home.searchEnd') : t('home.feedEnd') }}</span>
         </div>
       </template>
     </section>
@@ -129,16 +159,23 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppButton       from '@/components/common/AppButton.vue'
 import AppSkeleton     from '@/components/common/AppSkeleton.vue'
+import AppIcon         from '@/components/common/AppIcon.vue'
+import DreamMoodFilter from '@/components/common/DreamMoodFilter.vue'
+import UserAvatar     from '@/components/common/UserAvatar.vue'
 import DreamCard       from './DreamCard.vue'
+import DreamComposer   from './DreamComposer.vue'
 import { useDreamStore } from '@/store/useDreamStore'
 import { useAuthStore }  from '@/store/useAuthStore'
 import { usePostStore }  from '@/store/usePostStore'
-import type { ApiDream, ApiUser } from '@/api/types'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
+import { useSettingsStore } from '@/store/useSettingsStore'
+import apiClient          from '@/api/client'
+import { formatUsername } from '@/utils/username'
+import type { ApiDream, ApiUser, DreamSearchItem } from '@/api/types'
 
 const dreamStore = useDreamStore()
 const authStore  = useAuthStore()
 const postStore  = usePostStore()
+const settingsStore = useSettingsStore()
 const route      = useRoute()
 const router     = useRouter()
 const { t }      = useI18n({ useScope: 'global' })
@@ -147,7 +184,13 @@ const { t }      = useI18n({ useScope: 'global' })
 // ── Composer ──────────────────────────────────────────────────────────────────
 const composerText = ref('')
 const isPublic     = ref(true)
+const aiAnalysisEnabled = ref(true)
 const isPosting    = ref(false)
+const searchTab = ref<'posts' | 'users'>('posts')
+const userSearchResults = ref<ApiUser[]>([])
+const isSearchingUsers = ref(false)
+const userSearchError = ref(false)
+let userSearchRequest = 0
 
 watch(
   () => authStore.myUser?.defaultPrivacy,
@@ -158,21 +201,18 @@ watch(
 )
 
 const currentUser     = computed(() => authStore.myUser)
-const currentInitials = computed(() =>
-  currentUser.value ? getInitials(currentUser.value.display_name) : '?'
-)
-const currentAvatarBg = computed(() =>
-  currentUser.value ? getAvatarBg(currentUser.value._id) : '#262626'
-)
 
 async function handlePost(): Promise<void> {
   if (!composerText.value.trim() || isPosting.value) return
   isPosting.value = true
   try {
-    await dreamStore.addDream(composerText.value, isPublic.value, '')
+    await dreamStore.addDream(composerText.value, isPublic.value, '', aiAnalysisEnabled.value)
     composerText.value = ''
     isPublic.value     = authStore.myUser?.defaultPrivacy !== 'private'
-  } catch { /* silently ignore for now */ }
+    aiAnalysisEnabled.value = true
+  } catch {
+    settingsStore.showToast(t('home.postFailed'), 'error')
+  }
   finally { isPosting.value = false }
 }
 
@@ -197,20 +237,76 @@ function resolveUser(dream: ApiDream): ApiUser {
   }
 }
 
-const dreamsWithUsers = computed(() =>
-  dreamStore.dreams.map(dream => ({ dream, user: resolveUser(dream) }))
+type PresentedDreamSearchItem = DreamSearchItem & { user: ApiUser }
+
+const isSearchMode = computed(() =>
+  Boolean(dreamStore.searchQuery.trim() || dreamStore.searchMood)
+)
+const feedItems = computed<PresentedDreamSearchItem[]>(() =>
+  dreamStore.dreams.map(dream => ({
+    dream,
+    user: resolveUser(dream),
+    dreamRanges: [],
+    matchedComments: [],
+    matchedCommentCount: 0,
+  }))
+)
+const displayedItems = computed<PresentedDreamSearchItem[]>(() =>
+  isSearchMode.value
+    ? dreamStore.searchResults.map(item => ({ ...item, user: resolveUser(item.dream) }))
+    : feedItems.value
+)
+const isInitialLoading = computed(() =>
+  isSearchMode.value ? dreamStore.isSearching && !dreamStore.searchResults.length : dreamStore.isLoading
+)
+const isLoadingMoreResults = computed(() =>
+  isSearchMode.value ? dreamStore.isSearchLoadingMore : dreamStore.isLoadingMore
+)
+const hasMoreResults = computed(() =>
+  isSearchMode.value ? Boolean(dreamStore.searchNextCursor) : dreamStore.hasMore
 )
 
-const filteredDreams = computed(() => {
-  const q = dreamStore.searchQuery.trim().toLowerCase()
-  if (!q) return dreamsWithUsers.value
-  return dreamsWithUsers.value.filter(({ dream, user }) =>
-    dream.content.toLowerCase().includes(q) ||
-    user.display_name.toLowerCase().includes(q) ||
-    user.username.toLowerCase().includes(q) ||
-    dream.mood_tag.toLowerCase().includes(q)
-  )
-})
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  [() => dreamStore.searchQuery, () => dreamStore.searchMood, searchTab],
+  () => {
+    dreamStore.prepareSearchCriteriaChange()
+    if (searchTimer) clearTimeout(searchTimer)
+    if (searchTab.value === 'users') {
+      void searchUsers()
+      return
+    }
+    searchTimer = setTimeout(() => {
+      void dreamStore.searchDreams()
+    }, 300)
+  },
+)
+
+async function searchUsers(): Promise<void> {
+  const query = dreamStore.searchQuery.trim()
+  const requestId = ++userSearchRequest
+  if (!query) {
+    userSearchResults.value = []
+    userSearchError.value = false
+    isSearchingUsers.value = false
+    return
+  }
+  isSearchingUsers.value = true
+  userSearchError.value = false
+  try {
+    const { data } = await apiClient.post<{ success: boolean; data: ApiUser[] }>(
+      '/conversations/search',
+      { username: query },
+    )
+    if (requestId === userSearchRequest) {
+      userSearchResults.value = data.data ?? []
+    }
+  } catch {
+    if (requestId === userSearchRequest) userSearchError.value = true
+  } finally {
+    if (requestId === userSearchRequest) isSearchingUsers.value = false
+  }
+}
 
 // ── Infinite Scroll via IntersectionObserver ──────────────────────────────────
 const sentinel = ref<HTMLElement | null>(null)
@@ -220,9 +316,14 @@ function setupObserver() {
   if (!sentinel.value) return
   observer = new IntersectionObserver(
     ([entry]) => {
-      if (entry.isIntersecting && dreamStore.hasMore && !dreamStore.isLoadingMore) {
-        dreamStore.loadMore()
+      if (!entry.isIntersecting) return
+      if (isSearchMode.value) {
+        if (dreamStore.searchNextCursor && !dreamStore.isSearchLoadingMore) {
+          void dreamStore.loadMoreSearchResults()
+        }
+        return
       }
+      if (dreamStore.hasMore && !dreamStore.isLoadingMore) void dreamStore.loadMore()
     },
     { threshold: 0.1 }
   )
@@ -232,12 +333,14 @@ function setupObserver() {
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await dreamStore.loadFeed()
+  if (isSearchMode.value) await dreamStore.searchDreams()
   // Set up observer after feed loads so sentinel is rendered
   setupObserver()
 })
 
 onUnmounted(() => {
   observer?.disconnect()
+  if (searchTimer) clearTimeout(searchTimer)
 })
 
 // Re-attach observer if it wasn't set up on initial load (rare edge case)
@@ -263,6 +366,7 @@ watch(
     }
   }
 )
+
 </script>
 
 <style scoped>
@@ -276,84 +380,8 @@ watch(
   width: 100%;
 }
 
-/* ══════════════════════════════════════════
-   COMPOSER
-═══════════════════════════════════════════ */
-.composer {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-4) 0 var(--space-3);
-}
-
-.composer__avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
-  color: #fff;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.composer__body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.composer__textarea {
-  width: 100%;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-input);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--font-size-base);
-  color: var(--color-text-primary);
-  line-height: var(--line-height-relaxed);
-  resize: none;
-  transition: border-color var(--transition-fast);
-  font-family: var(--font-family-base);
-}
-.composer__textarea::placeholder { color: var(--color-text-muted); }
-.composer__textarea:focus {
-  border-color: #4a4a4a;
-  outline: none;
-}
-.composer__footer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.composer__visibility {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-}
-.composer__visibility:hover {
-  background: var(--color-bg-hover);
-  border-color: #3a3a3a;
-  color: var(--color-text-primary);
-}
-.composer__visibility--private {
-  border-color: #3a3a3a;
-  color: var(--color-text-secondary);
+.search-context {
+  display: block;
 }
 
 /* ══════════════════════════════════════════
@@ -382,6 +410,90 @@ watch(
 .search-results-label__query {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+}
+.search-tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.search-tabs__tab {
+  position: relative;
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.search-tabs__tab::after {
+  content: '';
+  position: absolute;
+  right: var(--space-3);
+  bottom: -1px;
+  left: var(--space-3);
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+.search-tabs__tab:hover,
+.search-tabs__tab--active { color: var(--color-text-primary); }
+.search-tabs__tab--active::after { background: var(--color-primary); }
+.user-search-results {
+  padding-bottom: var(--space-16);
+}
+.user-search-results__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.user-search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+}
+.user-search-row:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+  transform: translateY(-1px);
+}
+.user-search-row__info {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.user-search-row__info strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-search-row__info span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+.user-search-row__info small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-search-row__arrow {
+  color: var(--color-text-muted);
+  font-size: 1.35rem;
 }
 
 /* ══════════════════════════════════════════
@@ -431,6 +543,37 @@ watch(
 
 /* Responsive */
 @media (max-width: 600px) {
-  .home-view { max-width: 100%; }
+  .home-view {
+    max-width: 100%;
+  }
+
+  .home-divider {
+    margin-bottom: 12px;
+  }
+
+  .search-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .search-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .search-tabs__tab {
+    min-height: 44px;
+    flex: 1 0 auto;
+    padding: 10px 16px;
+  }
+
+  .user-search-row {
+    min-height: 64px;
+    padding: 10px 12px;
+  }
+
+  .dream-feed {
+    gap: 12px;
+    padding-bottom: 24px;
+  }
 }
 </style>

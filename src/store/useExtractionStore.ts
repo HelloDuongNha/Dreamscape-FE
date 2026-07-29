@@ -1,9 +1,64 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { cancelRuleV3Extraction, getRuleV3ExtractionProgress, startRuleV3Extraction } from '@/api/ruleCandidateApi'
+import type { RuleV3ExtractionRun } from '@/api/ruleCandidateApi'
+import { estimateRuleDurationSeconds } from '@/features/library/services/ruleExtractionTiming.service'
 import { useAcademicJobQueueStore } from './useAcademicJobQueueStore'
 
 const EXTRACTION_TASK_KEY = 'dreamscape:pinned-task:rule-extraction:v1'
+const DEFAULT_SECONDS_PER_BATCH = 12
+
+type ExtractionStatus = 'pending' | 'success' | 'stopped' | 'failed' | 'none'
+type ExtractionStage =
+  | 'queued'
+  | 'initializing'
+  | 'extracting_candidates'
+  | 'saving_candidates'
+  | 'merging_candidates'
+  | 'completed'
+
+interface StartedExtraction {
+  runId: string
+  status: 'pending' | 'success'
+}
+
+interface ApprovalTrackingResponse {
+  data?: {
+    academicSource?: {
+      _id?: string
+      title?: string
+    }
+    ruleExtraction?: StartedExtraction | {
+      status: 'failed'
+      errorCode?: string
+    }
+  }
+}
+
+function readApiErrorCode(error: unknown, fallback: string): string {
+  if (!error || typeof error !== 'object') return fallback
+  const response = 'response' in error ? error.response : undefined
+  if (!response || typeof response !== 'object' || !('data' in response)) return fallback
+  const data = response.data
+  if (!data || typeof data !== 'object' || !('errorCode' in data)) return fallback
+  return typeof data.errorCode === 'string' && data.errorCode ? data.errorCode : fallback
+}
+
+function hasHttpStatus(error: unknown, expectedStatus: number): boolean {
+  if (!error || typeof error !== 'object' || !('response' in error)) return false
+  const response = error.response
+  return Boolean(response && typeof response === 'object' && 'status' in response
+    && response.status === expectedStatus)
+}
+
+function normalizeExtractionStage(stage: RuleV3ExtractionRun['currentStage']): ExtractionStage {
+  if (stage === 'queued') return 'queued'
+  if (stage === 'extracting_candidates') return 'extracting_candidates'
+  if (stage === 'saving_candidates') return 'saving_candidates'
+  if (stage === 'merging_candidates') return 'merging_candidates'
+  if (stage === 'completed') return 'completed'
+  return 'initializing'
+}
 
 export const useExtractionStore = defineStore('extraction', () => {
   const sourceId = ref<string | null>(null)
@@ -11,21 +66,15 @@ export const useExtractionStore = defineStore('extraction', () => {
   const isDialogVisible = ref(false)
   const isPinnedVisible = ref(false)
   const progress = ref(0)
-  const status = ref<'pending' | 'success' | 'stopped' | 'failed' | 'none'>('none')
+  const status = ref<ExtractionStatus>('none')
   const outcome = ref<string | null>(null)
   const createdCount = ref(0)
   const mergedCount = ref(0)
   const rejectedCount = ref(0)
   const verifiedCount = ref(0)
-  const errorMessage = ref('')
-  const stepText = ref('Đang khởi tạo...')
-  const reasonCode = ref<string | null>(null)
-  const message = ref<string>('')
-  const stageDetail = ref('Đang đọc cấu trúc tài liệu và chuẩn bị phạm vi bằng chứng.')
   const elapsedSeconds = ref(0)
   const estimatedRemainingSeconds = ref<number | null>(null)
-  const processedLabel = ref('')
-  const currentStage = ref<'initializing' | 'extracting_candidates' | 'saving_candidates' | 'completed'>('initializing')
+  const currentStage = ref<ExtractionStage>('initializing')
   const totalBatches = ref(0)
   const processedBatches = ref(0)
   const rawCandidateCount = ref(0)
@@ -40,7 +89,40 @@ export const useExtractionStore = defineStore('extraction', () => {
   let etaAnchorAt = 0
   let etaAnchorSeconds: number | null = null
   let etaExpectedTotalSeconds: number | null = null
-  let plannedDurationSeconds: number | null = null
+  let plannedSecondsPerBatch = DEFAULT_SECONDS_PER_BATCH
+
+  function beginTracking(
+    id: string,
+    title: string,
+    showDialog: boolean,
+    secondsPerBatch = DEFAULT_SECONDS_PER_BATCH,
+  ) {
+    stopTracking()
+    sourceId.value = id
+    sourceTitle.value = title
+    isDialogVisible.value = showDialog
+    isPinnedVisible.value = !showDialog
+    progress.value = 0
+    status.value = 'pending'
+    outcome.value = null
+    createdCount.value = 0
+    mergedCount.value = 0
+    rejectedCount.value = 0
+    verifiedCount.value = 0
+    estimatedRemainingSeconds.value = null
+    etaAnchorSeconds = null
+    etaExpectedTotalSeconds = null
+    plannedSecondsPerBatch = Number.isFinite(secondsPerBatch) && secondsPerBatch > 0
+      ? secondsPerBatch
+      : DEFAULT_SECONDS_PER_BATCH
+    currentStage.value = 'initializing'
+    totalBatches.value = 0
+    processedBatches.value = 0
+    rawCandidateCount.value = 0
+    verifiedCandidateCount.value = 0
+    timingDeltaSeconds.value = null
+    startClock()
+  }
 
   function startClock(startedAt = Date.now()) {
     if (clockInterval) clearInterval(clockInterval)
@@ -66,7 +148,6 @@ export const useExtractionStore = defineStore('extraction', () => {
       startedAt: localStartedAt,
       progress: progress.value,
       status: status.value,
-      stepText: stepText.value,
       expiresAt: expiresAt || null,
     }))
   }
@@ -84,12 +165,11 @@ export const useExtractionStore = defineStore('extraction', () => {
       currentRunId.value = saved.runId
       progress.value = Number(saved.progress) || 0
       status.value = saved.status || 'pending'
-      stepText.value = saved.stepText || 'Đang khôi phục trạng thái…'
       isDialogVisible.value = false
       isPinnedVisible.value = true
       if (status.value === 'pending') {
         startClock(Number(saved.startedAt) || Date.now())
-        await pollRuleV3Run(saved.runId, false)
+        await pollRuleV3Run(saved.runId)
       } else if (saved.expiresAt) {
         scheduleTerminalDismiss(saved.expiresAt - Date.now())
       }
@@ -110,37 +190,14 @@ export const useExtractionStore = defineStore('extraction', () => {
     etaExpectedTotalSeconds = seconds === null ? null : elapsedSeconds.value + seconds
   }
 
-  async function runExtraction(id: string, title: string, promotedFromQueue = false, replaceExisting = false, baselineTotalSeconds: number | null = null) {
-    stopTracking()
-
-    sourceId.value = id
-    sourceTitle.value = title
-    isDialogVisible.value = !promotedFromQueue
-    isPinnedVisible.value = promotedFromQueue
-    progress.value = 0
-    status.value = 'pending'
-    outcome.value = null
-    createdCount.value = 0
-    mergedCount.value = 0
-    rejectedCount.value = 0
-    verifiedCount.value = 0
-    errorMessage.value = ''
-    reasonCode.value = null
-    message.value = ''
-    stepText.value = 'Đang khởi tạo tài liệu…'
-    stageDetail.value = 'Đang đọc cấu trúc section, ngôn ngữ và loại hình nghiên cứu.'
-    estimatedRemainingSeconds.value = null
-    etaAnchorSeconds = null
-    etaExpectedTotalSeconds = null
-    plannedDurationSeconds = baselineTotalSeconds && baselineTotalSeconds > 0 ? baselineTotalSeconds : null
-    processedLabel.value = ''
-    currentStage.value = 'initializing'
-    totalBatches.value = 0
-    processedBatches.value = 0
-    rawCandidateCount.value = 0
-    verifiedCandidateCount.value = 0
-    timingDeltaSeconds.value = null
-    startClock()
+  async function runExtraction(
+    id: string,
+    title: string,
+    promotedFromQueue = false,
+    replaceExisting = false,
+    secondsPerBatch = DEFAULT_SECONDS_PER_BATCH,
+  ) {
+    beginTracking(id, title, !promotedFromQueue, secondsPerBatch)
 
     try {
       const started = await startRuleV3Extraction(id, replaceExisting)
@@ -148,105 +205,196 @@ export const useExtractionStore = defineStore('extraction', () => {
       persistTask()
       if (started.data.status === 'success') {
         const existing = await getRuleV3ExtractionProgress(started.data.runId)
-        completeFromRun(existing.data, true, replaceExisting)
+        completeFromRun(existing.data, true)
         return
       }
-      await pollRuleV3Run(started.data.runId, replaceExisting)
-    } catch (err: any) {
-      const backendData = err.response?.data
-      handleFailure(
-        backendData?.message || err.message || 'Lỗi khi phân tích Rule V3.',
-        backendData?.errorCode || 'failed_system_error'
-      )
+      await pollRuleV3Run(started.data.runId)
+    } catch (error: unknown) {
+      handleFailure(readApiErrorCode(error, 'failed_system_error'))
     }
   }
 
-  function startExtraction(id: string, title: string, replaceExisting = false, baselineTotalSeconds: number | null = null) {
+  function startExtraction(
+    id: string,
+    title: string,
+    replaceExisting = false,
+    secondsPerBatch = DEFAULT_SECONDS_PER_BATCH,
+  ) {
     return useAcademicJobQueueStore().enqueue({
       sourceId: id,
       title,
       kind: 'rules',
-      run: ({ promotedFromQueue }) => runExtraction(id, title, promotedFromQueue, replaceExisting, baselineTotalSeconds),
+      run: ({ promotedFromQueue }) => runExtraction(id, title, promotedFromQueue, replaceExisting, secondsPerBatch),
     })
   }
 
-  async function pollRuleV3Run(runId: string, replaceExisting: boolean) {
+  function trackAutomaticExtraction(
+    id: string,
+    title: string,
+    started: StartedExtraction,
+  ) {
+    return useAcademicJobQueueStore().enqueue({
+      sourceId: id,
+      title,
+      kind: 'rules',
+      run: async () => {
+        beginTracking(id, title, false)
+        try {
+          await observeAutomaticRun(id, started)
+        } catch (error: unknown) {
+          handleFailure(readApiErrorCode(error, 'failed_system_error'))
+          throw error
+        }
+      },
+    })
+  }
+
+  async function observeAutomaticRun(
+    id: string,
+    started: StartedExtraction,
+  ): Promise<void> {
+    try {
+      await observeStartedRun(started)
+    } catch (error: unknown) {
+      if (!hasHttpStatus(error, 404)) throw error
+      const restarted = await startRuleV3Extraction(id, false)
+      await observeStartedRun(restarted.data)
+    }
+  }
+
+  async function observeStartedRun(started: StartedExtraction): Promise<void> {
+    currentRunId.value = started.runId
+    persistTask()
+    if (started.status === 'success') {
+      const existing = await getRuleV3ExtractionProgress(started.runId)
+      completeFromRun(existing.data, true)
+      return
+    }
+    await pollRuleV3Run(started.runId)
+  }
+
+  function trackApprovalResult(
+    response: ApprovalTrackingResponse,
+    fallbackTitle: string,
+  ): boolean {
+    const approvedSource = response?.data?.academicSource
+    const automaticRun = response?.data?.ruleExtraction
+    if (!approvedSource?._id || !automaticRun) return false
+    const title = approvedSource.title || fallbackTitle
+    const task = automaticRun.status === 'failed'
+      ? trackAutomaticFailure(approvedSource._id, title, automaticRun.errorCode)
+      : trackAutomaticExtraction(approvedSource._id, title, automaticRun)
+    void task.catch(() => undefined)
+    return true
+  }
+
+  function trackAutomaticFailure(id: string, title: string, errorCode?: string) {
+    return useAcademicJobQueueStore().enqueue({
+      sourceId: id,
+      title,
+      kind: 'rules',
+      run: async () => {
+        beginTracking(id, title, false)
+        handleFailure(errorCode || 'automatic_start_failed')
+        throw new Error(errorCode || 'automatic_start_failed')
+      },
+    })
+  }
+
+  async function pollRuleV3Run(runId: string) {
     while (true) {
       await new Promise(resolve => window.setTimeout(resolve, 1500))
       if (status.value !== 'pending') return
-      const response = await getRuleV3ExtractionProgress(runId)
-      const run = response.data
-      const total = Math.max(0, run.totalBatches || 0)
-      const processed = Math.max(0, run.processedBatches || 0)
-      currentStage.value = run.currentStage === 'saving_candidates' ? 'saving_candidates'
-        : run.currentStage === 'extracting_candidates' ? 'extracting_candidates' : 'initializing'
-      totalBatches.value = total
-      processedBatches.value = processed
-      rawCandidateCount.value = Math.max(0, run.rawCandidateCount || 0)
-      verifiedCandidateCount.value = Math.max(0, run.verifiedCandidateCount || 0)
+      const { data: run } = await getRuleV3ExtractionProgress(runId)
+      syncRunProgress(run)
+      applyStageProgress(run)
       persistTask()
-
-      if (run.currentStage === 'initializing') {
-        progress.value = 5
-        stepText.value = 'Đang lập kế hoạch phân tích Rule V3…'
-        stageDetail.value = 'Đang xác định loại tài liệu, section mục tiêu và các lô bằng chứng.'
-      } else if (run.currentStage === 'extracting_candidates') {
-        const ratio = total > 0 ? processed / total : 0
-        progress.value = 10 + Math.round(ratio * 80)
-        stepText.value = `Đang trích xuất và kiểm tra trích dẫn… (${processed}/${total})`
-        processedLabel.value = total > 0 ? `${processed}/${total} lô bằng chứng` : ''
-        stageDetail.value = `Đã nhận ${run.rawCandidateCount} kết luận thô; giữ ${run.verifiedCandidateCount} lập luận có dẫn chứng hợp lệ.`
-        // Freeze one honest schedule for the entire run. A completed run for
-        // this exact source becomes the next run's baseline; first runs use a
-        // conservative per-batch estimate. Progress observations never make
-        // the countdown jump around.
-        if (etaAnchorSeconds === null && total > 0) {
-          setEtaAnchor(plannedDurationSeconds !== null
-            ? Math.max(1, plannedDurationSeconds - elapsedSeconds.value)
-            : total * 32 + 8)
-        }
-      } else if (run.currentStage === 'saving_candidates') {
-        progress.value = 95
-        stepText.value = 'Đang gộp lập luận và lưu bằng chứng…'
-        stageDetail.value = replaceExisting
-          ? 'Bộ kết quả cũ chỉ được thay khi toàn bộ lập luận đã kiểm chứng lưu thành công.'
-          : 'Lập luận không đáp ứng hợp đồng lưu trữ sẽ bị loại và ghi rõ lý do.'
-        if (etaAnchorSeconds === null) {
-          setEtaAnchor(plannedDurationSeconds !== null
-            ? Math.max(1, plannedDurationSeconds - elapsedSeconds.value)
-            : 8)
-        }
-      }
-
-      if (run.status === 'success') {
-        completeFromRun(run, false, replaceExisting)
-        return
-      }
-      if (run.status === 'failed') {
-        const code = run.sanitizedErrorCode || 'failed_system_error'
-        const safeFailureMessages: Record<string, string> = {
-          all_verified_candidates_rejected: 'Các lập luận có dẫn chứng hợp lệ nhưng không lập luận nào vượt qua hợp đồng lưu trữ. Hệ thống không ghi dữ liệu rỗng.',
-          replacement_persistence_incomplete: 'Bộ lập luận thay thế lưu không đầy đủ. Hệ thống đã khôi phục nguyên trạng các lập luận trước lần chạy này.',
-          provider_unavailable: 'Mô hình trích xuất hiện không khả dụng.',
-          provider_timeout: 'Mô hình trích xuất phản hồi quá thời gian cho phép.',
-          provider_schema_invalid: 'Mô hình trả về dữ liệu không đúng cấu trúc Rule V3.',
-          input_too_large: 'Lô văn bản vượt quá giới hạn xử lý an toàn.'
-        }
-        handleFailure(safeFailureMessages[code] || 'Phân tích Rule V3 thất bại.', code)
-        return
-      }
-      if (run.status === 'cancelled') {
-        handleCancelled()
-        return
-      }
+      if (handleTerminalRun(run)) return
     }
+  }
+
+  function syncRunProgress(run: RuleV3ExtractionRun) {
+    currentStage.value = normalizeExtractionStage(run.currentStage)
+    totalBatches.value = Math.max(0, run.totalBatches || 0)
+    processedBatches.value = Math.max(0, run.processedBatches || 0)
+    rawCandidateCount.value = Math.max(0, run.rawCandidateCount || 0)
+    verifiedCandidateCount.value = Math.max(0, run.verifiedCandidateCount || 0)
+  }
+
+  function applyStageProgress(run: RuleV3ExtractionRun) {
+    if (run.currentStage === 'queued') {
+      applyQueuedProgress(run)
+      return
+    }
+    if (run.currentStage === 'initializing') {
+      applyInitializingProgress()
+      return
+    }
+    if (run.currentStage === 'extracting_candidates') {
+      applyExtractionProgress()
+      return
+    }
+    if (run.currentStage === 'saving_candidates') {
+      applySavingProgress()
+      return
+    }
+    if (run.currentStage === 'merging_candidates') {
+      progress.value = 98
+    }
+  }
+
+  function applyQueuedProgress(run: RuleV3ExtractionRun) {
+    const position = Math.max(1, Number(run.queuePosition) || 1)
+    progress.value = 0
+    if (etaAnchorSeconds !== null || totalBatches.value <= 0) return
+    setEtaAnchor(
+      estimateRuleDurationSeconds(totalBatches.value, plannedSecondsPerBatch) * (position + 1),
+    )
+  }
+
+  function applyInitializingProgress() {
+    progress.value = 5
+    if (etaAnchorSeconds !== null || totalBatches.value <= 0) return
+    setEtaAnchor(estimateRuleDurationSeconds(totalBatches.value, plannedSecondsPerBatch))
+  }
+
+  function applyExtractionProgress() {
+    const ratio = totalBatches.value > 0
+      ? processedBatches.value / totalBatches.value
+      : 0
+    progress.value = 10 + Math.round(ratio * 80)
+    if (etaAnchorSeconds !== null || totalBatches.value <= 0) return
+    setEtaAnchor(Math.max(
+      1,
+      estimateRuleDurationSeconds(totalBatches.value, plannedSecondsPerBatch) - elapsedSeconds.value,
+    ))
+  }
+
+  function applySavingProgress() {
+    progress.value = 94
+    if (etaAnchorSeconds !== null) return
+    setEtaAnchor(Math.max(1, 8 - elapsedSeconds.value))
+  }
+
+  function handleTerminalRun(run: RuleV3ExtractionRun): boolean {
+    if (run.status === 'success') {
+      completeFromRun(run, false)
+      return true
+    }
+    if (run.status === 'failed') {
+      handleFailure(run.sanitizedErrorCode || 'failed_system_error')
+      return true
+    }
+    if (run.status === 'cancelled') {
+      handleCancelled()
+      return true
+    }
+    return false
   }
 
   function handleCancelled() {
     status.value = 'stopped'
     outcome.value = 'user_cancelled'
-    stepText.value = 'Đã hủy phân tích.'
-    stageDetail.value = 'Không có lập luận chưa hoàn tất nào được lưu.'
     isDialogVisible.value = false
     isPinnedVisible.value = true
     stopClock()
@@ -265,14 +413,7 @@ export const useExtractionStore = defineStore('extraction', () => {
     }
   }
 
-  function completeFromRun(run: {
-    savedCandidateCount: number
-    mergedCandidateCount: number
-    rejectedCandidateCount: number
-    verifiedCandidateCount: number
-    resultRuleIds: string[]
-    rejectionDiagnostics?: Array<{ reasonCode: string; safeMessage: string }>
-  }, reused: boolean, replacementRequested: boolean) {
+  function completeFromRun(run: RuleV3ExtractionRun, reused: boolean) {
     const saved = Math.max(0, run.savedCandidateCount || 0)
     const merged = Math.max(0, run.mergedCandidateCount || 0)
     const rejected = Math.max(0, run.rejectedCandidateCount || 0)
@@ -283,41 +424,26 @@ export const useExtractionStore = defineStore('extraction', () => {
     verifiedCount.value = verified
 
     if (saved > 0) {
-      handleSuccess(saved, 'success_with_new_candidates', `Đã tạo ${saved} lập luận mới${merged > 0 ? ` và bổ sung bằng chứng vào ${merged} lập luận tương tự` : ''}.`)
+      handleSuccess(saved, 'success_with_new_candidates')
     } else if (resultCount > 0 || merged > 0) {
-      handleSuccess(0, 'success_with_existing_candidates', reused
-        ? `Kết quả đã có sẵn: ${resultCount} lập luận từ đúng bản đọc và cấu hình mô hình này.`
-        : `Không tạo bản trùng; đã bổ sung bằng chứng vào ${Math.max(merged, resultCount)} lập luận hiện có.`)
+      handleSuccess(0, reused
+        ? 'success_reused_candidates'
+        : 'success_with_existing_candidates')
     } else if (verified === 0) {
-      const reasonCounts = new Map<string, { message: string; count: number }>()
-      for (const item of run.rejectionDiagnostics || []) {
-        const current = reasonCounts.get(item.reasonCode)
-        reasonCounts.set(item.reasonCode, { message: item.safeMessage, count: (current?.count || 0) + 1 })
-      }
-      const reasonSummary = [...reasonCounts.values()]
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 3)
-        .map(item => `${item.count}× ${item.message}`)
-        .join(' ')
       handleSuccess(
         0,
         'success_no_verified_candidates',
-        `Không có lập luận nào vượt qua kiểm chứng dẫn chứng. Đã loại ${rejected} đề xuất.${reasonSummary ? ` Lý do chính: ${reasonSummary}` : ''}${replacementRequested ? ' Kết quả Rule V3 cũ được giữ nguyên.' : ''}`
       )
     } else {
-      handleFailure('Có lập luận đã kiểm chứng nhưng không lập luận nào lưu được.', 'all_verified_candidates_rejected')
+      handleFailure('all_verified_candidates_rejected')
     }
   }
 
-  function handleSuccess(count: number, outcomeVal: string, msgText: string) {
+  function handleSuccess(count: number, outcomeVal: string) {
     progress.value = 100
     status.value = 'success'
     outcome.value = outcomeVal
     createdCount.value = count
-    message.value = msgText
-    stepText.value = outcomeVal === 'success_no_verified_candidates'
-      ? 'Không có lập luận đạt kiểm chứng'
-      : 'Hoàn tất phân tích!'
     currentStage.value = 'completed'
     timingDeltaSeconds.value = etaExpectedTotalSeconds === null
       ? null
@@ -329,12 +455,10 @@ export const useExtractionStore = defineStore('extraction', () => {
     persistTask(Date.now() + 3000)
   }
 
-  function handleFailure(msg: string, outcomeVal: string = 'failed_system_error') {
+  function handleFailure(outcomeVal: string = 'failed_system_error') {
     progress.value = 0
     status.value = 'failed'
     outcome.value = outcomeVal
-    errorMessage.value = msg
-    stepText.value = 'Phân tích thất bại.'
     isDialogVisible.value = false
     isPinnedVisible.value = true
     stopClock()
@@ -375,16 +499,10 @@ export const useExtractionStore = defineStore('extraction', () => {
     mergedCount.value = 0
     rejectedCount.value = 0
     verifiedCount.value = 0
-    errorMessage.value = ''
-    reasonCode.value = null
-    message.value = ''
-    stepText.value = ''
-    stageDetail.value = ''
     elapsedSeconds.value = 0
     estimatedRemainingSeconds.value = null
     etaAnchorSeconds = null
     etaExpectedTotalSeconds = null
-    processedLabel.value = ''
     currentStage.value = 'initializing'
     totalBatches.value = 0
     processedBatches.value = 0
@@ -422,14 +540,8 @@ export const useExtractionStore = defineStore('extraction', () => {
     mergedCount,
     rejectedCount,
     verifiedCount,
-    errorMessage,
-    stepText,
-    reasonCode,
-    message,
-    stageDetail,
     elapsedSeconds,
     estimatedRemainingSeconds,
-    processedLabel,
     currentStage,
     totalBatches,
     processedBatches,
@@ -438,6 +550,8 @@ export const useExtractionStore = defineStore('extraction', () => {
     timingDeltaSeconds,
     isCancelling,
     startExtraction,
+    trackAutomaticExtraction,
+    trackApprovalResult,
     stopTracking,
     dismissPinned,
     minimizeDialog,

@@ -41,6 +41,7 @@
               :remaining-text="remainingText"
               :timing-delta-seconds="timingDeltaSeconds"
               :completed="completed"
+              :hide-elapsed="hideElapsed"
             />
 
             <ol class="long-task-stages" :aria-label="stepsAriaLabel">
@@ -54,7 +55,12 @@
                 }"
               >
                 <span class="long-task-stages__marker" aria-hidden="true">
-                  {{ stage.state === 'done' || index < currentStageIndex ? '✓' : index + 1 }}
+                  <AppIcon
+                    v-if="stage.state === 'done' || index < currentStageIndex"
+                    name="check"
+                    :size="12"
+                  />
+                  <template v-else>{{ index + 1 }}</template>
                 </span>
                 <div>
                   <strong>{{ stage.label }}</strong>
@@ -110,6 +116,7 @@
 import { ref, watch } from 'vue'
 import AppButton from './AppButton.vue'
 import AppConfirm from './AppConfirm.vue'
+import AppIcon from './AppIcon.vue'
 import PipelineProgressPanel from './PipelineProgressPanel.vue'
 
 export interface LongRunningTaskStage {
@@ -140,6 +147,7 @@ const props = withDefaults(defineProps<{
   remainingText?: string
   timingDeltaSeconds?: number | null
   completed?: boolean
+  hideElapsed?: boolean
   cancelable?: boolean
   cancelLoading?: boolean
   cancelLabel: string
@@ -156,6 +164,7 @@ const props = withDefaults(defineProps<{
   remainingText: '',
   timingDeltaSeconds: null,
   completed: false,
+  hideElapsed: false,
   cancelable: false,
   cancelLoading: false,
 })

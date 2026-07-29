@@ -8,7 +8,7 @@
       </div>
       <p class="oracle-compact__summary">{{ analysis.summary }}</p>
       <div class="oracle-compact__footer">
-        <span class="oracle-compact__hint">Xem phân tích trong chi tiết</span>
+        <span class="oracle-compact__hint">{{ t('oracle.dreamAnalysisCompactHint') }}</span>
       </div>
     </div>
 
@@ -16,67 +16,52 @@
     <div v-else-if="activeMode === 'collapsed' && !isExpanded" class="oracle-collapsed" @click="isExpanded = true">
       <div class="oracle-collapsed__header">
         <span class="oracle-collapsed__icon" aria-hidden="true">◈</span>
-        <h4 class="oracle-collapsed__title">Oracle AI phân tích</h4>
+        <h4 class="oracle-collapsed__title">{{ t('oracle.dreamAnalysisTitle') }}</h4>
       </div>
       <p class="oracle-collapsed__summary">{{ analysis.summary }}</p>
       <div class="oracle-collapsed__footer">
         <button class="oracle-toggle-btn" @click.stop="isExpanded = true">
-          Xem phân tích AI <span class="arrow">↓</span>
+          {{ t('oracle.dreamAnalysisExpand') }} <span class="arrow">↓</span>
         </button>
       </div>
     </div>
 
     <!-- ── FULL MODE or EXPANDED COLLAPSED MODE ── -->
     <div v-else class="oracle-full">
-      <section v-if="analysis.real_life_hypotheses?.length" class="oracle-verification-panel">
+      <section v-if="verificationQuestions.length" class="oracle-verification-panel">
         <div class="oracle-verification-panel__intro">
-          <span>Cần bạn xác nhận</span>
-          <p>Các câu hỏi ngắn giúp phân biệt điều đang xảy ra ngoài đời với một tình huống chỉ xuất hiện trong giấc mơ.</p>
+          <span>{{ t('oracle.dreamVerificationTitle') }}</span>
+          <p>{{ t('oracle.dreamVerificationDescription') }}</p>
         </div>
-        <article v-for="(item, idx) in visibleHypotheses" :key="questionKey(item, idx)" class="oracle-verification-card">
-          <span v-if="item.questionType" class="oracle-feedback__timeframe">{{ formatQuestionType(item) }}</span>
-          <p class="oracle-verification-card__question">{{ item.followUpQuestion }}</p>
-          <p v-if="item.reasonForAsking" class="oracle-verification-card__reason">{{ item.reasonForAsking }}</p>
-          <div v-if="item.sources?.length" class="oracle-item__sources oracle-item__sources--inline">
-            <span v-for="(src, srcIdx) in item.sources" :key="srcIdx" class="source-citation-wrap">
-              <span v-if="srcIdx === 0">Căn cứ: </span><span v-else class="source-separator">; </span>
-              <button type="button" class="source-citation-link" @click="navigateToSource(src.sourceId)">
-                {{ formatInlineCitation(src) }}
+        <article v-for="entry in verificationQuestions" :key="questionKey(entry.item, entry.hypothesisIndex)" class="oracle-verification-card">
+          <span v-if="entry.item.questionType" class="oracle-feedback__timeframe">{{ formatQuestionType(entry.item) }}</span>
+          <p class="oracle-verification-card__question">{{ localizedText(entry.item.localizedFollowUpQuestion, entry.item.followUpQuestion) }}</p>
+          <p v-if="localizedText(entry.item.localizedReasonForAsking, entry.item.reasonForAsking)" class="oracle-verification-card__reason">{{ localizedText(entry.item.localizedReasonForAsking, entry.item.reasonForAsking) }}</p>
+          <div v-if="entry.item.sources?.length" class="oracle-item__sources oracle-item__sources--inline">
+            <span v-for="(src, srcIdx) in entry.item.sources" :key="srcIdx" class="source-citation-wrap">
+              <span v-if="srcIdx === 0">{{ t('oracle.dreamVerificationBasis') }}: </span><span v-else class="source-separator">; </span>
+              <button type="button" class="source-citation-link" @click="openCitationBySource(src.sourceId)">
+                {{ sourceMarker(src.sourceId) }} {{ formatInlineCitation(src) }}
               </button>
             </span>
           </div>
           <div v-if="showHypothesisActions" class="oracle-feedback__actions">
             <AppFeedbackChoiceGroup
-              :model-value="(feedbackSelections[questionKey(item, idx)] as 'yes' | 'no' | 'unsure' | undefined)"
-              @update:model-value="selectFeedback(idx, $event)"
+              :model-value="(feedbackSelections[questionKey(entry.item, entry.hypothesisIndex)] as 'yes' | 'no' | 'unsure' | undefined)"
+              @update:model-value="selectFeedback(entry.hypothesisIndex, $event)"
             />
           </div>
-          <p v-if="feedbackSelections[questionKey(item, idx)] === 'yes' && item.ifYesMeaning" class="oracle-verification-card__result">{{ item.ifYesMeaning }}</p>
-          <p v-else-if="feedbackSelections[questionKey(item, idx)] === 'no' && item.ifNoMeaning" class="oracle-verification-card__result">{{ item.ifNoMeaning }}</p>
-          <p v-else-if="feedbackSelections[questionKey(item, idx)] === 'unsure'" class="oracle-verification-card__result">Chưa dùng hướng này làm kết luận; câu hỏi kế tiếp sẽ kiểm tra một khía cạnh khác nếu còn dữ kiện phù hợp.</p>
+          <p v-if="feedbackSelections[questionKey(entry.item, entry.hypothesisIndex)] === 'yes' && localizedText(entry.item.localizedIfYesMeaning, entry.item.ifYesMeaning)" class="oracle-verification-card__result">{{ localizedText(entry.item.localizedIfYesMeaning, entry.item.ifYesMeaning) }}</p>
+          <p v-else-if="feedbackSelections[questionKey(entry.item, entry.hypothesisIndex)] === 'no' && localizedText(entry.item.localizedIfNoMeaning, entry.item.ifNoMeaning)" class="oracle-verification-card__result">{{ localizedText(entry.item.localizedIfNoMeaning, entry.item.ifNoMeaning) }}</p>
+          <p v-else-if="feedbackSelections[questionKey(entry.item, entry.hypothesisIndex)] === 'unsure'" class="oracle-verification-card__result">{{ t('oracle.dreamVerificationUnsure') }}</p>
+          <span
+            v-if="entry.item.ruleScore !== undefined && scoreDelta(entry.item)"
+            class="oracle-rule-score-change"
+            :class="{ 'oracle-rule-score-change--down': scoreDelta(entry.item) < 0 }"
+          >
+            {{ scoreDelta(entry.item) > 0 ? '+' : '' }}{{ scoreDelta(entry.item) }} · {{ entry.item.ruleScore }}/100
+          </span>
         </article>
-        <div v-if="analysis.feedback_analysis" class="oracle-feedback-revision">
-          <span>Phân tích đã thay đổi theo câu trả lời của bạn</span>
-          <p>{{ analysis.feedback_analysis.interpretation }}</p>
-          <details class="oracle-feedback-revision__details">
-            <summary>Xem {{ analysis.feedback_analysis.confirmedFacts.length + analysis.feedback_analysis.rejectedDirections.length + (analysis.feedback_analysis.unresolvedQuestions?.length || 0) }} thay đổi chi tiết</summary>
-            <ul v-if="analysis.feedback_analysis.confirmedFacts.length" class="oracle-feedback-revision__list">
-              <li v-for="fact in analysis.feedback_analysis.confirmedFacts" :key="fact"><strong>Đã xác nhận:</strong> {{ fact }}</li>
-            </ul>
-            <ul v-if="analysis.feedback_analysis.rejectedDirections.length" class="oracle-feedback-revision__list">
-              <li v-for="direction in analysis.feedback_analysis.rejectedDirections" :key="direction"><strong>Đã loại khỏi trọng tâm:</strong> {{ direction }}</li>
-            </ul>
-            <ul v-if="analysis.feedback_analysis.unresolvedQuestions?.length" class="oracle-feedback-revision__list">
-              <li v-for="question in analysis.feedback_analysis.unresolvedQuestions" :key="question"><strong>Đang để mở:</strong> {{ question }}</li>
-            </ul>
-          </details>
-          <p v-if="analysis.feedback_changed_paths?.length" class="oracle-feedback-revision__hint">Chỉ những đoạn có nền tím nhạt bên dưới đã thực sự được viết lại theo câu trả lời này.</p>
-          <p v-else class="oracle-feedback-revision__hint">Câu trả lời đã được lưu nhưng chưa làm thay đổi đoạn phân tích nào.</p>
-        </div>
-        <div v-else-if="analysis.feedback_conclusion" class="oracle-feedback-revision">
-          <span>Điều câu trả lời vừa thay đổi</span>
-          <p>{{ analysis.feedback_conclusion }}</p>
-        </div>
       </section>
 
       <!-- Header -->
@@ -88,102 +73,60 @@
           </div>
           <!-- Collapse Button in Header -->
           <button v-if="activeMode === 'collapsed'" class="oracle-toggle-btn oracle-toggle-btn--header" @click="isExpanded = false">
-            Thu gọn phân tích AI <span class="arrow">↑</span>
+            {{ t('oracle.dreamAnalysisCollapse') }} <span class="arrow">↑</span>
           </button>
         </div>
       </header>
 
-      <section v-if="analysis.case_conclusion" class="oracle-case-conclusion">
-        <div class="oracle-case-conclusion__heading">
-          <span>{{ analysis.case_conclusion.status === 'clarified' ? 'Đã đối chiếu với câu trả lời' : 'Cần xác nhận thêm' }}</span>
-          <h3>{{ analysis.case_conclusion.headline }}</h3>
-        </div>
-        <p class="oracle-case-conclusion__answer">
-          <template v-for="(segment, segmentIdx) in feedbackSegments(analysis.case_conclusion.conclusion, 'case_conclusion.conclusion')" :key="`case-conclusion-${segmentIdx}`">
-            <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
+      <!-- Summary -->
+      <section class="oracle-section">
+        <h3 class="oracle-section__title">{{ t('oracle.dreamSummaryTitle') }}</h3>
+        <p class="oracle-section__text">
+          <template v-for="(part, partIdx) in splitOracleInlineParts(analysis.summary)" :key="`summary-${partIdx}`">
+            <button
+              v-if="part.citationIndex"
+              type="button"
+              class="source-citation-link oracle-inline-marker"
+              @click="openCitationByIndex(part.citationIndex)"
+            >[{{ part.citationIndex }}]</button>
+            <span
+              v-else-if="part.unsupported"
+              class="oracle-inline-marker oracle-inline-marker--unsupported"
+              :title="t('oracle.unsupportedClaimHelp')"
+            >[?]</span>
+            <strong v-else-if="part.strong">{{ part.text }}</strong>
+            <span v-else>{{ part.text }}</span>
           </template>
         </p>
-        <p class="oracle-case-conclusion__confidence"><strong>Mức chắc chắn:</strong> {{ analysis.case_conclusion.confidenceLabel }}</p>
-
-        <div v-if="analysis.case_conclusion.confirmedFindings?.length" class="oracle-case-decision oracle-case-decision--confirmed">
-          <strong>Điều câu trả lời đã xác nhận</strong>
-          <ul>
-            <li v-for="(item, idx) in analysis.case_conclusion.confirmedFindings" :key="`confirmed-${idx}`">
-              <template v-for="(segment, segmentIdx) in feedbackSegments(item, `case_conclusion.confirmedFindings.${idx}`)" :key="`confirmed-${idx}-${segmentIdx}`">
-                <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
-              </template>
-            </li>
-          </ul>
-        </div>
-
-        <div v-if="analysis.case_conclusion.ruledOut?.length" class="oracle-case-decision oracle-case-decision--ruled-out">
-          <strong>Điều không nên kết luận từ giấc mơ này</strong>
-          <ul>
-            <li v-for="(item, idx) in analysis.case_conclusion.ruledOut" :key="`ruled-out-${idx}`">
-              <template v-for="(segment, segmentIdx) in feedbackSegments(item, `case_conclusion.ruledOut.${idx}`)" :key="`ruled-out-${idx}-${segmentIdx}`">
-                <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
-              </template>
-            </li>
-          </ul>
-        </div>
-
-        <div v-if="analysis.case_conclusion.recommendedNextStep" class="oracle-case-action">
-          <strong>Việc hữu ích nhất lúc này</strong>
-          <p>
-            <template v-for="(segment, segmentIdx) in feedbackSegments(analysis.case_conclusion.recommendedNextStep, 'case_conclusion.recommendedNextStep')" :key="`case-action-${segmentIdx}`">
-              <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
-            </template>
-          </p>
-        </div>
-
-        <div class="oracle-concern-card">
-          <strong>{{ analysis.case_conclusion.concern.label }}</strong>
-          <p>{{ analysis.case_conclusion.concern.explanation }}</p>
-          <details>
-            <summary>Khi nào nên lưu ý thêm?</summary>
-            <ul>
-              <li v-for="item in analysis.case_conclusion.concern.watchFor" :key="item">{{ item }}</li>
-            </ul>
-            <a :href="analysis.case_conclusion.concern.helpSource.url" target="_blank" rel="noopener noreferrer">{{ analysis.case_conclusion.concern.helpSource.title }}</a>
-          </details>
-        </div>
-
-        <details class="oracle-evidence-chain">
-          <summary>Vì sao có thể tin kết luận này?</summary>
-          <article v-for="item in analysis.case_conclusion.evidenceBasis" :key="item.kind">
-            <strong>{{ item.title }}</strong>
-            <p>{{ item.detail }}</p>
-            <div v-if="item.sources?.length" class="oracle-evidence-chain__sources">
-              <button v-for="source in item.sources" :key="source.sourceId || source.doi || source.title" type="button" @click="navigateToSource(source.sourceId)">
-                {{ source.title }}<template v-if="source.year"> ({{ source.year }})</template><template v-if="source.doi"> · DOI {{ source.doi }}</template>
-              </button>
-            </div>
-          </article>
-        </details>
       </section>
-
-      <!-- Summary -->
-      <section v-if="!analysis.case_conclusion" class="oracle-section">
-        <h3 class="oracle-section__title">Tóm tắt</h3>
-        <p class="oracle-section__text">{{ analysis.summary }}</p>
-      </section>
-      <details v-else class="oracle-narrative-summary">
-        <summary>Xem tóm tắt lời kể</summary>
-        <p>{{ analysis.summary }}</p>
-      </details>
 
       <!-- Core Analysis -->
       <section class="oracle-section">
-        <h3 class="oracle-section__title">Vì sao hệ thống đi đến kết luận này?</h3>
+        <h3 class="oracle-section__title">{{ t('oracle.dreamReasoningTitle') }}</h3>
         <p class="oracle-section__text oracle-section__text--spaced">
           <template v-for="(segment, segmentIdx) in feedbackSegments(analysis.core_analysis, 'core_analysis')" :key="`core-${segmentIdx}`">
-            <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
+            <template v-for="(part, partIdx) in splitOracleInlineParts(segment.text)" :key="`core-${segmentIdx}-${partIdx}`">
+              <button
+                v-if="part.citationIndex"
+                type="button"
+                class="source-citation-link oracle-inline-marker"
+                @click="openCitationByIndex(part.citationIndex)"
+              >[{{ part.citationIndex }}]</button>
+              <span
+                v-else-if="part.unsupported"
+                class="oracle-inline-marker oracle-inline-marker--unsupported"
+                :title="t('oracle.unsupportedClaimHelp')"
+              >[?]</span>
+              <mark v-else-if="segment.changed" class="oracle-text--feedback-changed">{{ part.text }}</mark>
+              <strong v-else-if="part.strong">{{ part.text }}</strong>
+              <span v-else>{{ part.text }}</span>
+            </template>
           </template>
         </p>
       </section>
 
       <section v-if="analysis.interpretive_threads?.length" class="oracle-section">
-        <h3 class="oracle-section__title">Các mạch diễn giải</h3>
+        <h3 class="oracle-section__title">{{ t('oracle.dreamThreadsTitle') }}</h3>
         <ul class="oracle-list oracle-list--threads">
           <li v-for="(thread, idx) in analysis.interpretive_threads" :key="idx" class="oracle-item oracle-thread">
             <div class="oracle-item__header">
@@ -191,15 +134,29 @@
             </div>
             <p class="oracle-item__desc">
               <template v-for="(segment, segmentIdx) in feedbackSegments(thread.reasoning, `interpretive_threads.${idx}.reasoning`)" :key="`thread-reason-${idx}-${segmentIdx}`">
-                <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
+                <template v-for="(part, partIdx) in splitOracleInlineParts(segment.text)" :key="`thread-${idx}-${segmentIdx}-${partIdx}`">
+                  <button
+                    v-if="part.citationIndex"
+                    type="button"
+                    class="source-citation-link oracle-inline-marker"
+                    @click="openCitationByIndex(part.citationIndex)"
+                  >[{{ part.citationIndex }}]</button>
+                  <span
+                    v-else-if="part.unsupported"
+                    class="oracle-inline-marker oracle-inline-marker--unsupported"
+                    :title="t('oracle.unsupportedClaimHelp')"
+                  >[?]</span>
+                  <mark v-else-if="segment.changed" class="oracle-text--feedback-changed">{{ part.text }}</mark>
+                  <strong v-else-if="part.strong">{{ part.text }}</strong>
+                  <span v-else>{{ part.text }}</span>
+                </template>
               </template>
             </p>
-            <p class="oracle-thread__basis">Căn cứ diễn giải: trình tự chi tiết trong lời kể<span v-if="analysis.feedback_analysis"> và câu trả lời bạn vừa cung cấp</span>.</p>
             <div class="oracle-item__evidence">
-              <span class="evidence-label">Chi tiết được nối lại:</span>
+              <span class="evidence-label">{{ t('oracle.dreamConnectedDetails') }}</span>
               <span v-for="(ev, evIdx) in thread.dreamEvidence" :key="evIdx" class="evidence-tag">“{{ ev }}”</span>
             </div>
-            <p class="oracle-thread__alternative"><strong>Cách hiểu khác:</strong>
+            <p class="oracle-thread__alternative"><strong>{{ t('oracle.dreamAlternativeMeaning') }}</strong>
               <template v-for="(segment, segmentIdx) in feedbackSegments(thread.alternativeExplanation, `interpretive_threads.${idx}.alternativeExplanation`)" :key="`thread-alt-${idx}-${segmentIdx}`">
                 <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
               </template>
@@ -210,21 +167,19 @@
 
       <!-- Symbolic Notes -->
       <section class="oracle-section">
-        <h3 class="oracle-section__title">Những chi tiết đang dẫn dắt giấc mơ</h3>
+        <h3 class="oracle-section__title">{{ t('oracle.dreamMotifsTitle') }}</h3>
         <div v-if="!analysis.symbolic_notes || analysis.symbolic_notes.length === 0" class="oracle-section__empty">
-          Không có biểu tượng nổi bật được xác định từ nội dung mơ.
+          {{ t('oracle.dreamMotifsEmpty') }}
         </div>
         <ul v-else class="oracle-list oracle-list--motifs">
           <li v-for="(note, idx) in analysis.symbolic_notes" :key="idx" class="oracle-item oracle-motif-card">
             <div class="oracle-motif-card__label">
               <span class="oracle-item__name">{{ note.symbol }}</span>
               <span class="oracle-motif-card__origin">
-                {{ note.origin === 'dictionary'
-                  ? `Có đối chiếu từ điển biểu tượng${note.dictionarySymbol ? ` · ${note.dictionarySymbol}` : ''}`
-                  : (hasMotifHistory(note) ? 'Đã có trong kho quan sát từ các giấc mơ trước' : 'Quan sát theo ngữ cảnh đang được tích lũy') }}
+                {{ motifOriginLabel(note) }}
               </span>
               <span v-if="note.contextualTone && note.contextualTone !== 'neutral'" class="oracle-context-tone">
-                Cảm xúc trong cảnh: {{ getContextToneLabel(note.contextualTone).toLocaleLowerCase('vi') }}
+                {{ t('oracle.dreamSceneEmotion', { tone: getContextToneLabel(note.contextualTone) }) }}
               </span>
             </div>
             <div class="oracle-motif-card__body">
@@ -234,17 +189,17 @@
                 </template>
               </p>
               <p v-if="note.dreamEvidence" class="oracle-item__grounding">
-                <span>Trong lời kể</span>
+                <span>{{ t('oracle.dreamInNarrative') }}</span>
                 “{{ note.dreamEvidence }}”
               </p>
               <div v-if="hasMotifHistory(note)" class="oracle-motif-card__history">
-                <span>Dữ liệu từ các trường hợp đã có</span>
+                <span>{{ t('oracle.dreamObservedCases') }}</span>
                 <div>
-                  <span v-if="note.motifStats?.previousPersonalDreamCount">{{ note.motifStats.previousPersonalDreamCount }} giấc mơ trước của bạn có chi tiết này</span>
-                  <span v-if="note.motifStats?.similarDreamCount">{{ note.motifStats.similarDreamCount }} giấc mơ tương đồng cũng có chi tiết này</span>
-                  <span v-if="note.motifStats?.sameSequenceCount">{{ note.motifStats.sameSequenceCount }} trường hợp trong số đó có cùng kiểu tình tiết</span>
-                  <span v-if="note.motifStats?.confirmedContextCount">{{ note.motifStats.confirmedContextCount }} trường hợp có hoàn cảnh liên quan được người kể xác nhận</span>
-                  <span v-if="note.motifStats?.observedPublicDreamCount">{{ note.motifStats.observedPublicDreamCount }} giấc mơ công khai đã được ghi nhận trong kho quan sát</span>
+                  <span v-if="note.motifStats?.previousPersonalDreamCount">{{ t('oracle.dreamPersonalMotifCount', { count: note.motifStats.previousPersonalDreamCount }) }}</span>
+                  <span v-if="note.motifStats?.similarDreamCount">{{ t('oracle.dreamSimilarMotifCount', { count: note.motifStats.similarDreamCount }) }}</span>
+                  <span v-if="note.motifStats?.sameSequenceCount">{{ t('oracle.dreamSequenceMotifCount', { count: note.motifStats.sameSequenceCount }) }}</span>
+                  <span v-if="note.motifStats?.confirmedContextCount">{{ t('oracle.dreamConfirmedMotifCount', { count: note.motifStats.confirmedContextCount }) }}</span>
+                  <span v-if="note.motifStats?.observedPublicDreamCount">{{ t('oracle.dreamPublicMotifCount', { count: note.motifStats.observedPublicDreamCount }) }}</span>
                 </div>
               </div>
             </div>
@@ -252,61 +207,33 @@
         </ul>
       </section>
 
-      <!-- Scientific Context Notes -->
-      <section v-if="analysis.scientific_context_notes && analysis.scientific_context_notes.length > 0" class="oracle-section">
-        <div class="oracle-section-heading">
-          <h3 class="oracle-section__title">Điều có thể đang diễn ra bên dưới giấc mơ</h3>
+      <section v-if="referenceSources.length" class="oracle-section oracle-sources">
+        <h3 class="oracle-section__title">{{ t('oracle.references') }}</h3>
+        <div class="oracle-sources__list">
+          <button
+            v-for="source in referenceSources"
+            :key="source.key"
+            type="button"
+            class="oracle-source-card"
+            @click="openCitation(source)"
+          >
+            <span class="oracle-source-card__index">[{{ source.index }}]</span>
+            <span class="oracle-source-card__content">
+              <strong>{{ source.title || t('oracle.academicSource') }}</strong>
+              <small>{{ source.year || '' }}<template v-if="source.doi"> · {{ source.doi }}</template></small>
+            </span>
+            <AppIcon class="oracle-source-card__open" name="external-link" :size="14" />
+          </button>
         </div>
-        <ul class="oracle-list oracle-list--science">
-          <li v-for="(note, idx) in analysis.scientific_context_notes" :key="note.ruleId || idx" class="oracle-science-card">
-            <div class="oracle-science-card__header">
-              <span class="oracle-science-card__index">{{ String(idx + 1).padStart(2, '0') }}</span>
-              <h4>{{ note.insightTitle || 'Một cơ chế đáng cân nhắc' }}</h4>
-              <span v-if="note.applicationTier === 'exploratory'" class="oracle-science-card__tier">Giả thuyết khám phá · bằng chứng còn yếu</span>
-            </div>
-            <p class="oracle-science-card__explanation">
-              <template v-for="(segment, segmentIdx) in feedbackSegments(note.note, `scientific_context_notes.${idx}.note`)" :key="`science-${idx}-${segmentIdx}`">
-                <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
-              </template>
-            </p>
-
-            <div v-if="note.caseApplicability?.answeredCount" class="oracle-science-card__applicability">
-              <div>
-                <span>Mức phù hợp trong trường hợp này</span>
-                <strong>{{ caseApplicabilityLabel(note.caseApplicability.status) }}</strong>
-              </div>
-              <p>{{ note.caseApplicability.confirmedCount }}/{{ note.caseApplicability.totalCount }} chiều dữ kiện được xác nhận · {{ note.caseApplicability.weakenedCount }} bị làm yếu · {{ note.caseApplicability.unresolvedCount }} còn chưa rõ</p>
-              <small v-if="note.academicEvidenceScore !== undefined">Điểm bằng chứng học thuật vẫn là {{ note.academicEvidenceScore }}/100. Phản hồi cá nhân giúp kiểm tra việc áp dụng vào giấc mơ này, không tạo thêm bằng chứng nghiên cứu độc lập.</small>
-            </div>
-
-            <div v-if="note.matchedDreamDetails?.length || note.dreamEvidence?.length" class="oracle-science-card__matches">
-              <span>Những đoạn trong giấc mơ liên quan trực tiếp</span>
-              <blockquote v-for="detail in (note.matchedDreamDetails || note.dreamEvidence)" :key="detail">“{{ detail }}”</blockquote>
-            </div>
-
-            <details v-if="note.evidenceQuotes?.length" class="oracle-science-card__evidence">
-              <summary>Kiểm tra căn cứ trong tài liệu</summary>
-              <div v-for="evidence in note.evidenceQuotes" :key="`${evidence.chunkId}:${evidence.quote}`">
-                <span>{{ formatEvidenceSource(note, evidence.sourceId) }}</span>
-                <blockquote>“{{ evidence.quote }}”</blockquote>
-              </div>
-            </details>
-
-            <div v-if="note.boundary" class="oracle-science-card__boundary">
-              <span>Điều chưa thể kết luận</span>
-              <p>{{ note.boundary }}</p>
-            </div>
-          </li>
-        </ul>
       </section>
 
       <!-- Cultural Symbolic Notes -->
       <section v-if="culturalNotesToShow.length > 0" class="oracle-section">
-        <h3 class="oracle-section__title">Góc nhìn văn hóa có căn cứ</h3>
+        <h3 class="oracle-section__title">{{ t('oracle.dreamCulturalTitle') }}</h3>
         <ul class="oracle-list">
           <li v-for="(note, idx) in culturalNotesToShow" :key="idx" class="oracle-item">
             <div v-if="hasRealSource(note.source)" class="oracle-item__header">
-              <span class="oracle-item__name">Nguồn: {{ note.source }}</span>
+              <span class="oracle-item__name">{{ t('oracle.dreamSourceLabel') }}: {{ note.source }}</span>
             </div>
             <p class="oracle-item__desc">{{ note.note }}</p>
           </li>
@@ -315,8 +242,8 @@
 
       <section v-if="analysis.practical_reflections?.length" class="oracle-section">
         <div class="oracle-section-heading">
-          <h3 class="oracle-section__title">Điều nên để ý hôm nay và sắp tới</h3>
-          <p>Những việc cụ thể giúp kiểm tra nguyên nhân có thể có, không phải dự báo chắc chắn.</p>
+          <h3 class="oracle-section__title">{{ t('oracle.dreamPracticalTitle') }}</h3>
+          <p>{{ t('oracle.dreamPracticalDescription') }}</p>
         </div>
         <ol class="oracle-reflections">
           <li v-for="(item, idx) in analysis.practical_reflections" :key="idx" class="oracle-reflection">
@@ -327,7 +254,7 @@
                   <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
                 </template>
               </p>
-              <span>Vì sao nên thử:
+              <span>{{ t('oracle.dreamPracticalReason') }}
                 <template v-for="(segment, segmentIdx) in feedbackSegments(item.rationale, `practical_reflections.${idx}.rationale`)" :key="`rationale-${idx}-${segmentIdx}`">
                   <mark v-if="segment.changed" class="oracle-text--feedback-changed">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span>
                 </template>
@@ -337,59 +264,35 @@
         </ol>
       </section>
 
-      <details v-if="analysis.creative_continuation" class="oracle-continuation">
-        <summary>
-          <span>Nếu giấc mơ có phần tiếp theo</span>
-          <small>Sáng tác tham khảo · không phải dự báo</small>
-        </summary>
-        <div class="oracle-continuation__body">
-          <h3>{{ analysis.creative_continuation.title }}</h3>
-          <p class="oracle-continuation__story" translate="no">{{ analysis.creative_continuation.continuation }}</p>
-          <p class="oracle-continuation__connection"><strong>Mạch được nối tiếp:</strong> {{ analysis.creative_continuation.connectionToCurrentDream }}</p>
-          <div v-if="analysis.creative_continuation.inspirations?.length" class="oracle-continuation__inspirations">
-            <strong>Tham khảo mô-típ từ các giấc mơ tương đồng</strong>
-            <button
-              v-for="item in analysis.creative_continuation.inspirations"
-              :key="item.dreamId"
-              type="button"
-              @click="openSimilarDream(item.dreamId)"
-            >
-              {{ item.title }} · {{ item.similarity }}%
-            </button>
-          </div>
-          <small>{{ analysis.creative_continuation.disclaimer }}</small>
-        </div>
-      </details>
-
       <details v-if="analysis.grounding_summary" class="oracle-grounding-audit">
-        <summary>Kết quả này được tạo từ đâu?</summary>
+        <summary>{{ t('oracle.dreamGroundingTitle') }}</summary>
         <div class="oracle-grounding-audit__grid">
-          <span>Lời kể gốc <strong>{{ analysis.grounding_summary.narrativeUsed ? 'Đã dùng' : 'Không có' }}</strong></span>
-          <span>Câu trả lời đã làm rõ <strong>{{ analysis.grounding_summary.resolvedContextCount }}</strong></span>
-          <span>Câu trả lời còn để mở <strong>{{ analysis.grounding_summary.unresolvedContextCount }}</strong></span>
-          <span>Chi tiết khớp từ điển <strong>{{ analysis.grounding_summary.dictionaryMotifCount }}</strong></span>
-          <span>Chi tiết nhận diện từ lời kể <strong>{{ analysis.grounding_summary.contextualMotifCount }}</strong></span>
-          <span>Kết luận học thuật liên quan <strong>{{ analysis.grounding_summary.appliedRuleCount }}</strong></span>
-          <span>Cơ chế tâm lý có dẫn chứng <strong>{{ analysis.grounding_summary.explanatoryRuleCount }}</strong></span>
-          <span>Giả thuyết khám phá cần xác nhận <strong>{{ analysis.grounding_summary.exploratoryRuleCount ?? 0 }}</strong></span>
-          <span>Giấc mơ cũ được tham khảo <strong>{{ analysis.grounding_summary.similarDreamCount }}</strong></span>
-          <span>Dữ kiện về điều kiện ngủ <strong>{{ analysis.grounding_summary.sleepContextFactCount ?? 0 }}</strong></span>
+          <span>{{ t('oracle.dreamGroundingNarrative') }} <strong>{{ analysis.grounding_summary.narrativeUsed ? t('oracle.used') : t('oracle.none') }}</strong></span>
+          <span>{{ t('oracle.dreamGroundingResolved') }} <strong>{{ analysis.grounding_summary.resolvedContextCount }}</strong></span>
+          <span>{{ t('oracle.dreamGroundingOpen') }} <strong>{{ analysis.grounding_summary.unresolvedContextCount }}</strong></span>
+          <span>{{ t('oracle.dreamGroundingDictionary') }} <strong>{{ analysis.grounding_summary.dictionaryMotifCount }}</strong></span>
+          <span>{{ t('oracle.dreamGroundingContextual') }} <strong>{{ analysis.grounding_summary.contextualMotifCount }}</strong></span>
+          <span>{{ t('oracle.dreamGroundingRules') }} <strong>{{ analysis.grounding_summary.appliedRuleCount }}</strong></span>
+          <span>{{ t('oracle.dreamGroundingMechanisms') }} <strong>{{ analysis.grounding_summary.explanatoryRuleCount }}</strong></span>
+          <span>{{ t('oracle.dreamGroundingExploratory') }} <strong>{{ analysis.grounding_summary.exploratoryRuleCount ?? 0 }}</strong></span>
+          <span>{{ t('oracle.dreamGroundingSimilar') }} <strong>{{ analysis.grounding_summary.similarDreamCount }}</strong></span>
+          <span>{{ t('oracle.dreamGroundingSleep') }} <strong>{{ analysis.grounding_summary.sleepContextFactCount ?? 0 }}</strong></span>
         </div>
         <p v-if="analysis.grounding_summary.explanatoryRuleCount === 0 && (analysis.grounding_summary.exploratoryRuleCount ?? 0) > 0">
-          Kết quả có lập luận đã duyệt nhưng mức hỗ trợ còn yếu. Hệ thống dùng chúng để đặt câu hỏi và đối chiếu cấu trúc của trường hợp này; câu trả lời Có/Không sẽ cộng hoặc trừ trực tiếp vào điểm lập luận.
+          {{ t('oracle.dreamGroundingWeak') }}
         </p>
         <p v-else-if="analysis.grounding_summary.explanatoryRuleCount === 0">
-          Thư viện hiện chưa có lập luận cơ chế phù hợp cho trường hợp này. Các mạch diễn giải phía trên được suy ra từ trình tự lời kể và câu trả lời của bạn, không được trình bày như một kết luận khoa học.
+          {{ t('oracle.dreamGroundingWithoutRule') }}
         </p>
         <p v-else>
-          Chỉ phần “Điều có thể đang diễn ra bên dưới giấc mơ” được phép dùng lập luận cơ chế và trích dẫn học thuật. Các chi tiết theo ngữ cảnh vẫn chỉ có giá trị trong chính lời kể này.
+          {{ t('oracle.dreamGroundingWithRule') }}
         </p>
       </details>
 
       <section v-if="analysis.similar_dreams?.length" class="oracle-section oracle-similar">
         <div class="oracle-section-heading">
-          <h3 class="oracle-section__title">Những giấc mơ có nét tương đồng</h3>
-          <p>Các bài đạt từ 40% tương đồng, dùng để tham khảo trải nghiệm chứ không thay thế bằng chứng nghiên cứu.</p>
+          <h3 class="oracle-section__title">{{ t('oracle.dreamSimilarTitle') }}</h3>
+          <p>{{ t('oracle.dreamSimilarDescription') }}</p>
         </div>
         <div class="oracle-similar__rail">
           <button
@@ -400,15 +303,12 @@
             @click="openSimilarDream(item.dreamId)"
           >
             <div class="oracle-similar__topline">
-              <span>{{ item.sameAuthor ? 'Giấc mơ trước của bạn' : item.authorDisplayName }}</span>
+              <span>{{ item.sameAuthor ? t('oracle.dreamPreviousOwn') : item.authorDisplayName }}</span>
               <strong>{{ item.similarity }}%</strong>
             </div>
             <h4>{{ item.title }}</h4>
             <p>{{ item.excerpt }}</p>
-            <div class="oracle-similar__reasons">
-              <span v-for="reason in item.matchedOn" :key="reason">{{ reason }}</span>
-            </div>
-            <span class="oracle-similar__open">Xem bài viết <span aria-hidden="true">→</span></span>
+            <span class="oracle-similar__open">{{ t('oracle.dreamOpenPost') }} <span aria-hidden="true">→</span></span>
           </button>
         </div>
       </section>
@@ -419,23 +319,124 @@
         <!-- Collapse Button at bottom of disclaimer -->
         <div v-if="activeMode === 'collapsed'" class="oracle-full__footer">
           <button class="oracle-toggle-btn" @click="isExpanded = false">
-            Thu gọn phân tích AI <span class="arrow">↑</span>
+            {{ t('oracle.dreamAnalysisCollapse') }} <span class="arrow">↑</span>
           </button>
         </div>
       </footer>
+
+      <section v-if="analysis.creative_continuation || continuationPending" class="oracle-continuation">
+        <header class="oracle-continuation__header">
+          <span>{{ t('oracle.dreamContinuationTitle') }}</span>
+          <small>{{ t('oracle.dreamContinuationSubtitle') }}</small>
+        </header>
+        <div class="oracle-continuation__body">
+          <div v-if="continuationPending" class="oracle-continuation__progress-state">
+            <div class="oracle-continuation__progress" :aria-label="t('oracle.continuationProgressLabel')">
+              <span :style="{ width: `${continuationProgress}%` }"></span>
+            </div>
+            <span>{{ continuationProgress }}%</span>
+            <p v-if="!displayedContinuation" class="oracle-continuation__status">
+              {{ continuationStatusMessage }}
+            </p>
+          </div>
+          <template v-if="displayedContinuation">
+            <h3>{{ displayedContinuation.title }}</h3>
+            <div
+              class="oracle-continuation__story-wrap"
+              :class="{ 'oracle-continuation__story-wrap--collapsed': continuationCanCollapse && !continuationExpanded }"
+            >
+              <p class="oracle-continuation__story" translate="no">{{ displayedContinuation.continuation }}</p>
+            </div>
+            <button
+              v-if="continuationCanCollapse"
+              type="button"
+              class="oracle-continuation__expand"
+              @click="continuationExpanded = !continuationExpanded"
+            >
+              <span>{{ t(continuationExpanded ? 'oracle.continuationCollapse' : 'oracle.continuationExpand') }}</span>
+              <span class="oracle-continuation__expand-icon" aria-hidden="true">
+                {{ continuationExpanded ? '⌃' : '⌄' }}
+              </span>
+            </button>
+            <p class="oracle-continuation__connection"><strong>{{ t('oracle.dreamContinuationConnection') }}</strong> {{ displayedContinuation.connectionToCurrentDream }}</p>
+            <div v-if="displayedContinuation.inspirations?.length" class="oracle-continuation__inspirations">
+              <strong>{{ t('oracle.dreamContinuationInspirations') }}</strong>
+              <button
+                v-for="item in displayedContinuation.inspirations"
+                :key="item.dreamId"
+                type="button"
+                @click="openSimilarDream(item.dreamId)"
+              >
+                {{ item.title }} · {{ item.similarity }}%
+              </button>
+            </div>
+            <small>{{ displayedContinuation.disclaimer }}</small>
+          </template>
+          <div v-if="canManageContinuation && displayedContinuation" class="oracle-continuation__controls">
+            <nav :aria-label="t('oracle.dreamContinuationHistory')">
+              <button type="button" :disabled="continuationIndex === 0" @click="continuationIndex--">‹</button>
+              <span>{{ continuationIndex + 1 }} / {{ continuationVersions.length }}</span>
+              <button type="button" :disabled="continuationIndex === continuationVersions.length - 1" @click="continuationIndex++">›</button>
+            </nav>
+            <button
+              type="button"
+              class="oracle-continuation__reload"
+              :title="continuationLoading ? t('oracle.continuationRegenerating') : t('oracle.dreamContinuationRegenerate')"
+              :aria-label="continuationLoading ? t('oracle.continuationRegenerating') : t('oracle.dreamContinuationRegenerate')"
+              :disabled="continuationLoading"
+              @click="regenerateContinuation"
+            >
+              <span
+                aria-hidden="true"
+                :class="{ 'oracle-continuation__spinner': continuationLoading }"
+              >↻</span>
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
+    <OracleCitationModal
+      v-model="citationModalOpen"
+      message-id=""
+      feedback-origin="dream"
+      :dream-id="dreamId"
+      :citation="selectedCitation"
+      @open-source="navigateToSource"
+      @feedback-updated="applyCitationFeedback"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import type { AiDreamAnalysisResult } from '@/api/types'
+import { useI18n } from 'vue-i18n'
+import type {
+  AiDreamAnalysisResult,
+  AiRealLifeHypothesis,
+  AiSymbolicNote,
+  ApiDream,
+} from '@/api/types'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { usePostStore } from '@/store/usePostStore'
 import { useDreamStore } from '@/store/useDreamStore'
 import apiClient from '@/api/client'
 import AppFeedbackChoiceGroup, { type FeedbackChoice } from '@/components/common/AppFeedbackChoiceGroup.vue'
+import AppIcon from '@/components/common/AppIcon.vue'
+import OracleCitationModal from '@/features/oracle/components/OracleCitationModal.vue'
+import type {
+  DreamHypothesisFeedbackResponse,
+  OracleCitationDto,
+  OracleRuleScoreUpdateDto,
+} from '@/api/oracleApi'
+import { getApiErrorMessage } from '@/utils/apiError'
+import { useDreamContinuationStore } from '@/store/useDreamContinuationStore'
+import { splitOracleInlineParts } from '@/features/oracle/services/oracleInlineContent.service'
+import {
+  buildDreamCitationSources,
+  selectDreamVerificationQuestions,
+  type DreamCitationSource,
+} from '@/features/oracle/services/dreamCitationPresentation.service'
 
 const props = withDefaults(defineProps<{
   analysis: AiDreamAnalysisResult | null | undefined
@@ -443,10 +444,12 @@ const props = withDefaults(defineProps<{
   showHypothesisActions?: boolean
   mode?: 'compact' | 'collapsed' | 'full'
   dreamId?: string
+  canManageContinuation?: boolean
 }>(), {
   compact: false,
   showHypothesisActions: false,
   mode: 'full',
+  canManageContinuation: false,
 })
 
 const emit = defineEmits<{
@@ -460,9 +463,24 @@ const activeMode = computed(() => {
 })
 
 const router = useRouter()
+const { t, locale } = useI18n({ useScope: 'global' })
 
-function formatCitationText(src: any): string {
-  if (!src) return 'Tài liệu'
+interface CitationDisplaySource {
+  authors?: string[] | string
+  title?: string
+  year?: number
+}
+
+function localizedText(
+  localized: { vi?: string; en?: string } | undefined,
+  fallback?: string,
+): string {
+  const language = locale.value.toLowerCase().startsWith('vi') ? 'vi' : 'en'
+  return String(localized?.[language] || fallback || '')
+}
+
+function formatCitationText(src: CitationDisplaySource | null | undefined): string {
+  if (!src) return t('oracle.academicSource')
   let citation = ''
   const authors = src.authors
   if (authors && (Array.isArray(authors) ? authors.length > 0 : String(authors).trim() !== '')) {
@@ -491,7 +509,7 @@ function formatCitationText(src: any): string {
   }
   
   if (!citation) {
-    citation = 'Tài liệu'
+    citation = t('oracle.academicSource')
   }
   
   if (src.year) {
@@ -501,26 +519,16 @@ function formatCitationText(src: any): string {
   return citation
 }
 
-function formatInlineCitation(src: any): string {
+function formatInlineCitation(src: CitationDisplaySource): string {
   return formatCitationText(src).replace(/^"|"$/g, '')
-}
-
-function formatEvidenceSource(note: any, sourceId: string): string {
-  const source = note?.sources?.find((item: any) => item.sourceId === sourceId)
-  return source ? formatCitationText(source) : 'Trích dẫn trong tài liệu nguồn'
 }
 
 function navigateToSource(sourceId: string) {
   if (!sourceId) return
-  try {
-    if (router) {
-      router.push(`/library/sources/${sourceId}`).catch(err => {
-        console.error('Failed to navigate to library source:', err)
-      })
-    }
-  } catch (err) {
-    console.error('Failed to navigate to library source:', err)
-  }
+  if (!router) return
+  router.push(`/library/sources/${sourceId}`).catch(() => {
+    settingsStore.showToast(t('oracle.sourceDetailsLoadFailed'), 'error')
+  })
 }
 
 async function openSimilarDream(dreamId: string) {
@@ -528,75 +536,114 @@ async function openSimilarDream(dreamId: string) {
   await postStore.openPost(dreamId)
 }
 
-function formatQuestionType(item: any): string {
-  if (item?.questionBasis === 'sleep_context') return 'Kiểm tra môi trường ngủ'
+function formatQuestionType(item: AiRealLifeHypothesis): string {
+  if (item?.questionBasis === 'sleep_context') return t('oracle.dreamQuestionSleepContext')
   const type = item?.questionType as 'past' | 'present' | 'future'
-  if (type === 'past') return 'Kiểm tra sự kiện đã xảy ra'
-  if (type === 'future') return 'Có thể trả lời sau'
-  return 'Kiểm tra hoàn cảnh hiện tại'
-}
-
-function caseApplicabilityLabel(status: string): string {
-  return ({
-    strong_match: 'Phù hợp mạnh trong ca này',
-    partial_match: 'Phù hợp một phần',
-    mixed: 'Kết quả còn pha trộn',
-    weakened: 'Không phù hợp làm hướng chính',
-    unresolved: 'Chưa đủ dữ liệu',
-  } as Record<string, string>)[status] || 'Chưa đủ dữ liệu'
+  if (type === 'past') return t('oracle.dreamQuestionPast')
+  if (type === 'future') return t('oracle.dreamQuestionFuture')
+  return t('oracle.dreamQuestionPresent')
 }
 
 // Expanded state
 const isExpanded = ref(activeMode.value === 'full')
 const feedbackSelections = ref<Record<string, string>>({})
-const revealedQuestionCount = ref(2)
-const visibleHypotheses = computed(() => (props.analysis?.real_life_hypotheses || []).slice(0, revealedQuestionCount.value))
 
 // A feedback response replaces the analysis payload. Watching that object made
 // the open result collapse after every answer. Only a different post or mode
 // may reset expansion state.
 watch(() => props.dreamId, () => {
   isExpanded.value = activeMode.value === 'full'
-  revealedQuestionCount.value = 2
 })
 
 watch(() => props.mode, (newMode) => {
   isExpanded.value = newMode === 'full'
 })
 
-function questionKey(item: any, idx: number): string {
+function questionKey(item: AiRealLifeHypothesis | undefined, idx: number): string {
   return String(item?.verificationKey || `question-${idx}`)
 }
 
 function feedbackSegments(value: unknown, path: string): Array<{ text: string; changed: boolean }> {
   const text = String(value || '')
-  const changedFragments = props.analysis?.feedback_changed_fragments?.[path]?.filter(Boolean) || []
-  if (!text || changedFragments.length === 0) return [{ text, changed: false }]
+  const fragments = (props.analysis?.feedback_changed_fragments?.[path] || [])
+    .map(fragment => String(fragment || '').trim())
+    .filter(Boolean)
+  if (!text || fragments.length === 0) return [{ text, changed: false }]
 
   const segments: Array<{ text: string; changed: boolean }> = []
   let cursor = 0
   while (cursor < text.length) {
-    let nextFragment = ''
-    let nextIndex = -1
-    for (const fragment of changedFragments) {
-      const index = text.indexOf(fragment, cursor)
-      if (index !== -1 && (nextIndex === -1 || index < nextIndex)) {
-        nextFragment = fragment
-        nextIndex = index
-      }
-    }
-    if (nextIndex === -1) {
+    const matches = fragments
+      .map(fragment => ({ fragment, index: text.indexOf(fragment, cursor) }))
+      .filter(match => match.index >= cursor)
+      .sort((left, right) => left.index - right.index || right.fragment.length - left.fragment.length)
+    const next = matches[0]
+    if (!next) {
       segments.push({ text: text.slice(cursor), changed: false })
       break
     }
-    if (nextIndex > cursor) segments.push({ text: text.slice(cursor, nextIndex), changed: false })
-    segments.push({ text: nextFragment, changed: true })
-    cursor = nextIndex + nextFragment.length
+    if (next.index > cursor) segments.push({ text: text.slice(cursor, next.index), changed: false })
+    segments.push({ text: next.fragment, changed: true })
+    cursor = next.index + next.fragment.length
   }
-  return segments.length > 0 ? segments : [{ text, changed: false }]
+  return segments.length ? segments : [{ text, changed: false }]
 }
 
-function hasMotifHistory(note: any): boolean {
+const verificationQuestions = computed(() =>
+  selectDreamVerificationQuestions(props.analysis))
+const referenceSources = computed(() =>
+  buildDreamCitationSources(props.analysis, t('oracle.academicSource')))
+
+const selectedCitation = ref<OracleCitationDto | null>(null)
+const citationModalOpen = ref(false)
+
+watch(referenceSources, sources => {
+  if (!citationModalOpen.value || !selectedCitation.value) return
+  const sourceStillExists = sources.some(source =>
+    source.sourceId === selectedCitation.value?.sourceId
+    && source.index === selectedCitation.value?.index)
+  if (sourceStillExists) return
+  citationModalOpen.value = false
+  selectedCitation.value = null
+})
+
+function sourceMarker(sourceId: string): string {
+  const source = referenceSources.value.find(item => item.sourceId === sourceId)
+  return source ? `[${source.index}]` : ''
+}
+
+function scoreDelta(item: AiRealLifeHypothesis): number {
+  return Number(item?.ruleVoteDelta ?? item?.ruleScoreDelta) || 0
+}
+
+function openCitation(source: DreamCitationSource) {
+  selectedCitation.value = {
+    index: Number(source.index) || 1,
+    sourceType: source.sourceType || 'academic_source',
+    sourceId: String(source.sourceId || ''),
+    title: String(source.title || t('oracle.academicSource')),
+    year: source.year,
+    excerpt: String(source.quote || ''),
+    ruleLinks: source.ruleLinks || [],
+  }
+  citationModalOpen.value = true
+}
+
+function openCitationBySource(sourceId: string) {
+  const source = referenceSources.value.find(item => item.sourceId === sourceId)
+  if (source) openCitation(source)
+}
+
+function openCitationByIndex(index: number) {
+  const source = referenceSources.value.find(item => item.index === index)
+  if (source) openCitation(source)
+}
+
+function applyCitationFeedback(payload: { analysis?: AiDreamAnalysisResult }) {
+  if (payload?.analysis) applyDreamAnalysisUpdate(payload.analysis)
+}
+
+function hasMotifHistory(note: AiSymbolicNote): boolean {
   const stats = note?.motifStats
   return Boolean(stats && (
     stats.previousPersonalDreamCount
@@ -608,35 +655,109 @@ function hasMotifHistory(note: any): boolean {
   ))
 }
 
-// Watch props.analysis to sync saved user feedback
-watch(() => props.analysis, (newVal) => {
-  if (newVal?.real_life_hypotheses) {
-    const selections: Record<string, string> = {}
-    newVal.real_life_hypotheses.forEach((item: any, idx: number) => {
-      if (item.userFeedback) {
-        selections[questionKey(item, idx)] = item.userFeedback
-      }
-    })
-    feedbackSelections.value = selections
-    const answeredCount = Object.keys(selections).length
-    revealedQuestionCount.value = Math.max(
-      revealedQuestionCount.value,
-      Math.min(newVal.real_life_hypotheses.length, 2 + answeredCount),
-    )
-  } else {
-    feedbackSelections.value = {}
-    revealedQuestionCount.value = 2
+function syncFeedbackSelections(analysis: AiDreamAnalysisResult | null | undefined) {
+  const selections: Record<string, string> = {}
+  for (const [index, item] of (analysis?.real_life_hypotheses || []).entries()) {
+    if (item.userFeedback) selections[questionKey(item, index)] = item.userFeedback
   }
-}, { immediate: true })
+  feedbackSelections.value = selections
+}
+
+watch(() => props.analysis, syncFeedbackSelections, { immediate: true })
 
 const settingsStore = useSettingsStore()
 const postStore = usePostStore()
 const dreamStore = useDreamStore()
+const continuationStore = useDreamContinuationStore()
+const continuationTask = computed(() => props.dreamId
+  ? continuationStore.findTask(props.dreamId)
+  : undefined)
+
+function applyDreamAnalysisUpdate(refreshedAnalysis: AiDreamAnalysisResult) {
+  if (props.analysis) Object.assign(props.analysis, refreshedAnalysis)
+  syncFeedbackSelections(refreshedAnalysis)
+
+  const targetDreamId = props.dreamId || postStore.focusedDream?._id
+  if (!targetDreamId) return
+  if (postStore.focusedDream?._id === targetDreamId) {
+    postStore.focusedDream.ai_result = refreshedAnalysis
+    postStore.focusedDream.aiAnalysis = refreshedAnalysis
+  }
+  const storedDream = dreamStore.dreams.find(dream => dream._id === targetDreamId)
+  if (storedDream) {
+    storedDream.ai_result = refreshedAnalysis
+    storedDream.aiAnalysis = refreshedAnalysis
+  }
+}
+const continuationLoading = computed(() => continuationTask.value?.status === 'pending')
+const continuationProgress = computed(() => continuationTask.value?.progress || 0)
+const continuationPending = computed(() =>
+  continuationLoading.value
+  || ['queued', 'running'].includes(String(props.analysis?.continuationMetadata?.status || '')),
+)
+const continuationStatusMessage = computed(() =>
+  continuationTask.value?.statusMessage
+  || String(props.analysis?.continuationMetadata?.statusMessage || t('oracle.continuationReturning')),
+)
+const continuationIndex = ref(0)
+const continuationExpanded = ref(false)
+const continuationVersions = computed(() => {
+  const stored = props.analysis?.creative_continuation_history || []
+  if (stored.length) return stored
+  return props.analysis?.creative_continuation ? [props.analysis.creative_continuation] : []
+})
+const displayedContinuation = computed(() =>
+  continuationVersions.value[continuationIndex.value]
+  || props.analysis?.creative_continuation,
+)
+const continuationCanCollapse = computed(() =>
+  String(displayedContinuation.value?.continuation || '').length > 650)
+
+watch(continuationVersions, (versions) => {
+  const storedIndex = Number(props.analysis?.creative_continuation_index)
+  continuationIndex.value = Number.isInteger(storedIndex) && storedIndex >= 0 && storedIndex < versions.length
+    ? storedIndex
+    : Math.max(0, versions.length - 1)
+}, { immediate: true })
+
+watch([() => props.dreamId, continuationIndex], () => {
+  continuationExpanded.value = false
+})
+
+watch(() => continuationTask.value?.dream, dream => {
+  if (!dream?.ai_result || !props.analysis) return
+  Object.assign(props.analysis, dream.ai_result)
+}, { deep: false })
+
+watch(
+  () => props.analysis?.continuationMetadata,
+  metadata => {
+    if (!props.dreamId || !metadata || !['queued', 'running'].includes(String(metadata.status))) return
+    continuationStore.track({
+      _id: props.dreamId,
+      ai_result: props.analysis,
+      continuationMetadata: metadata,
+    } as ApiDream, 'dialog')
+  },
+  { immediate: true, deep: true },
+)
+
+watch(() => continuationTask.value?.status, (status, previous) => {
+  if (status === 'completed' && previous === 'pending') {
+    settingsStore.showToast(t('oracle.continuationRegenerated'), 'success')
+  } else if (status === 'failed' && previous === 'pending') {
+    settingsStore.showToast(t('oracle.continuationRegenerateFailed'), 'error')
+  }
+})
+
+onUnmounted(() => {
+  if (props.dreamId) continuationStore.pin(props.dreamId)
+})
 
 async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null) {
   const targetDreamId = props.dreamId || postStore.focusedDream?._id
   if (!targetDreamId) {
-    console.error('Cannot save hypothesis feedback: dreamId is missing')
+    settingsStore.showToast(t('oracle.dreamFeedbackSaveFailed'), 'error')
     return
   }
 
@@ -646,25 +767,22 @@ async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null)
   const submittedAnswer = val
 
   try {
-    const response = await apiClient.post(`/dreams/${targetDreamId}/hypothesis-feedback`, {
+    const response = await apiClient.post<DreamHypothesisFeedbackResponse>(
+      `/dreams/${targetDreamId}/hypothesis-feedback`,
+      {
       hypothesisIndex: hypothesisIdx,
       verificationKey: hypothesisItem?.verificationKey,
       answer: submittedAnswer,
       questionText
-    })
+      },
+    )
 
     if (response.data.success) {
       if (submittedAnswer === null) delete feedbackSelections.value[feedbackKey]
       else feedbackSelections.value[feedbackKey] = submittedAnswer
-      if (submittedAnswer !== null) {
-        revealedQuestionCount.value = Math.min(
-          props.analysis?.real_life_hypotheses?.length || revealedQuestionCount.value,
-          revealedQuestionCount.value + 1,
-        )
-      }
       const refreshedAnalysis = response.data.data?.analysis
-      if (props.analysis && refreshedAnalysis) {
-        Object.assign(props.analysis, refreshedAnalysis)
+      if (refreshedAnalysis) {
+        applyDreamAnalysisUpdate(refreshedAnalysis)
       } else if (props.analysis) {
         props.analysis.feedback_revision = response.data.data?.feedbackRevision || []
         props.analysis.feedback_conclusion = response.data.data?.feedbackConclusion || null
@@ -673,37 +791,33 @@ async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null)
         ? response.data.data.ruleScoreUpdates
         : []
       const directDelta = scoreUpdates
-        .filter((item: any) => item?.relation === 'direct')
-        .reduce((total: number, item: any) => total + (Number(item?.scoreDelta) || 0), 0)
+        .filter((item: OracleRuleScoreUpdateDto) => item.relation === 'direct')
+        .reduce((total, item) => total + (Number(item.voteDelta ?? item.scoreDelta) || 0), 0)
       const scoreMessage = directDelta > 0
-        ? `Đã cộng ${directDelta} điểm vào lập luận.`
+        ? t('oracle.dreamFeedbackScoreAdded', { score: directDelta })
         : directDelta < 0
-          ? `Đã trừ ${Math.abs(directDelta)} điểm khỏi lập luận.`
+          ? t('oracle.dreamFeedbackScoreRemoved', { score: Math.abs(directDelta) })
           : submittedAnswer === null
-            ? 'Đã bỏ lựa chọn.'
-            : 'Đã lưu lựa chọn; điểm lập luận không đổi.'
+            ? t('oracle.dreamFeedbackCleared')
+            : t('oracle.dreamFeedbackSaved')
       settingsStore.showToast(scoreMessage, 'success')
 
-      // Update state mirror in stores
-      if (postStore.focusedDream && postStore.focusedDream._id === targetDreamId) {
-        const d = postStore.focusedDream
-        if (refreshedAnalysis) {
-          d.ai_result = refreshedAnalysis
-          d.aiAnalysis = refreshedAnalysis
-        }
-      }
-
-      const dreamInStore = dreamStore.dreams.find((d: any) => d._id === targetDreamId)
-      if (dreamInStore) {
-        if (refreshedAnalysis) {
-          dreamInStore.ai_result = refreshedAnalysis
-          dreamInStore.aiAnalysis = refreshedAnalysis
-        }
-      }
     }
-  } catch (err: any) {
-    console.error('Failed to submit hypothesis feedback:', err)
-    settingsStore.showToast(err.response?.data?.message || 'Không thể lưu phản hồi.', 'error')
+  } catch (error: unknown) {
+    settingsStore.showToast(
+      getApiErrorMessage(error, t('oracle.dreamFeedbackSaveFailed')),
+      'error',
+    )
+  }
+}
+
+async function regenerateContinuation() {
+  if (!props.dreamId || continuationLoading.value) return
+  try {
+    continuationExpanded.value = false
+    await continuationStore.start(props.dreamId)
+  } catch {
+    settingsStore.showToast(t('oracle.continuationRegenerateFailed'), 'error')
   }
 }
 
@@ -712,10 +826,21 @@ function handleCompactClick() {
 }
 
 function getContextToneLabel(tone?: string): string {
-  if (tone === 'reassuring') return 'Mang tính an ủi'
-  if (tone === 'threatening') return 'Mang tính đe dọa'
-  if (tone === 'ambivalent') return 'Cảm xúc đan xen'
-  return 'Chưa rõ sắc thái'
+  if (tone === 'reassuring') return t('oracle.dreamToneReassuring')
+  if (tone === 'threatening') return t('oracle.dreamToneThreatening')
+  if (tone === 'ambivalent') return t('oracle.dreamToneAmbivalent')
+  return t('oracle.dreamToneUnclear')
+}
+
+function motifOriginLabel(note: AiSymbolicNote): string {
+  if (note.origin === 'dictionary') {
+    return note.dictionarySymbol
+      ? t('oracle.dreamMotifDictionaryNamed', { symbol: note.dictionarySymbol })
+      : t('oracle.dreamMotifDictionary')
+  }
+  return hasMotifHistory(note)
+    ? t('oracle.dreamMotifObserved')
+    : t('oracle.dreamMotifContextual')
 }
 
 const culturalNotesToShow = computed(() => {
@@ -1020,128 +1145,6 @@ function hasRealSource(source: string | undefined | null): boolean {
   margin: 0;
 }
 
-.oracle-case-conclusion {
-  display: grid;
-  gap: 14px;
-  margin-top: 18px;
-  padding: 18px;
-  border: 1px solid rgba(99, 102, 241, .34);
-  border-radius: 14px;
-  background: linear-gradient(145deg, rgba(99, 102, 241, .10), rgba(15, 23, 42, .22));
-}
-
-.oracle-case-conclusion__heading span {
-  color: #a5b4fc;
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-}
-
-.oracle-case-conclusion__heading h3 {
-  margin: 5px 0 0;
-  color: var(--color-text-primary);
-  font-size: 1rem;
-}
-
-.oracle-case-conclusion__answer {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: .94rem;
-  font-weight: 560;
-  line-height: 1.7;
-}
-
-.oracle-case-conclusion__confidence {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.oracle-case-decision,
-.oracle-case-action {
-  padding: 12px 14px;
-  border-radius: 10px;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.oracle-case-decision strong,
-.oracle-case-action strong {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--color-text-primary);
-  font-size: 12px;
-}
-
-.oracle-case-decision ul {
-  display: grid;
-  gap: 5px;
-  margin: 0;
-  padding-left: 18px;
-  color: var(--color-text-secondary);
-}
-
-.oracle-case-decision--confirmed {
-  border: 1px solid rgba(52, 211, 153, .24);
-  background: rgba(16, 185, 129, .07);
-}
-
-.oracle-case-decision--ruled-out {
-  border: 1px solid rgba(148, 163, 184, .20);
-  background: rgba(30, 41, 59, .24);
-}
-
-.oracle-case-action {
-  border: 1px solid rgba(129, 140, 248, .32);
-  background: rgba(99, 102, 241, .10);
-}
-
-.oracle-case-action p {
-  margin: 0;
-  color: var(--color-text-primary);
-}
-
-.oracle-concern-card {
-  padding: 12px 14px;
-  border: 1px solid rgba(52, 211, 153, .25);
-  border-radius: 10px;
-  background: rgba(16, 185, 129, .055);
-}
-
-.oracle-concern-card > strong { color: #6ee7b7; font-size: 13px; }
-.oracle-concern-card p { margin: 6px 0 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
-.oracle-concern-card details { margin-top: 9px; }
-.oracle-concern-card summary, .oracle-evidence-chain > summary, .oracle-narrative-summary > summary, .oracle-feedback-revision__details > summary { color: #b6c2cf; cursor: pointer; font-size: 11px; font-weight: 650; }
-.oracle-concern-card ul { margin: 8px 0 0; padding-left: 18px; color: var(--color-text-muted); font-size: 11px; line-height: 1.6; }
-.oracle-concern-card a { display: inline-block; margin-top: 8px; color: #93c5fd; font-size: 11px; text-decoration: none; }
-.oracle-concern-card a:hover { text-decoration: underline; }
-
-.oracle-evidence-chain {
-  padding-top: 2px;
-}
-
-.oracle-evidence-chain article {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-left: 2px solid #52637a;
-  background: rgba(255, 255, 255, .018);
-}
-
-.oracle-evidence-chain article > strong { color: var(--color-text-primary); font-size: 12px; }
-.oracle-evidence-chain article > p { margin: 5px 0 0; color: var(--color-text-secondary); font-size: 11px; line-height: 1.55; }
-.oracle-evidence-chain__sources { display: grid; gap: 5px; margin-top: 8px; }
-.oracle-evidence-chain__sources button { padding: 0; border: 0; background: transparent; color: #93c5fd; cursor: pointer; font-size: 11px; line-height: 1.45; text-align: left; }
-.oracle-evidence-chain__sources button:hover { text-decoration: underline; }
-
-.oracle-narrative-summary {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.oracle-narrative-summary p { margin: 9px 0 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.6; }
-
 /* Sections */
 .oracle-section {
   display: flex;
@@ -1280,13 +1283,6 @@ function hasRealSource(source: string | undefined | null): boolean {
   font-weight: 550;
   line-height: 1.35;
 }
-.oracle-thread__basis {
-  margin: -2px 0 2px;
-  color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.5;
-}
 .oracle-motif-card__body { min-width: 0; }
 .oracle-motif-card__body .oracle-item__desc { line-height: 1.7; }
 .oracle-motif-card__body .oracle-item__grounding {
@@ -1384,25 +1380,25 @@ function hasRealSource(source: string | undefined | null): boolean {
 }
 
 .oracle-continuation {
-  margin-top: 18px;
-  border: 1px solid rgba(168, 85, 247, .28);
+  margin-top: 24px;
+  border: 1px solid var(--color-border);
   border-radius: 14px;
-  background: linear-gradient(145deg, rgba(88, 28, 135, .12), rgba(15, 23, 42, .20));
+  background: color-mix(in srgb, var(--color-bg-elevated) 70%, var(--color-bg-surface));
   overflow: hidden;
 }
 
-.oracle-continuation > summary {
+.oracle-continuation__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px;
-  cursor: pointer;
+  border-bottom: 1px solid var(--color-border-subtle);
   color: var(--color-text-primary);
   font-weight: 700;
 }
 
-.oracle-continuation > summary small,
+.oracle-continuation__header small,
 .oracle-continuation__body > small {
   color: var(--color-text-muted);
   font-size: 10px;
@@ -1412,7 +1408,7 @@ function hasRealSource(source: string | undefined | null): boolean {
 .oracle-continuation__body {
   display: grid;
   gap: 12px;
-  padding: 0 16px 16px;
+  padding: 16px;
 }
 
 .oracle-continuation__body h3,
@@ -1424,6 +1420,55 @@ function hasRealSource(source: string | undefined | null): boolean {
   white-space: pre-line;
   color: var(--color-text-primary);
   line-height: 1.75;
+}
+
+.oracle-continuation__story-wrap {
+  position: relative;
+}
+
+.oracle-continuation__story-wrap--collapsed {
+  max-height: 12.25rem;
+  overflow: hidden;
+}
+
+.oracle-continuation__story-wrap--collapsed::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3.5rem;
+  background: linear-gradient(transparent, var(--color-bg-elevated));
+  content: '';
+  pointer-events: none;
+}
+
+.oracle-continuation__expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: stretch;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-bg-surface) 82%, var(--color-primary) 18%);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease;
+}
+
+.oracle-continuation__expand:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 60%, var(--color-border));
+  background: color-mix(in srgb, var(--color-bg-surface) 72%, var(--color-primary) 28%);
+}
+
+.oracle-continuation__expand-icon {
+  font-size: 16px;
+  line-height: 1;
 }
 
 .oracle-continuation__connection {
@@ -1899,8 +1944,174 @@ function hasRealSource(source: string | undefined | null): boolean {
   text-decoration: underline;
 }
 
+.oracle-inline-marker {
+  margin: 0 .08rem;
+  cursor: pointer;
+  font-size: .76em;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: super;
+}
+
+.oracle-inline-marker--unsupported {
+  color: #d6a75f;
+  cursor: help;
+}
+
 .source-separator {
   color: var(--color-text-muted, #737373);
+}
+
+.oracle-rule-score-change {
+  align-self: flex-end;
+  color: #79d6a3;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.oracle-rule-score-change--down {
+  color: #ef8a8a;
+}
+
+.oracle-sources__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.oracle-source-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease;
+}
+
+.oracle-source-card:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-bg-elevated));
+}
+
+.oracle-source-card__index {
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.oracle-source-card__content {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.oracle-source-card__content strong {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oracle-source-card__content small,
+.oracle-source-card__open {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.oracle-continuation__reload {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 17px;
+}
+
+.oracle-continuation__reload:disabled {
+  cursor: wait;
+  opacity: .7;
+}
+
+.oracle-continuation__spinner {
+  animation: oracle-continuation-spin .7s linear infinite;
+}
+
+@keyframes oracle-continuation-spin {
+  to { transform: rotate(360deg); }
+}
+
+.oracle-continuation__progress {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-border-subtle);
+}
+
+.oracle-continuation__progress-state {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.oracle-continuation__progress span {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+  transition: width .2s ease;
+}
+
+.oracle-continuation__controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.oracle-continuation__controls nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.oracle-continuation__controls nav button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 19px;
+}
+
+.oracle-continuation__controls nav button:disabled {
+  cursor: default;
+  opacity: .35;
 }
 
 .oracle-item__internal-framework {

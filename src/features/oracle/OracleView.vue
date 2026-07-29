@@ -23,9 +23,9 @@
       :thread-title="activeThread?.title"
       :is-sending="isSending"
       :suggested-prompts="latestSuggestions"
-      :wait-for-complete="waitForComplete"
       :context-usage="latestContextUsage"
       :context-message-count="activeMessages.length"
+      :queued-prompts="activeQueuedPrompts"
       :run-estimate="activeThread ? {
         expectedMinMs: activeThread.activeRunExpectedMinMs,
         expectedMaxMs: activeThread.activeRunExpectedMaxMs,
@@ -36,7 +36,9 @@
       @open-citation="handleOpenCitation"
       @edit-message="handleEditMessage"
       @select-branch="handleSelectBranch"
-      @update:wait-for-complete="setWaitForComplete"
+      @edit-queued-prompt="handleEditQueuedPrompt"
+      @remove-queued-prompt="handleRemoveQueuedPrompt"
+      @queue-editing-change="handleQueueEditingChange"
     />
 
     <OracleCitationModal
@@ -70,6 +72,7 @@ import OracleModelConnections from './components/OracleModelConnections.vue'
 import OracleCitationModal from './components/OracleCitationModal.vue'
 import { useOracleChatStore } from '@/store/useOracleChatStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { isAbortError } from '@/utils/apiError'
 import { usePostStore } from '@/store/usePostStore'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -83,6 +86,9 @@ import {
   type OracleCitationDto,
 } from '@/api/oracleApi'
 import type { OracleMode, OracleShellMessage } from './oracleShell.types'
+import { materializeOracleBranch } from './services/oracleBranchPresentation.service'
+import { applyOracleStreamEvent } from './services/oracleStreamPresentation.service'
+import { createOracleSmoothPresenter } from './services/oracleSmoothPresenter.service'
 
 const { t } = useI18n()
 const oracleStore = useOracleChatStore()
@@ -97,6 +103,8 @@ const {
   isLoading,
   isMutating,
   backgroundRun,
+  citationChange,
+  promptQueue,
 } = storeToRefs(oracleStore)
 const isSidebarOpen = ref(false)
 const chatShell = ref<InstanceType<typeof OracleChatShell> | null>(null)
@@ -111,26 +119,22 @@ const selectedCitation = ref<OracleCitationDto | null>(null)
 const selectedCitationMessageId = ref('')
 const pendingDeleteThreadId = ref<string | null>(null)
 const isSending = ref(false)
-const waitForComplete = ref(localStorage.getItem('oracle_wait_for_complete') === 'true')
+const isQueueEditorOpen = ref(false)
+const dispatchingQueueId = ref<string | null>(null)
 let streamController: AbortController | null = null
 let currentRunId: string | null = null
-let presentationFrame: number | null = null
-let presentationQueue = ''
-let presentationTargetId: string | null = null
-let presentationReady = false
-let lastPresentationAt = 0
-let drainResolvers: Array<() => void> = []
 let isLeavingView = false
+let routeSyncReady = false
+const smoothPresenter = createOracleSmoothPresenter((targetId) =>
+  activeMessages.value.find((message) => message.id === targetId))
 
-function streamEventTime(payload: Record<string, unknown>, preferredKey?: string): number {
-  const preferred = preferredKey ? payload[preferredKey] : undefined
-  const parsed = Date.parse(String(preferred || payload._eventCreatedAt || ''))
-  return Number.isFinite(parsed) ? parsed : Date.now()
-}
+const activeQueuedPrompts = computed(() =>
+  promptQueue.value.filter((prompt) =>
+    prompt.threadId === activeThreadId.value && prompt.id !== dispatchingQueueId.value))
+
 const latestSuggestions = computed(() => {
   const assistant = [...activeMessages.value].reverse().find((message) => message.role === 'assistant')
-  const blocked = /^(tôi sẽ kể chi tiết giấc mơ|i will describe the dream in detail|oracle cần biết thêm điều gì để phân tích|what else does oracle need)/iu
-  return (assistant?.suggestedPrompts || []).filter((suggestion) => !blocked.test(suggestion.trim()))
+  return assistant?.suggestedPrompts || []
 })
 const latestContextUsage = computed(() => (
   [...activeMessages.value].reverse().find((message) => message.contextUsage)?.contextUsage || {
@@ -146,74 +150,21 @@ const latestContextUsage = computed(() => (
   }
 ))
 
-function resolvePresentationDrain() {
-  if (presentationQueue || presentationFrame !== null) return
-  const resolvers = drainResolvers
-  drainResolvers = []
-  resolvers.forEach((resolve) => resolve())
-}
-
-function paintPresentationFrame(timestamp: number) {
-  presentationFrame = null
-  const target = activeMessages.value.find((message) => message.id === presentationTargetId)
-  if (!target || !presentationQueue) {
-    presentationQueue = ''
-    resolvePresentationDrain()
-    return
-  }
-  const elapsed = lastPresentationAt ? timestamp - lastPresentationAt : 16
-  lastPresentationAt = timestamp
-  const characters = document.hidden
-    ? presentationQueue.length
-    : Math.max(4, Math.min(48, Math.ceil(presentationQueue.length / 90), Math.floor(elapsed / 4)))
-  target.content += presentationQueue.slice(0, characters)
-  presentationQueue = presentationQueue.slice(characters)
-  if (presentationQueue) presentationFrame = requestAnimationFrame(paintPresentationFrame)
-  else resolvePresentationDrain()
-}
-
-function enqueuePresentation(targetId: string, text: string) {
-  presentationTargetId = targetId
-  presentationQueue += text
-}
-
-function setWaitForComplete(value: boolean) {
-  waitForComplete.value = value
-  localStorage.setItem('oracle_wait_for_complete', String(value))
-  if (presentationReady) releasePresentation()
-}
-
-function releasePresentation() {
-  if (!presentationReady) return
-  if (waitForComplete.value) {
-    clearPresentation(true)
-    return
-  }
-  if (presentationQueue && presentationFrame === null) {
-    lastPresentationAt = 0
-    presentationFrame = requestAnimationFrame(paintPresentationFrame)
-  }
-}
-
-function waitForPresentationDrain(): Promise<void> {
-  if (!presentationQueue && presentationFrame === null) return Promise.resolve()
-  return new Promise((resolve) => drainResolvers.push(resolve))
-}
-
-function clearPresentation(flush = false) {
-  if (presentationFrame !== null) cancelAnimationFrame(presentationFrame)
-  presentationFrame = null
-  const target = activeMessages.value.find((message) => message.id === presentationTargetId)
-  if (flush && target) target.content += presentationQueue
-  presentationQueue = ''
-  presentationTargetId = null
-  presentationReady = false
-  resolvePresentationDrain()
+function presentStreamEvent(event: Parameters<typeof applyOracleStreamEvent>[0]['event'], target: OracleShellMessage) {
+  applyOracleStreamEvent({
+    event,
+    target,
+    enqueueText: (text) => smoothPresenter.enqueue(target.id, text),
+    releaseText: smoothPresenter.release,
+    clearText: smoothPresenter.clear,
+    responseUnavailable: t('oracle.responseUnavailable'),
+    responseCancelled: t('oracle.responseCancelled'),
+  })
 }
 
 async function handleNewThread() {
   streamController?.abort()
-  clearPresentation()
+  smoothPresenter.clear()
   activeMode.value = 'chat'
   oracleStore.selectThread(null)
   await router.replace({ path: '/oracle', query: {} })
@@ -223,67 +174,6 @@ async function handleNewThread() {
   isSidebarOpen.value = false
   await nextTick()
   chatShell.value?.focusComposer()
-}
-
-function turnToMessage(turn: OracleTurnDto): OracleShellMessage {
-  const timing = turn.runTiming
-  return {
-    id: turn._id,
-    role: turn.role,
-    content: turn.contentBlocks.map((block) => block.text).join('\n'),
-    citations: turn.citations || [],
-    suggestedPrompts: turn.suggestedPrompts || [],
-    contextUsage: turn.contextUsage,
-    parentTurnId: turn.parentTurnId,
-    branchRootTurnId: turn.branchRootTurnId,
-    supersedesTurnId: turn.supersedesTurnId,
-    createdAt: turn.createdAt,
-    runState: timing ? 'completed' : undefined,
-    startedAt: timing ? new Date(timing.startedAt).getTime() : undefined,
-    thoughtCompletedAt: timing ? new Date(timing.thoughtCompletedAt).getTime() : undefined,
-    completedAt: timing ? new Date(timing.completedAt).getTime() : undefined,
-    expectedMinMs: timing?.expectedMinMs,
-    expectedMaxMs: timing?.expectedMaxMs,
-  }
-}
-
-function materializeBranch(turns: OracleTurnDto[], requestedLeafId?: string): OracleShellMessage[] {
-  if (!turns.length) return []
-  const byId = new Map(turns.map((turn) => [turn._id, turn]))
-  const defaultLeaf = [...turns].reverse().find((turn) => turn.role === 'assistant' && turn.contentBlocks.length)
-    || turns[turns.length - 1]
-  let current: OracleTurnDto | undefined = byId.get(requestedLeafId || '') || defaultLeaf
-  const ancestry: OracleTurnDto[] = []
-  while (current && ancestry.length < 100) {
-    ancestry.push(current)
-    current = current.parentTurnId ? byId.get(current.parentTurnId) : undefined
-  }
-  const selected = ancestry.length > 1 ? ancestry.reverse() : turns
-  return selected
-    .filter((turn) => turn.role === 'user' || turn.contentBlocks.length > 0)
-    .map((turn) => {
-      const message = turnToMessage(turn)
-      if (turn.role !== 'user') return message
-      const rootId = turn.branchRootTurnId || turn._id
-      const variants = turns
-        .filter((candidate) => candidate.role === 'user'
-          && (candidate._id === rootId || candidate.branchRootTurnId === rootId))
-        .sort((a, b) => a.sequence - b.sequence)
-      if (variants.length <= 1) return message
-      const index = variants.findIndex((candidate) => candidate._id === turn._id)
-      const assistantLeaf = (variant?: OracleTurnDto) => (
-        variant
-          ? turns.find((candidate) => candidate.role === 'assistant' && candidate.parentTurnId === variant._id)?._id
-          : undefined
-      )
-      message.branch = {
-        index: index + 1,
-        total: variants.length,
-        previousLeafId: assistantLeaf(variants[index - 1]),
-        nextLeafId: assistantLeaf(variants[index + 1]),
-      }
-      return message
-    })
 }
 
 async function loadThreadMessages(id: string, preferredLeafId?: string) {
@@ -296,7 +186,6 @@ async function loadThreadMessages(id: string, preferredLeafId?: string) {
         runState: message.runState,
         startedAt: message.startedAt,
         thoughtCompletedAt: message.thoughtCompletedAt,
-        presentationStartedAt: message.presentationStartedAt,
         firstTokenAt: message.firstTokenAt,
         completedAt: message.completedAt,
         expectedMinMs: message.expectedMinMs,
@@ -304,7 +193,10 @@ async function loadThreadMessages(id: string, preferredLeafId?: string) {
       },
     ]),
   )
-  const selected = materializeBranch(data.turns, preferredLeafId || selectedBranchLeafId.value || undefined)
+  const selected = materializeOracleBranch(
+    data.turns,
+    preferredLeafId || selectedBranchLeafId.value || undefined,
+  )
   selectedBranchLeafId.value = selected[selected.length - 1]?.id || null
   activeMessages.value = selected.map((message) => {
     const runtime = runtimeById.get(message.id)
@@ -316,31 +208,34 @@ async function loadThreadMessages(id: string, preferredLeafId?: string) {
   })
 }
 
-async function handleSelectThread(id: string) {
+async function handleSelectThread(id: string, updateRoute = true) {
   streamController?.abort()
-  clearPresentation()
+  smoothPresenter.clear()
   oracleStore.selectThread(id)
-  await router.replace({ path: '/oracle', query: { thread: id } })
+  if (updateRoute) await router.replace({ path: '/oracle', query: { thread: id } })
   selectedBranchLeafId.value = null
   allThreadTurns.value = []
   isSidebarOpen.value = false
   try {
-    await loadThreadMessages(id)
     const thread = threads.value.find((item) => item.id === id)
     const tracked = backgroundRun.value?.threadId === id ? backgroundRun.value : null
     const runId = thread?.activeRunId || tracked?.runId
+    const assistantTurnId = thread?.activeRunAssistantTurnId || tracked?.assistantTurnId
+    await loadThreadMessages(id, assistantTurnId || undefined)
     if (runId && !isSending.value) {
       await resumeActiveRun(
         id,
         runId,
         thread?.activeRunStartedAt || tracked?.startedAt,
-        thread?.activeRunAssistantTurnId || tracked?.assistantTurnId,
+        assistantTurnId,
         thread?.activeRunStage || tracked?.stage,
         thread?.activeRunStageStartedAt || tracked?.stageStartedAt,
       )
+    } else {
+      scheduleQueuedPrompt(id)
     }
-  } catch (error: any) {
-    if (!isLeavingView && error?.name !== 'AbortError') {
+  } catch (error: unknown) {
+    if (!isLeavingView && !isAbortError(error)) {
       settingsStore.showToastKey('oracle.loadError', undefined, 'error')
     }
   }
@@ -370,18 +265,32 @@ function requestDeleteThread(id: string) {
 async function confirmDeleteThread() {
   if (!pendingDeleteThreadId.value) return
   try {
-    await oracleStore.removeThread(pendingDeleteThreadId.value)
+    const deletedThreadId = pendingDeleteThreadId.value
+    await oracleStore.removeThread(deletedThreadId)
     showDeleteConfirm.value = false
     pendingDeleteThreadId.value = null
     activeMessages.value = []
+    if (route.query.thread === deletedThreadId) {
+      await router.replace({ path: '/oracle', query: {} })
+    }
+    settingsStore.showToastKey('oracle.deleteSuccess', undefined, 'success')
   } catch {
     settingsStore.showToastKey('oracle.deleteError', undefined, 'error')
   }
 }
 
-async function handleSend(content: string) {
+function handleSend(content: string) {
+  if (isSending.value) {
+    oracleStore.enqueuePrompt(activeThreadId.value, content)
+    return
+  }
+  void sendOracleContent(content)
+}
+
+async function sendOracleContent(content: string, queuedPromptId?: string) {
   if (isSending.value) return
   isSending.value = true
+  dispatchingQueueId.value = queuedPromptId || null
   let threadId = activeThreadId.value
   let createdForThisMessage = false
   let runPersisted = false
@@ -390,6 +299,7 @@ async function handleSend(content: string) {
       threadId = await oracleStore.addThread(t('oracle.untitledConversation'), activeMode.value)
       if (!threadId) throw new Error('oracle_thread_create_failed')
       createdForThisMessage = true
+      oracleStore.assignUnscopedPrompts(threadId)
     }
     // Resolve the real persisted parent before adding the optimistic assistant.
     // A local placeholder ID must never be sent as a backend turn ID.
@@ -416,6 +326,7 @@ async function handleSend(content: string) {
     const clientRequestId = `oracle_${crypto.randomUUID()}`
     const run = await postOracleTurn(threadId, content, clientRequestId, parentTurnId)
     runPersisted = true
+    if (queuedPromptId) oracleStore.removeQueuedPrompt(queuedPromptId)
     currentRunId = run.runId
     oracleStore.trackRun(threadId, run.runId, { assistantTurnId: run.assistantTurnId })
     await oracleStore.loadThreads()
@@ -429,64 +340,54 @@ async function handleSend(content: string) {
     await streamOracleRun(run.runId, (event) => {
       const target = activeMessages.value.find((message) => message.id === run.assistantTurnId)
       if (!target) return
-      if (event.type === 'token') {
-        if (!target.firstTokenAt) target.firstTokenAt = Date.now()
-        enqueuePresentation(run.assistantTurnId, String(event.payload.text || ''))
-      }
-      if (event.type === 'tool_progress' && event.payload.stage === 'preparing_answer') {
-        target.thoughtCompletedAt = streamEventTime(event.payload, 'stageStartedAt')
-        target.runState = 'preparing'
-      }
-      if (event.type === 'done') {
-        presentationReady = true
-        target.presentationStartedAt = Date.now()
-        target.runState = waitForComplete.value ? 'completed' : 'responding'
-        releasePresentation()
-        target.completedAt = streamEventTime(event.payload, 'completedAt')
-        target.suggestedPrompts = Array.isArray(event.payload.suggestedPrompts)
-          ? event.payload.suggestedPrompts.map(String)
-          : []
-        if (event.payload.contextUsage) {
-          target.contextUsage = event.payload.contextUsage as OracleShellMessage['contextUsage']
-        }
-      }
-      if (event.type === 'citation' && event.payload.citation) {
-        target.citations = [
-          ...(target.citations || []),
-          event.payload.citation as NonNullable<OracleShellMessage['citations']>[number],
-        ]
-      }
-      if (event.type === 'error') {
-        if (waitForComplete.value) clearPresentation(true)
-        target.runState = 'failed'
-        target.completedAt = Date.now()
-        target.content = target.content || t('oracle.responseUnavailable')
-      }
-      if (event.type === 'cancelled') {
-        if (waitForComplete.value) clearPresentation(true)
-        target.runState = 'cancelled'
-        target.completedAt = Date.now()
-        target.content = target.content || t('oracle.responseCancelled')
-      }
+      presentStreamEvent(event, target)
     }, streamController.signal)
-    await waitForPresentationDrain()
+    await smoothPresenter.waitForDrain()
     const completedTarget = activeMessages.value.find((message) => message.id === run.assistantTurnId)
     if (completedTarget?.runState === 'responding') completedTarget.runState = 'completed'
     oracleStore.completeRun(threadId)
     await oracleStore.loadThreads()
     await loadThreadMessages(threadId, run.assistantTurnId)
-  } catch (error: any) {
-    if (createdForThisMessage && !runPersisted && error?.name !== 'AbortError' && threadId) {
+  } catch (error: unknown) {
+    if (createdForThisMessage && !runPersisted && !isAbortError(error) && threadId) {
       await oracleStore.removeThread(threadId).catch(() => undefined)
       activeMessages.value = []
     }
-    if (error?.name !== 'AbortError') {
+    if (!isAbortError(error)) {
       settingsStore.showToastKey('oracle.sendError', undefined, 'error')
     }
   } finally {
     currentRunId = null
     isSending.value = false
+    dispatchingQueueId.value = null
+    scheduleQueuedPrompt(threadId)
   }
+}
+
+function scheduleQueuedPrompt(threadId: string | null) {
+  window.setTimeout(() => {
+    if (
+      isSending.value
+      || isQueueEditorOpen.value
+      || !threadId
+      || activeThreadId.value !== threadId
+    ) return
+    const nextPrompt = oracleStore.promptsForThread(threadId)[0]
+    if (nextPrompt) void sendOracleContent(nextPrompt.content, nextPrompt.id)
+  }, 0)
+}
+
+function handleEditQueuedPrompt(id: string, content: string) {
+  oracleStore.updateQueuedPrompt(id, content)
+}
+
+function handleRemoveQueuedPrompt(id: string) {
+  oracleStore.removeQueuedPrompt(id)
+}
+
+function handleQueueEditingChange(editing: boolean) {
+  isQueueEditorOpen.value = editing
+  if (!editing) scheduleQueuedPrompt(activeThreadId.value)
 }
 
 async function handleEditMessage(message: OracleShellMessage, content: string) {
@@ -523,51 +424,33 @@ async function handleEditMessage(message: OracleShellMessage, content: string) {
     const assistantMessage = activeMessages.value.find((item) => item.id === optimisticAssistantId)
     if (userMessage) userMessage.id = run.userTurnId
     if (assistantMessage) assistantMessage.id = run.assistantTurnId
+    selectedBranchLeafId.value = run.assistantTurnId
+    await loadThreadMessages(threadId, run.assistantTurnId)
     streamController?.abort()
     streamController = new AbortController()
     await streamOracleRun(run.runId, (event) => {
       const target = activeMessages.value.find((item) => item.id === run.assistantTurnId)
       if (!target) return
-      if (event.type === 'token') {
-        if (!target.firstTokenAt) target.firstTokenAt = Date.now()
-        enqueuePresentation(target.id, String(event.payload.text || ''))
-      }
-      if (event.type === 'tool_progress' && event.payload.stage === 'preparing_answer') {
-        target.thoughtCompletedAt = streamEventTime(event.payload, 'stageStartedAt')
-        target.runState = 'preparing'
-      }
-      if (event.type === 'done') {
-        presentationReady = true
-        target.presentationStartedAt = Date.now()
-        target.runState = waitForComplete.value ? 'completed' : 'responding'
-        releasePresentation()
-        target.completedAt = streamEventTime(event.payload, 'completedAt')
-        target.suggestedPrompts = Array.isArray(event.payload.suggestedPrompts)
-          ? event.payload.suggestedPrompts.map(String)
-          : []
-        if (event.payload.contextUsage) target.contextUsage = event.payload.contextUsage as OracleShellMessage['contextUsage']
-      }
-      if (event.type === 'citation' && event.payload.citation) {
-        target.citations = [...(target.citations || []), event.payload.citation as NonNullable<OracleShellMessage['citations']>[number]]
-      }
+      presentStreamEvent(event, target)
     }, streamController.signal)
-    await waitForPresentationDrain()
+    await smoothPresenter.waitForDrain()
     const completed = activeMessages.value.find((item) => item.id === run.assistantTurnId)
     if (completed?.runState === 'responding') completed.runState = 'completed'
     oracleStore.completeRun(threadId)
     await oracleStore.loadThreads()
     await loadThreadMessages(threadId, run.assistantTurnId)
-  } catch (error: any) {
-    if (error?.name !== 'AbortError') settingsStore.showToastKey('oracle.sendError', undefined, 'error')
+  } catch (error: unknown) {
+    if (!isAbortError(error)) settingsStore.showToastKey('oracle.sendError', undefined, 'error')
     await loadThreadMessages(threadId).catch(() => undefined)
   } finally {
     currentRunId = null
     isSending.value = false
+    scheduleQueuedPrompt(threadId)
   }
 }
 
 function handleSelectBranch(leafId: string) {
-  const selected = materializeBranch(allThreadTurns.value, leafId)
+  const selected = materializeOracleBranch(allThreadTurns.value, leafId)
   selectedBranchLeafId.value = leafId
   activeMessages.value = selected
 }
@@ -598,6 +481,8 @@ async function resumeActiveRun(
   if (stage === 'preparing') {
     target.runState = 'preparing'
     target.thoughtCompletedAt = restoredStageAt || target.thoughtCompletedAt || runStartedAt
+  } else if (!target.runState) {
+    target.runState = 'thinking'
   }
   if (!existingTarget) activeMessages.value.push(target)
   isSending.value = true
@@ -611,44 +496,16 @@ async function resumeActiveRun(
   streamController = new AbortController()
   try {
     await streamOracleRun(runId, (event) => {
-      if (event.type === 'token') {
-        if (!target.firstTokenAt) target.firstTokenAt = Date.now()
-        enqueuePresentation(target.id, String(event.payload.text || ''))
-      }
-      if (event.type === 'tool_progress' && event.payload.stage === 'preparing_answer') {
-        target.thoughtCompletedAt = streamEventTime(event.payload, 'stageStartedAt')
-        target.runState = 'preparing'
-      }
-      if (event.type === 'citation' && event.payload.citation) {
-        target.citations = [...(target.citations || []), event.payload.citation as NonNullable<OracleShellMessage['citations']>[number]]
-      }
-      if (event.type === 'done') {
-        presentationReady = true
-        target.presentationStartedAt = Date.now()
-        target.runState = waitForComplete.value ? 'completed' : 'responding'
-        releasePresentation()
-        target.completedAt = streamEventTime(event.payload, 'completedAt')
-        target.suggestedPrompts = Array.isArray(event.payload.suggestedPrompts)
-          ? event.payload.suggestedPrompts.map(String)
-          : []
-        if (event.payload.contextUsage) {
-          target.contextUsage = event.payload.contextUsage as OracleShellMessage['contextUsage']
-        }
-      }
-      if (event.type === 'error' || event.type === 'cancelled') {
-        if (waitForComplete.value) clearPresentation(true)
-        target.runState = event.type === 'error' ? 'failed' : 'cancelled'
-        target.completedAt = Date.now()
-        target.content ||= event.type === 'error' ? t('oracle.responseUnavailable') : t('oracle.responseCancelled')
-      }
+      presentStreamEvent(event, target)
     }, streamController.signal)
-    await waitForPresentationDrain()
+    await smoothPresenter.waitForDrain()
     if (target.runState === 'responding') target.runState = 'completed'
     oracleStore.completeRun(threadId)
     await Promise.all([oracleStore.loadThreads(), loadThreadMessages(threadId)])
   } finally {
     isSending.value = false
     currentRunId = null
+    scheduleQueuedPrompt(threadId)
   }
 }
 
@@ -656,12 +513,11 @@ async function handleOpenCitation(message: OracleShellMessage, index: number) {
   const citation = message.citations?.find((item) => item.index === index)
   if (!citation) return
   if (citation.sourceType === 'academic_source') {
-    selectedCitationMessageId.value = message.id
-    selectedCitation.value = citation
-    showCitationModal.value = true
     try {
-      const details = await getOracleCitationDetails(message.id, index)
+      const details = await getOracleCitationDetails(message.id, index, citation.sourceId)
+      selectedCitationMessageId.value = message.id
       selectedCitation.value = details
+      showCitationModal.value = true
       const stored = message.citations?.findIndex((item) => item.index === index) ?? -1
       if (stored >= 0 && message.citations) message.citations[stored] = details
     } catch {
@@ -681,7 +537,7 @@ async function handleCancel() {
   if (!currentRunId) return
   const runId = currentRunId
   streamController?.abort()
-  clearPresentation(true)
+  smoothPresenter.clear(true)
   const pending = [...activeMessages.value].reverse().find(
     (message) => message.role === 'assistant'
       && ['thinking', 'preparing', 'responding'].includes(message.runState || ''),
@@ -705,6 +561,46 @@ watch(activeThread, (thread) => {
   if (thread) activeMode.value = thread.mode
 })
 
+watch(
+  [
+    isSending,
+    activeThreadId,
+    isQueueEditorOpen,
+    () => activeQueuedPrompts.value.length,
+  ],
+  ([sending, threadId, editing, queueLength]) => {
+    if (!sending && !editing && threadId && queueLength) scheduleQueuedPrompt(threadId)
+  },
+)
+
+watch(() => citationChange.value?.revision, async () => {
+  const threadId = activeThreadId.value
+  const change = citationChange.value
+  if (!threadId || !change?.threadIds.includes(threadId)) return
+  showCitationModal.value = false
+  selectedCitation.value = null
+  await loadThreadMessages(threadId)
+})
+
+watch(
+  () => route.query.thread,
+  async (value) => {
+    if (!routeSyncReady) return
+    const threadId = typeof value === 'string' ? value : null
+    if (threadId === activeThreadId.value) return
+    if (!threadId) {
+      streamController?.abort()
+      smoothPresenter.clear()
+      oracleStore.selectThread(null)
+      activeMessages.value = []
+      allThreadTurns.value = []
+      selectedBranchLeafId.value = null
+      return
+    }
+    await handleSelectThread(threadId, false)
+  },
+)
+
 onMounted(async () => {
   try {
     await oracleStore.loadThreads()
@@ -713,34 +609,39 @@ onMounted(async () => {
       : activeThreadId.value
     if (requestedThreadId) {
       oracleStore.selectThread(requestedThreadId)
-      await loadThreadMessages(requestedThreadId)
       const thread = threads.value.find((item) => item.id === requestedThreadId)
       const tracked = backgroundRun.value?.threadId === requestedThreadId
         ? backgroundRun.value
         : null
       const runId = thread?.activeRunId || tracked?.runId
+      const assistantTurnId = thread?.activeRunAssistantTurnId || tracked?.assistantTurnId
+      await loadThreadMessages(requestedThreadId, assistantTurnId || undefined)
       if (runId) {
         await resumeActiveRun(
           requestedThreadId,
           runId,
           thread?.activeRunStartedAt || tracked?.startedAt,
-          thread?.activeRunAssistantTurnId || tracked?.assistantTurnId,
+          assistantTurnId,
           thread?.activeRunStage || tracked?.stage,
           thread?.activeRunStageStartedAt || tracked?.stageStartedAt,
         )
+      } else {
+        scheduleQueuedPrompt(requestedThreadId)
       }
     }
-  } catch (error: any) {
-    if (!isLeavingView && error?.name !== 'AbortError') {
+  } catch (error: unknown) {
+    if (!isLeavingView && !isAbortError(error)) {
       settingsStore.showToastKey('oracle.loadError', undefined, 'error')
     }
+  } finally {
+    routeSyncReady = true
   }
 })
 
 onBeforeUnmount(() => {
   isLeavingView = true
   streamController?.abort()
-  clearPresentation()
+  smoothPresenter.clear()
 })
 </script>
 
@@ -752,5 +653,11 @@ onBeforeUnmount(() => {
   background: var(--color-bg-base, #0a0a0a);
   overflow: hidden;
   position: relative;
+}
+
+@media (max-width: 767px) {
+  .oracle-view {
+    height: 100%;
+  }
 }
 </style>

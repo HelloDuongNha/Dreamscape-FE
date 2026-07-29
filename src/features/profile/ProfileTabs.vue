@@ -66,4 +66,19 @@ const tabs = computed<{ id: TabId; label: string }[]>(() => [
   border-bottom-color: var(--color-text-primary); /* 2px solid white */
   font-weight: var(--font-weight-semibold);
 }
+
+@media (max-width: 640px) {
+  .profile-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--color-bg-base);
+  }
+
+  .profile-tabs__tab {
+    min-height: 44px;
+    padding: 10px 8px;
+    font-size: var(--font-size-sm);
+  }
+}
 </style>
