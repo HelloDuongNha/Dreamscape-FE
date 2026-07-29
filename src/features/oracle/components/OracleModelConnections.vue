@@ -61,7 +61,7 @@
           </label>
           <label>
             <span>{{ t('oracle.modelName') }}</span>
-            <input v-model="form.modelName" required spellcheck="false" :placeholder="form.provider === 'ollama' ? 'qwen2.5:14b' : 'model-id'" />
+            <input v-model="form.modelName" required spellcheck="false" :placeholder="form.provider === 'ollama' ? 'qwen3.5:9b' : 'model-id'" />
           </label>
           <label v-if="form.provider === 'openai_compatible'">
             <span>{{ t('oracle.apiKey') }}</span>
