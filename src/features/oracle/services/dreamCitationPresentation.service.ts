@@ -12,28 +12,29 @@ interface DreamCitationSource extends OracleCitationDto {
   key: string
 }
 
-// Selects only questions backed by the active resolved Dream citation ledger.
+// Selects questions backed by a current citation or resolved prose claim.
 export function selectDreamVerificationQuestions(
   analysis: AiDreamAnalysisResult | null | undefined,
 ): DreamVerificationQuestionEntry[] {
   const hypotheses = analysis?.real_life_hypotheses || []
   const entries = hypotheses.map((item, hypothesisIndex) => ({ item, hypothesisIndex }))
-  if (!hasCitationLedger(analysis)) return entries
-
   const bindings = resolvedBindings(analysis)
-  if (bindings.length === 0) return []
+  const citations = analysis?.citations || []
+  if (!hasCitationLedger(analysis) && citations.length === 0) return entries
   const selected: DreamVerificationQuestionEntry[] = []
-  const usedSources: SourceIdentity[] = []
+  const usedKeys = new Set<string>()
   for (const entry of entries) {
-    const identities = questionSources(entry.item)
     const verificationKey = String(entry.item?.verificationKey || '')
-    const active = identities.some(source =>
-      bindings.some(binding => sameSource(source, binding.source || {})))
-      || bindings.some(binding =>
-        verificationKey && binding.verificationKey === verificationKey)
+    const active = verificationKey
+      ? bindings.some(binding => binding.verificationKey === verificationKey)
+      : questionSources(entry.item).some(source =>
+        bindings.some(binding => sameSource(source, binding.source || {}))
+        || citations.some(citation => sameSource(source, citation)))
     if (!active) continue
-    if (identities.some(source => usedSources.some(used => sameSource(source, used)))) continue
-    usedSources.push(...identities)
+    const key = verificationKey
+      || `${entry.item?.ruleId || ''}:${entry.item?.followUpQuestion || ''}`
+    if (!key || usedKeys.has(key)) continue
+    usedKeys.add(key)
     selected.push(entry)
   }
   return selected
@@ -48,8 +49,7 @@ export function buildDreamCitationSources(
   const bindings = resolvedBindings(analysis)
   const sources = new Map<string, any>()
   const citations = (analysis.citations || []).filter(citation =>
-    !hasCitationLedger(analysis)
-    || bindings.some(binding => sameSource(citation, binding.source || {})))
+    Boolean(sourceKey(citation)))
 
   for (const citation of citations) {
     const key = sourceKey(citation)
@@ -123,7 +123,8 @@ export function buildDreamCitationSources(
   return [...sources.values()]
     .map(source => ({
       ...source,
-      index: Number(source.index) || citationIndexForSource(source, bindings),
+      index: Number(source.index)
+        || citationIndexForSource(source, analysis.citations || [], bindings),
       key: sourceKey(source),
     }))
     .filter(source => source.index > 0)
@@ -157,6 +158,7 @@ function isActiveSource(
   analysis: AiDreamAnalysisResult,
 ): boolean {
   return !hasCitationLedger(analysis)
+    || (analysis.citations || []).some(citation => sameSource(source, citation))
     || bindings.some(binding => sameSource(source, binding.source || {}))
 }
 
@@ -191,8 +193,12 @@ function mergeSource(
 
 function citationIndexForSource(
   source: SourceIdentity,
+  citations: NonNullable<AiDreamAnalysisResult['citations']>,
   bindings: ReturnType<typeof resolvedBindings>,
 ): number {
+  const citationIndex = Number(citations.find(citation =>
+    sameSource(source, citation))?.index)
+  if (citationIndex > 0) return citationIndex
   return Number(bindings.find(binding =>
     sameSource(source, binding.source || {}))?.citationIndex) || 0
 }

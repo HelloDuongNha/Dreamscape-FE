@@ -511,9 +511,25 @@ function oracleTaskMessage(task: DreamAnalysisTask) {
   }
   const elapsed = formatDuration(task.elapsedSeconds)
   if (task.dream.analysisMetadata?.currentStage === 'queued') {
-    return `${task.statusMessage} · ${t('oracle.dreamAnalysisWaited', { duration: elapsed })}`
+    const position = Number(task.dream.analysisMetadata?.queuePosition) || 1
+    return `${t('oracle.dreamAnalysisQueuedMessage', { position })} · ${t('oracle.dreamAnalysisWaited', { duration: elapsed })}`
   }
-  return `${task.statusMessage} · ${task.progress}% · ${t('oracle.dreamAnalysisRan', { duration: elapsed })}`
+  return `${oracleTaskStageMessage(task)} · ${task.progress}% · ${t('oracle.dreamAnalysisRan', { duration: elapsed })}`
+}
+
+function oracleTaskStageMessage(task: DreamAnalysisTask) {
+  const stage = task.dream.analysisMetadata?.currentStage
+  const keyByStage: Partial<Record<NonNullable<typeof stage>, string>> = {
+    preparing: 'oracle.dreamAnalysisStages.preparing',
+    retrieving_context: 'oracle.dreamAnalysisStages.retrievingContext',
+    retrieving_rules: 'oracle.dreamAnalysisStages.retrievingRules',
+    generating_analysis: 'oracle.dreamAnalysisStages.generatingAnalysis',
+    finalizing: 'oracle.dreamAnalysisStages.finalizing',
+    completed: 'oracle.dreamAnalysisStages.completed',
+    failed: 'oracle.dreamAnalysisStages.failed',
+    cancelled: 'oracle.dreamAnalysisStages.cancelled',
+  }
+  return t(keyByStage[stage || 'preparing'] || 'oracle.dreamAnalysisStages.preparing')
 }
 
 function handleOraclePinnedClick(task: DreamAnalysisTask) {
