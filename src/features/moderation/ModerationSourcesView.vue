@@ -391,6 +391,9 @@
             <AppButton
               variant="danger-outline"
               size="sm"
+              :loading="isReaderBuildInProgress(source)"
+              :disabled="isReaderBuildInProgress(source)"
+              :title="isReaderBuildInProgress(source) ? t('library.moderation.actions.waitForReader') : undefined"
               @click="openReviewModal(source, 'rejected')"
             >
               {{ t('library.moderation.actions.reject') }}
@@ -398,6 +401,7 @@
             <AppButton
               variant="smart"
               size="sm"
+              :loading="isReaderBuildInProgress(source)"
               :disabled="isReaderBuildInProgress(source)"
               :title="isReaderBuildInProgress(source) ? t('library.moderation.actions.waitForReader') : undefined"
               @click="openReviewModal(source, 'approved')"
@@ -553,6 +557,7 @@ import {
   buildEvidenceResearchPrompt,
   type EvidenceResearchLanguage,
 } from './services/evidenceResearchPrompt.service'
+import { isSourceReaderBuildInProgress } from './services/sourceReviewAvailability.service'
 
 const settingsStore = useSettingsStore()
 const sourceProgressStore = useSourceProgressStore()
@@ -753,7 +758,7 @@ watch(locale, (value) => {
 })
 
 function openReviewModal(source: SourceContribution, action: 'approved' | 'rejected') {
-  if (action === 'approved' && isReaderBuildInProgress(source)) {
+  if (isReaderBuildInProgress(source)) {
     settingsStore.showToast(t('library.moderation.actions.waitForReader'), 'error')
     return
   }
@@ -764,17 +769,7 @@ function openReviewModal(source: SourceContribution, action: 'approved' | 'rejec
 }
 
 function isReaderBuildInProgress(source: SourceContribution): boolean {
-  const activeStages = new Set([
-    'uploaded',
-    'inspecting',
-    'extracting_text',
-    'resolving_identifiers',
-    'fetching_preferred_source',
-    'ocr_processing',
-    'compiling_reader',
-  ])
-  return source.fullTextStatus === 'importing'
-    || activeStages.has(String(source.extractionStatus || ''))
+  return isSourceReaderBuildInProgress(source, sourceProgressStore)
 }
 
 function openSourcePreview(source: SourceContribution, event?: MouseEvent): void {

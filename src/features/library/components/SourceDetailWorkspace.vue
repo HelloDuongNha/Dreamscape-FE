@@ -853,7 +853,9 @@
                 variant="danger"
                 size="sm"
                 block
-                :loading="isReviewing"
+                :loading="isReviewing || readerReviewLocked"
+                :disabled="readerReviewLocked"
+                :title="readerReviewLocked ? t('library.moderation.actions.waitForReader') : undefined"
                 @click="handleModerationReject"
               >
                 {{ t('library.system.reject') }}
@@ -863,8 +865,9 @@
                 variant="primary"
                 size="sm"
                 block
-                :loading="isReviewing"
-                :disabled="!moderationTitleValid"
+                :loading="isReviewing || readerReviewLocked"
+                :disabled="!moderationTitleValid || readerReviewLocked"
+                :title="readerReviewLocked ? t('library.moderation.actions.waitForReader') : undefined"
                 @click="handleModerationApprove"
               >
                 {{ t('library.system.approve') }}
@@ -1326,6 +1329,7 @@ import {
   PDF_MAX_FILE_SIZE_BYTES,
   PDF_MAX_FILE_SIZE_LABEL,
 } from '@/utils/pdfUploadLimits'
+import { isSourceReaderBuildInProgress } from '@/features/moderation/services/sourceReviewAvailability.service'
 
 const props = withDefaults(
   defineProps<{
@@ -1346,6 +1350,7 @@ const { t, locale } = useI18n({ useScope: 'global' })
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 const extractionStore = useExtractionStore()
+const sourceProgressStore = useSourceProgressStore()
 
 const resolvedSourceId = computed(() => props.sourceId || '')
 
@@ -3842,6 +3847,9 @@ async function handlePdfRegenConfirm() {
 
 
 const isReviewing = ref(false)
+const readerReviewLocked = computed(() => Boolean(
+  source.value && isSourceReaderBuildInProgress(source.value, sourceProgressStore),
+))
 
 async function handleModerationTitleUpdate() {
   if (!source.value || !moderationTitleValid.value || !moderationTitleDirty.value) return
@@ -3863,6 +3871,10 @@ async function handleModerationTitleUpdate() {
 
 async function handleModerationApprove() {
   if (!source.value) return
+  if (readerReviewLocked.value) {
+    settingsStore.showToast(t('library.moderation.actions.waitForReader'), 'error')
+    return
+  }
   isReviewing.value = true
   try {
     const res = await reviewSource(source.value._id, {
@@ -3886,6 +3898,10 @@ async function handleModerationApprove() {
 
 async function handleModerationReject() {
   if (!source.value) return
+  if (readerReviewLocked.value) {
+    settingsStore.showToast(t('library.moderation.actions.waitForReader'), 'error')
+    return
+  }
   isReviewing.value = true
   try {
     const res = await reviewSource(source.value._id, { reviewStatus: 'rejected' })
