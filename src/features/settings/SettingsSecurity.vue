@@ -133,7 +133,8 @@
             :id="`logout-session-${session._id}`"
             variant="danger-outline"
             size="sm"
-            @click="settingsStore.logoutSession(session._id)"
+            :disabled="sessionActionId === session._id"
+            @click="requestSessionLogout(session)"
           >
             {{ t('settings.logoutBtn') }}
           </AppButton>
@@ -150,6 +151,17 @@
       danger
       @confirm="confirmRevokeOtherSessions"
     />
+    <AppConfirm
+      v-model="showSessionRevokeConfirm"
+      :title="t('settings.revokeSessionTitle')"
+      :message="t('settings.revokeSessionMessage', { device: sessionToRevoke?.device_name || '' })"
+      :confirm-label="t('settings.revokeSessionConfirm')"
+      :cancel-label="t('common.confirm.cancel')"
+      :loading="!!sessionActionId"
+      danger
+      @confirm="confirmSessionLogout"
+      @cancel="sessionToRevoke = null"
+    />
   </div>
 </template>
 
@@ -160,7 +172,7 @@ import { useI18n }            from 'vue-i18n'
 import AppInput               from '@/components/common/AppInput.vue'
 import AppButton              from '@/components/common/AppButton.vue'
 import AppConfirm             from '@/components/common/AppConfirm.vue'
-import { useSettingsStore }   from '@/store/useSettingsStore'
+import { useSettingsStore, type DeviceSession } from '@/store/useSettingsStore'
 import { useAuthStore }       from '@/store/useAuthStore'
 import { useLocaleStore }     from '@/store/useLocaleStore'
 import { timeAgo }            from '@/utils/timeAgo'
@@ -366,6 +378,28 @@ const sortedSessions = computed(() => {
 
 const showRevokePrompt = ref(false)
 const isRevokingOthers = ref(false)
+const sessionToRevoke = ref<DeviceSession | null>(null)
+const sessionActionId = ref<string | null>(null)
+const showSessionRevokeConfirm = computed({
+  get: () => sessionToRevoke.value !== null,
+  set: (isOpen: boolean) => {
+    if (!isOpen && !sessionActionId.value) sessionToRevoke.value = null
+  },
+})
+
+function requestSessionLogout(session: DeviceSession) {
+  if (session.is_current || sessionActionId.value) return
+  sessionToRevoke.value = session
+}
+
+async function confirmSessionLogout() {
+  const session = sessionToRevoke.value
+  if (!session || sessionActionId.value) return
+  sessionActionId.value = session._id
+  const succeeded = await settingsStore.logoutSession(session._id)
+  sessionActionId.value = null
+  if (succeeded) sessionToRevoke.value = null
+}
 
 async function confirmRevokeOtherSessions() {
   if (isRevokingOthers.value) return

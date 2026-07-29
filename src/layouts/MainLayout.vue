@@ -19,7 +19,12 @@
     <div class="main-layout__body">
 
       <!-- Sticky top header -->
-      <header id="app-header" class="main-layout__header" role="banner">
+      <header
+        id="app-header"
+        class="main-layout__header"
+        :class="{ 'main-layout__header--with-search': route.path === '/' }"
+        role="banner"
+      >
         <div class="main-layout__header-inner">
 
           <!-- Left: burger (mobile) + page title -->
@@ -181,11 +186,14 @@
                           :label="t('notifications.options')"
                           @select="handleNotificationMenuSelect(notif, $event)"
                         >
-                          <template #trigger="{ toggle }">
+                          <template #trigger="{ toggle, isOpen, panelId }">
                             <button
                               type="button"
                               class="notifications-dropdown__menu-btn"
                               :aria-label="t('notifications.options')"
+                              aria-haspopup="menu"
+                              :aria-expanded="isOpen"
+                              :aria-controls="isOpen ? panelId : undefined"
                               :disabled="notificationActionId === notif._id"
                               @click.stop="toggle"
                             >
@@ -528,6 +536,7 @@ defineProps<{ title?: string }>()
 .main-layout__body {
   margin-left: var(--sidebar-width);
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
@@ -811,7 +820,21 @@ defineProps<{ title?: string }>()
   .header-search__bar:focus-within { width: 200px; }
 }
 @media (max-width: 600px) {
-  .header-search { display: none; }
+  .main-layout__header--with-search {
+    height: calc(var(--header-height) + 48px);
+  }
+  .header-search {
+    position: absolute;
+    right: var(--space-3);
+    bottom: 8px;
+    left: var(--space-3);
+    display: flex;
+    margin: 0;
+  }
+  .header-search__bar,
+  .header-search__bar:focus-within {
+    width: 100%;
+  }
 }
 
 /* ── Notifications Dropdown ─────────────────────────────────── */

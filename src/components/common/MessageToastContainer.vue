@@ -588,7 +588,9 @@ async function handleOraclePinnedClick(task: DreamAnalysisTask) {
 
 const extractionTitle = computed(() => {
   if (extractionStore.status === 'success') {
-    if (extractionStore.outcome === 'success_with_existing_candidates') {
+    if (['success_with_existing_candidates', 'success_reused_candidates'].includes(
+      extractionStore.outcome || '',
+    )) {
       return t('rules.extraction.pin.existing')
     }
     if (extractionStore.outcome === 'success_no_verified_candidates') return t('rules.extraction.pin.noVerified')
@@ -603,6 +605,19 @@ const extractionTitle = computed(() => {
 
 const extractionMessage = computed(() => {
   if (extractionStore.status === 'success') {
+    if (extractionStore.outcome === 'success_reused_candidates') {
+      return t('rules.extraction.pin.reusedMessage')
+    }
+    if (extractionStore.outcome === 'success_with_existing_candidates') {
+      return t('rules.extraction.pin.existingMessage', {
+        merged: extractionStore.mergedCount,
+      })
+    }
+    if (extractionStore.outcome === 'success_no_verified_candidates') {
+      return t('rules.extraction.pin.noVerifiedMessage', {
+        rejected: extractionStore.rejectedCount,
+      })
+    }
     return t('rules.extraction.pin.completedMessage', {
       created: extractionStore.createdCount,
       merged: extractionStore.mergedCount,
@@ -612,7 +627,7 @@ const extractionMessage = computed(() => {
     return t(`rules.extraction.pin.stoppedMessages.${extractionStore.outcome || 'default'}`)
   }
   if (extractionStore.status === 'failed') {
-    return extractionStore.errorMessage || t('rules.extraction.pin.failedMessage')
+    return extractionFailureMessage(extractionStore.outcome)
   }
   const stageKey = extractionStore.currentStage === 'extracting_candidates'
     ? 'extracting'
@@ -623,6 +638,22 @@ const extractionMessage = computed(() => {
         : 'preparing'
   return `${t(`rules.extraction.pin.${stageKey}`)} (${extractionStore.progress}%)`
 })
+
+function extractionFailureMessage(outcome: string | null) {
+  const keys: Record<string, string> = {
+    all_verified_candidates_rejected: 'rejected',
+    candidate_persistence_incomplete: 'incomplete',
+    replacement_persistence_incomplete: 'incomplete',
+    provider_unavailable: 'unavailable',
+    provider_timeout: 'timeout',
+    provider_schema_invalid: 'invalid',
+    input_too_large: 'tooLarge',
+  }
+  const key = keys[outcome || '']
+  return key
+    ? t(`rules.failure.${key}`)
+    : t('rules.extraction.pin.failedMessage')
+}
 
 function handleExtractionPinnedClick() {
   if (extractionStore.status === 'success') {

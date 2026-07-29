@@ -47,6 +47,15 @@
       :disabled="isUploading"
       @change="selectAvatar"
     />
+
+    <AvatarCropModal
+      v-model="cropOpen"
+      :source-url="cropSourceUrl"
+      :loading="isUploading"
+      @confirm="uploadCroppedAvatar"
+      @cancel="discardCrop"
+      @error="handleCropError"
+    />
   </div>
 </template>
 
@@ -57,6 +66,7 @@ import apiClient from '@/api/client'
 import { getAvatarBg, getInitials } from '@/data/mockUsers'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import AvatarCropModal from './AvatarCropModal.vue'
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -76,6 +86,8 @@ const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const fileInput = ref<HTMLInputElement | null>(null)
 const previewUrl = ref('')
+const cropSourceUrl = ref('')
+const cropOpen = ref(false)
 const isUploading = ref(false)
 
 const imageSource = computed(() => previewUrl.value || props.avatar)
@@ -86,7 +98,7 @@ function openPicker(): void {
   if (!isUploading.value) fileInput.value?.click()
 }
 
-async function selectAvatar(event: Event): Promise<void> {
+function selectAvatar(event: Event): void {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
@@ -101,16 +113,26 @@ async function selectAvatar(event: Event): Promise<void> {
     return
   }
 
+  releaseCropSource()
+  cropSourceUrl.value = URL.createObjectURL(file)
+  cropOpen.value = true
+}
+
+async function uploadCroppedAvatar(file: File): Promise<void> {
   releasePreview()
   previewUrl.value = URL.createObjectURL(file)
   isUploading.value = true
-
   try {
     const body = new FormData()
     body.append('avatar', file)
     const { data } = await apiClient.put<{ success: boolean; avatar: string }>(
       '/auth/profile/avatar',
       body,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      },
     )
     if (!data.success || !data.avatar) throw new Error('avatar_response_invalid')
 
@@ -119,6 +141,8 @@ async function selectAvatar(event: Event): Promise<void> {
       authStore.updateCurrentUser({ ...currentUser, avatar: data.avatar })
     }
     releasePreview()
+    cropOpen.value = false
+    releaseCropSource()
     settingsStore.showToastKey('settings.avatarUpdated', undefined, 'success')
   } catch (error: any) {
     releasePreview()
@@ -134,12 +158,30 @@ async function selectAvatar(event: Event): Promise<void> {
   }
 }
 
+function discardCrop(): void {
+  cropOpen.value = false
+  releaseCropSource()
+}
+
+function handleCropError(): void {
+  discardCrop()
+  settingsStore.showToastKey('settings.avatarTypeError', undefined, 'error')
+}
+
 function releasePreview(): void {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   previewUrl.value = ''
 }
 
-onBeforeUnmount(releasePreview)
+function releaseCropSource(): void {
+  if (cropSourceUrl.value) URL.revokeObjectURL(cropSourceUrl.value)
+  cropSourceUrl.value = ''
+}
+
+onBeforeUnmount(() => {
+  releasePreview()
+  releaseCropSource()
+})
 </script>
 
 <style scoped>

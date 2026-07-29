@@ -7,6 +7,7 @@ import en from '@/i18n/locales/en'
 import viMessages from '@/i18n/locales/vi'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import AvatarCropModal from './AvatarCropModal.vue'
 
 const { put } = vi.hoisted(() => ({ put: vi.fn() }))
 vi.mock('@/api/client', () => ({ default: { put } }))
@@ -43,9 +44,18 @@ describe('AvatarEditor', () => {
     await input.trigger('change')
     await flushPromises()
 
+    expect(put).not.toHaveBeenCalled()
+    const cropModal = wrapper.findComponent(AvatarCropModal)
+    expect(cropModal.props('modelValue')).toBe(true)
+    cropModal.vm.$emit('confirm', file)
+    await flushPromises()
+
     expect(put).toHaveBeenCalledOnce()
     expect(put.mock.calls[0][0]).toBe('/auth/profile/avatar')
     expect(put.mock.calls[0][1]).toBeInstanceOf(FormData)
+    expect(put.mock.calls[0][2]).toEqual({
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
     expect(authStore.user?.avatar).toBe('https://cdn.example/avatar.webp')
     expect(useSettingsStore().toast.content).toEqual({
       kind: 'key',

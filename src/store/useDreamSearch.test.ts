@@ -28,12 +28,17 @@ describe('Dream search state', () => {
     store.searchQuery = 'first query'
     const firstRequest = store.searchDreams()
     store.searchQuery = 'second query'
+    store.prepareSearchCriteriaChange()
+
+    first.resolve({ data: responseFixture('first-dream') })
+    await firstRequest
+    expect(store.searchResults).toEqual([])
+    expect(store.isSearching).toBe(true)
+
     const secondRequest = store.searchDreams()
 
     second.resolve({ data: responseFixture('second-dream') })
     await secondRequest
-    first.resolve({ data: responseFixture('first-dream') })
-    await firstRequest
 
     expect(store.searchResults.map(item => item.dream._id)).toEqual(['second-dream'])
     expect(api.get).toHaveBeenNthCalledWith(

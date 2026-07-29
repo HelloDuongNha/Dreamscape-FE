@@ -9,9 +9,9 @@
         :aria-labelledby="titleId"
         :aria-describedby="messageId"
         @click.self="handleCancel"
+        @keydown="handleDialogKeydown"
       >
-        <div class="app-confirm" style="position: relative;">
-          <!-- Close X button -->
+        <div ref="dialogRef" class="app-confirm" tabindex="-1">
           <button
             type="button"
             class="app-confirm__close-btn"
@@ -21,13 +21,8 @@
           >
             ×
           </button>
-          <!-- Title -->
           <h2 :id="titleId" class="app-confirm__title">{{ title }}</h2>
-
-          <!-- Message -->
           <p :id="messageId" class="app-confirm__message">{{ message }}</p>
-
-          <!-- Actions -->
           <div class="app-confirm__actions">
             <button
               v-if="secondaryLabel"
@@ -66,18 +61,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = withDefaults(defineProps<{
-  modelValue:   boolean          // v-model — controls visibility
-  title:        string
-  message:      string
+  modelValue: boolean
+  title: string
+  message: string
   confirmLabel?: string
-  cancelLabel?:  string
+  cancelLabel?: string
   secondaryLabel?: string
-  danger?:       boolean         // if true, confirm button is red
-  loading?:      boolean         // while async confirm action runs
+  danger?: boolean
+  loading?: boolean
 }>(), {
   confirmLabel: '',
   cancelLabel:  '',
@@ -99,6 +94,8 @@ const titleId  = computed(() => `${uid}-title`)
 const messageId = computed(() => `${uid}-msg`)
 const resolvedConfirmLabel = computed(() => props.confirmLabel || t('common.confirm.confirm'))
 const resolvedCancelLabel = computed(() => props.cancelLabel || t('common.confirm.cancel'))
+const dialogRef = ref<HTMLElement | null>(null)
+let previouslyFocusedElement: HTMLElement | null = null
 
 function handleConfirm() {
   if (props.loading) return
@@ -110,6 +107,69 @@ function handleCancel() {
   emit('cancel')
   emit('update:modelValue', false)
 }
+
+function enabledControls(): HTMLElement[] {
+  if (!dialogRef.value) return []
+  return Array.from(
+    dialogRef.value.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ),
+  )
+}
+
+function handleDialogKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    handleCancel()
+    return
+  }
+
+  if (event.key !== 'Tab') return
+  const controls = enabledControls()
+  if (controls.length === 0) {
+    event.preventDefault()
+    dialogRef.value?.focus()
+    return
+  }
+
+  const first = controls[0]
+  const last = controls[controls.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last?.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first?.focus()
+  }
+}
+
+watch(
+  () => props.modelValue,
+  async (isOpen, wasOpen) => {
+    if (isOpen) {
+      previouslyFocusedElement = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+      await nextTick()
+      const cancelButton = dialogRef.value?.querySelector<HTMLElement>('.app-confirm__btn--cancel:not(:disabled)')
+      const initialFocusTarget = cancelButton ?? dialogRef.value
+      initialFocusTarget?.focus()
+      return
+    }
+
+    if (wasOpen) {
+      await nextTick()
+      previouslyFocusedElement?.focus()
+      previouslyFocusedElement = null
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  if (props.modelValue) previouslyFocusedElement?.focus()
+})
 </script>
 
 <style scoped>
@@ -128,6 +188,7 @@ function handleCancel() {
 /* ── Modal panel ── */
 /* Strictly flat: #181818 bg, 1px solid #262626 border, NO shadow */
 .app-confirm {
+  position: relative;
   width: min(400px, calc(100vw - 2rem));
   background: #181818;
   border: 1px solid #262626;
@@ -137,6 +198,10 @@ function handleCancel() {
   flex-direction: column;
   gap: var(--space-4);
   box-shadow: none;
+}
+
+.app-confirm:focus {
+  outline: none;
 }
 
 .app-confirm__close-btn {

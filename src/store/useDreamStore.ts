@@ -347,6 +347,15 @@ export const useDreamStore = defineStore('dream', () => {
     searchError.value = false
   }
 
+  /**
+   * Invalidates in-flight results as soon as criteria change. The view calls
+   * this before its debounce delay so an older response cannot render beneath
+   * a newer query while the next request is still waiting to start.
+   */
+  function prepareSearchCriteriaChange(): void {
+    invalidateSearchRequest()
+  }
+
   function resetSearchState(): void {
     invalidateSearchRequest()
     searchResults.value = []
@@ -389,6 +398,7 @@ export const useDreamStore = defineStore('dream', () => {
     loadFeed,
     loadMore,
     searchDreams,
+    prepareSearchCriteriaChange,
     loadMoreSearchResults,
     clearSearch,
     refreshDream,

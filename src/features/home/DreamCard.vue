@@ -51,12 +51,14 @@
         :label="t('home.postOptions')"
         @select="handleMenuSelect"
       >
-        <template #trigger="{ toggle }">
+        <template #trigger="{ toggle, isOpen, panelId }">
           <button
             :id="`post-menu-btn-${dream._id}`"
             class="dream-card__menu-btn"
             :aria-label="t('home.postOptions')"
-            aria-haspopup="true"
+            aria-haspopup="menu"
+            :aria-expanded="isOpen"
+            :aria-controls="isOpen ? panelId : undefined"
             @click.stop="toggle"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

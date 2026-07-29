@@ -258,6 +258,7 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 watch(
   [() => dreamStore.searchQuery, () => dreamStore.searchMood],
   () => {
+    dreamStore.prepareSearchCriteriaChange()
     if (searchTimer) clearTimeout(searchTimer)
     searchTimer = setTimeout(() => {
       void dreamStore.searchDreams()

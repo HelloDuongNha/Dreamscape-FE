@@ -18,14 +18,8 @@ export const useExtractionStore = defineStore('extraction', () => {
   const mergedCount = ref(0)
   const rejectedCount = ref(0)
   const verifiedCount = ref(0)
-  const errorMessage = ref('')
-  const stepText = ref('Đang khởi tạo...')
-  const reasonCode = ref<string | null>(null)
-  const message = ref<string>('')
-  const stageDetail = ref('Đang đọc cấu trúc tài liệu và chuẩn bị phạm vi bằng chứng.')
   const elapsedSeconds = ref(0)
   const estimatedRemainingSeconds = ref<number | null>(null)
-  const processedLabel = ref('')
   const currentStage = ref<'queued' | 'initializing' | 'extracting_candidates' | 'saving_candidates' | 'merging_candidates' | 'completed'>('initializing')
   const totalBatches = ref(0)
   const processedBatches = ref(0)
@@ -56,18 +50,12 @@ export const useExtractionStore = defineStore('extraction', () => {
     mergedCount.value = 0
     rejectedCount.value = 0
     verifiedCount.value = 0
-    errorMessage.value = ''
-    reasonCode.value = null
-    message.value = ''
-    stepText.value = 'Đang khởi tạo tài liệu…'
-    stageDetail.value = 'Đang đọc cấu trúc section, ngôn ngữ và loại hình nghiên cứu.'
     estimatedRemainingSeconds.value = null
     etaAnchorSeconds = null
     etaExpectedTotalSeconds = null
     plannedSecondsPerBatch = Number.isFinite(secondsPerBatch) && secondsPerBatch > 0
       ? secondsPerBatch
       : 12
-    processedLabel.value = ''
     currentStage.value = 'initializing'
     totalBatches.value = 0
     processedBatches.value = 0
@@ -101,7 +89,6 @@ export const useExtractionStore = defineStore('extraction', () => {
       startedAt: localStartedAt,
       progress: progress.value,
       status: status.value,
-      stepText: stepText.value,
       expiresAt: expiresAt || null,
     }))
   }
@@ -119,12 +106,11 @@ export const useExtractionStore = defineStore('extraction', () => {
       currentRunId.value = saved.runId
       progress.value = Number(saved.progress) || 0
       status.value = saved.status || 'pending'
-      stepText.value = saved.stepText || 'Đang khôi phục trạng thái…'
       isDialogVisible.value = false
       isPinnedVisible.value = true
       if (status.value === 'pending') {
         startClock(Number(saved.startedAt) || Date.now())
-        await pollRuleV3Run(saved.runId, false)
+        await pollRuleV3Run(saved.runId)
       } else if (saved.expiresAt) {
         scheduleTerminalDismiss(saved.expiresAt - Date.now())
       }
@@ -154,16 +140,13 @@ export const useExtractionStore = defineStore('extraction', () => {
       persistTask()
       if (started.data.status === 'success') {
         const existing = await getRuleV3ExtractionProgress(started.data.runId)
-        completeFromRun(existing.data, true, replaceExisting)
+        completeFromRun(existing.data, true)
         return
       }
-      await pollRuleV3Run(started.data.runId, replaceExisting)
+      await pollRuleV3Run(started.data.runId)
     } catch (err: any) {
       const backendData = err.response?.data
-      handleFailure(
-        backendData?.message || err.message || 'Lỗi khi phân tích Rule V3.',
-        backendData?.errorCode || 'failed_system_error'
-      )
+      handleFailure(backendData?.errorCode || 'failed_system_error')
     }
   }
 
@@ -191,10 +174,7 @@ export const useExtractionStore = defineStore('extraction', () => {
           await observeAutomaticRun(id, started)
         } catch (error: any) {
           const backendData = error.response?.data
-          handleFailure(
-            backendData?.message || error.message || 'Lỗi khi phân tích Rule V3.',
-            backendData?.errorCode || 'failed_system_error',
-          )
+          handleFailure(backendData?.errorCode || 'failed_system_error')
           throw error
         }
       },
@@ -221,10 +201,10 @@ export const useExtractionStore = defineStore('extraction', () => {
     persistTask()
     if (started.status === 'success') {
       const existing = await getRuleV3ExtractionProgress(started.runId)
-      completeFromRun(existing.data, true, false)
+      completeFromRun(existing.data, true)
       return
     }
-    await pollRuleV3Run(started.runId, false)
+    await pollRuleV3Run(started.runId)
   }
 
   function trackApprovalResult(
@@ -249,18 +229,13 @@ export const useExtractionStore = defineStore('extraction', () => {
       kind: 'rules',
       run: async () => {
         beginTracking(id, title, false)
-        handleFailure(
-          errorCode === 'provider_unavailable'
-            ? 'Mô hình trích xuất hiện không khả dụng.'
-            : 'Không thể khởi động phân tích Rule V3.',
-          errorCode || 'automatic_start_failed',
-        )
+        handleFailure(errorCode || 'automatic_start_failed')
         throw new Error(errorCode || 'automatic_start_failed')
       },
     })
   }
 
-  async function pollRuleV3Run(runId: string, replaceExisting: boolean) {
+  async function pollRuleV3Run(runId: string) {
     while (true) {
       await new Promise(resolve => window.setTimeout(resolve, 1500))
       if (status.value !== 'pending') return
@@ -281,25 +256,17 @@ export const useExtractionStore = defineStore('extraction', () => {
       if (run.currentStage === 'queued') {
         const position = Math.max(1, Number(run.queuePosition) || 1)
         progress.value = 0
-        stepText.value = `Đang chờ tới lượt phân tích · vị trí ${position}`
-        stageDetail.value = 'Tác vụ sẽ tự bắt đầu khi lượt phân tích trước hoàn tất.'
-        processedLabel.value = ''
         if (etaAnchorSeconds === null && total > 0) {
           setEtaAnchor(estimateRuleDurationSeconds(total, plannedSecondsPerBatch) * (position + 1))
         }
       } else if (run.currentStage === 'initializing') {
         progress.value = 5
-        stepText.value = 'Đang lập kế hoạch phân tích Rule V3…'
-        stageDetail.value = 'Đang xác định loại tài liệu, section mục tiêu và các lô bằng chứng.'
         if (etaAnchorSeconds === null && total > 0) {
           setEtaAnchor(estimateRuleDurationSeconds(total, plannedSecondsPerBatch))
         }
       } else if (run.currentStage === 'extracting_candidates') {
         const ratio = total > 0 ? processed / total : 0
         progress.value = 10 + Math.round(ratio * 80)
-        stepText.value = `Đang trích xuất và kiểm tra trích dẫn… (${processed}/${total})`
-        processedLabel.value = total > 0 ? `${processed}/${total} lô bằng chứng` : ''
-        stageDetail.value = `Đã nhận ${run.rawCandidateCount} kết luận thô; giữ ${run.verifiedCandidateCount} lập luận có dẫn chứng hợp lệ.`
         // Freeze one honest schedule for the entire run. A completed run for
         // this exact source becomes the next run's baseline; first runs use a
         // conservative per-batch estimate. Progress observations never make
@@ -312,34 +279,20 @@ export const useExtractionStore = defineStore('extraction', () => {
         }
       } else if (run.currentStage === 'saving_candidates') {
         progress.value = 94
-        stepText.value = 'Đang lưu lập luận và bằng chứng…'
-        stageDetail.value = replaceExisting
-          ? 'Bộ kết quả cũ chỉ được thay khi toàn bộ lập luận đã kiểm chứng lưu thành công.'
-          : 'Lập luận không đáp ứng hợp đồng lưu trữ sẽ bị loại và ghi rõ lý do.'
         if (etaAnchorSeconds === null) {
           setEtaAnchor(Math.max(1, 8 - elapsedSeconds.value))
         }
       } else if (run.currentStage === 'merging_candidates') {
         progress.value = 98
-        stepText.value = 'Đang tự động gộp các lập luận tương thích…'
-        stageDetail.value = 'Mỗi mệnh đề và liên kết dẫn chứng được giữ nguyên trong lập luận tổng hợp.'
       }
 
       if (run.status === 'success') {
-        completeFromRun(run, false, replaceExisting)
+        completeFromRun(run, false)
         return
       }
       if (run.status === 'failed') {
         const code = run.sanitizedErrorCode || 'failed_system_error'
-        const safeFailureMessages: Record<string, string> = {
-          all_verified_candidates_rejected: 'Các lập luận có dẫn chứng hợp lệ nhưng không lập luận nào vượt qua hợp đồng lưu trữ. Hệ thống không ghi dữ liệu rỗng.',
-          replacement_persistence_incomplete: 'Bộ lập luận thay thế lưu không đầy đủ. Hệ thống đã khôi phục nguyên trạng các lập luận trước lần chạy này.',
-          provider_unavailable: 'Mô hình trích xuất hiện không khả dụng.',
-          provider_timeout: 'Mô hình trích xuất phản hồi quá thời gian cho phép.',
-          provider_schema_invalid: 'Mô hình trả về dữ liệu không đúng cấu trúc Rule V3.',
-          input_too_large: 'Lô văn bản vượt quá giới hạn xử lý an toàn.'
-        }
-        handleFailure(safeFailureMessages[code] || 'Phân tích Rule V3 thất bại.', code)
+        handleFailure(code)
         return
       }
       if (run.status === 'cancelled') {
@@ -352,8 +305,6 @@ export const useExtractionStore = defineStore('extraction', () => {
   function handleCancelled() {
     status.value = 'stopped'
     outcome.value = 'user_cancelled'
-    stepText.value = 'Đã hủy phân tích.'
-    stageDetail.value = 'Không có lập luận chưa hoàn tất nào được lưu.'
     isDialogVisible.value = false
     isPinnedVisible.value = true
     stopClock()
@@ -379,7 +330,7 @@ export const useExtractionStore = defineStore('extraction', () => {
     verifiedCandidateCount: number
     resultRuleIds: string[]
     rejectionDiagnostics?: Array<{ reasonCode: string; safeMessage: string }>
-  }, reused: boolean, replacementRequested: boolean) {
+  }, reused: boolean) {
     const saved = Math.max(0, run.savedCandidateCount || 0)
     const merged = Math.max(0, run.mergedCandidateCount || 0)
     const rejected = Math.max(0, run.rejectedCandidateCount || 0)
@@ -390,41 +341,26 @@ export const useExtractionStore = defineStore('extraction', () => {
     verifiedCount.value = verified
 
     if (saved > 0) {
-      handleSuccess(saved, 'success_with_new_candidates', `Đã tạo ${saved} lập luận mới${merged > 0 ? ` và bổ sung bằng chứng vào ${merged} lập luận tương tự` : ''}.`)
+      handleSuccess(saved, 'success_with_new_candidates')
     } else if (resultCount > 0 || merged > 0) {
-      handleSuccess(0, 'success_with_existing_candidates', reused
-        ? `Kết quả đã có sẵn: ${resultCount} lập luận từ đúng bản đọc và cấu hình mô hình này.`
-        : `Không tạo bản trùng; đã bổ sung bằng chứng vào ${Math.max(merged, resultCount)} lập luận hiện có.`)
+      handleSuccess(0, reused
+        ? 'success_reused_candidates'
+        : 'success_with_existing_candidates')
     } else if (verified === 0) {
-      const reasonCounts = new Map<string, { message: string; count: number }>()
-      for (const item of run.rejectionDiagnostics || []) {
-        const current = reasonCounts.get(item.reasonCode)
-        reasonCounts.set(item.reasonCode, { message: item.safeMessage, count: (current?.count || 0) + 1 })
-      }
-      const reasonSummary = [...reasonCounts.values()]
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 3)
-        .map(item => `${item.count}× ${item.message}`)
-        .join(' ')
       handleSuccess(
         0,
         'success_no_verified_candidates',
-        `Không có lập luận nào vượt qua kiểm chứng dẫn chứng. Đã loại ${rejected} đề xuất.${reasonSummary ? ` Lý do chính: ${reasonSummary}` : ''}${replacementRequested ? ' Kết quả Rule V3 cũ được giữ nguyên.' : ''}`
       )
     } else {
-      handleFailure('Có lập luận đã kiểm chứng nhưng không lập luận nào lưu được.', 'all_verified_candidates_rejected')
+      handleFailure('all_verified_candidates_rejected')
     }
   }
 
-  function handleSuccess(count: number, outcomeVal: string, msgText: string) {
+  function handleSuccess(count: number, outcomeVal: string) {
     progress.value = 100
     status.value = 'success'
     outcome.value = outcomeVal
     createdCount.value = count
-    message.value = msgText
-    stepText.value = outcomeVal === 'success_no_verified_candidates'
-      ? 'Không có lập luận đạt kiểm chứng'
-      : 'Hoàn tất phân tích!'
     currentStage.value = 'completed'
     timingDeltaSeconds.value = etaExpectedTotalSeconds === null
       ? null
@@ -436,12 +372,10 @@ export const useExtractionStore = defineStore('extraction', () => {
     persistTask(Date.now() + 3000)
   }
 
-  function handleFailure(msg: string, outcomeVal: string = 'failed_system_error') {
+  function handleFailure(outcomeVal: string = 'failed_system_error') {
     progress.value = 0
     status.value = 'failed'
     outcome.value = outcomeVal
-    errorMessage.value = msg
-    stepText.value = 'Phân tích thất bại.'
     isDialogVisible.value = false
     isPinnedVisible.value = true
     stopClock()
@@ -482,16 +416,10 @@ export const useExtractionStore = defineStore('extraction', () => {
     mergedCount.value = 0
     rejectedCount.value = 0
     verifiedCount.value = 0
-    errorMessage.value = ''
-    reasonCode.value = null
-    message.value = ''
-    stepText.value = ''
-    stageDetail.value = ''
     elapsedSeconds.value = 0
     estimatedRemainingSeconds.value = null
     etaAnchorSeconds = null
     etaExpectedTotalSeconds = null
-    processedLabel.value = ''
     currentStage.value = 'initializing'
     totalBatches.value = 0
     processedBatches.value = 0
@@ -529,14 +457,8 @@ export const useExtractionStore = defineStore('extraction', () => {
     mergedCount,
     rejectedCount,
     verifiedCount,
-    errorMessage,
-    stepText,
-    reasonCode,
-    message,
-    stageDetail,
     elapsedSeconds,
     estimatedRemainingSeconds,
-    processedLabel,
     currentStage,
     totalBatches,
     processedBatches,

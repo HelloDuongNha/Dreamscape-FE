@@ -53,11 +53,14 @@
                 :label="t('home.postOptions')"
                 @select="handleModalMenuSelect"
               >
-                <template #trigger="{ toggle }">
+                <template #trigger="{ toggle, isOpen, panelId }">
                   <button
                     type="button"
                     class="modal-menu-btn"
                     :aria-label="t('home.postOptions')"
+                    aria-haspopup="menu"
+                    :aria-expanded="isOpen"
+                    :aria-controls="isOpen ? panelId : undefined"
                     @click.stop="toggle"
                   >
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -359,11 +362,14 @@
                           :label="t('home.commentOptions')"
                           @select="handleCommentMenuSelect(comment, $event)"
                         >
-                          <template #trigger="{ toggle }">
+                          <template #trigger="{ toggle, isOpen, panelId }">
                             <button
                               type="button"
                               class="modal-comment__menu-btn"
                               :aria-label="t('home.commentOptions')"
+                              aria-haspopup="menu"
+                              :aria-expanded="isOpen"
+                              :aria-controls="isOpen ? panelId : undefined"
                               @click.stop="toggle"
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

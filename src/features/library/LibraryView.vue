@@ -447,7 +447,12 @@ function formatNumber(value: number) {
 const isLoadingSources = ref(false)
 const hasErrorSources = ref(false)
 const searchQuery = ref('')
-const searchValidationError = ref('')
+const searchValidationErrorCode = ref<'invalid_doi' | null>(null)
+const searchValidationError = computed(() => (
+  searchValidationErrorCode.value
+    ? t('library.validation.doiSearchFormat')
+    : ''
+))
 const sources = ref<any[]>([])
 const currentPage = ref(1)
 const pagination = ref({
@@ -495,7 +500,7 @@ const filteredSources = computed(() => {
 async function fetchApprovedSources() {
   const parsedSearch = parseDoiSearchInput(searchQuery.value)
   if (parsedSearch.error) {
-    searchValidationError.value = t('library.validation.doiSearchFormat')
+    searchValidationErrorCode.value = 'invalid_doi'
     hasErrorSources.value = false
     isLoadingSources.value = false
     sources.value = []
@@ -503,7 +508,7 @@ async function fetchApprovedSources() {
     return
   }
 
-  searchValidationError.value = ''
+  searchValidationErrorCode.value = null
   const requestId = ++sourceListRequestId
   sourceListAbortController?.abort()
   sourceListAbortController = new AbortController()
@@ -543,7 +548,7 @@ watch(searchQuery, () => {
   if (searchTimeout) clearTimeout(searchTimeout)
   sourceListAbortController?.abort()
   sourceListRequestId += 1
-  searchValidationError.value = ''
+  searchValidationErrorCode.value = null
   isLoadingSources.value = true
   searchTimeout = setTimeout(() => {
     currentPage.value = 1

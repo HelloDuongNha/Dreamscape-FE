@@ -13,7 +13,7 @@
     :step-text="localizedStepText"
     :detail-text="localizedStageDetail"
     :elapsed-seconds="extractionStore.elapsedSeconds"
-    :processed-label="extractionStore.processedLabel"
+    :processed-label="processedLabel"
     :estimated-remaining-seconds="extractionStore.estimatedRemainingSeconds"
     :timing-delta-seconds="extractionStore.timingDeltaSeconds"
     :completed="extractionStore.status !== 'pending'"
@@ -86,4 +86,10 @@ const localizedStageDetail = computed(() => {
   if (extractionStore.currentStage === 'completed') return t('rules.extraction.stepDetails.completed')
   return t('rules.extraction.stepDetails.prepare')
 })
+const processedLabel = computed(() => extractionStore.totalBatches > 0
+  ? t('rules.extraction.batchProgress', {
+      processed: extractionStore.processedBatches,
+      total: extractionStore.totalBatches,
+    })
+  : '')
 </script>

@@ -41,13 +41,15 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  async function logoutSession(id: string) {
+  async function logoutSession(id: string): Promise<boolean> {
     try {
       const { data } = await apiClient.delete(`/auth/sessions/${id}`)
       if (data.success) {
         sessions.value = sessions.value.filter(s => s._id !== id)
         showToastKey('toasts.sessionLoggedOutSuccess', undefined, 'success')
+        return true
       }
+      return false
     } catch (err: any) {
       const msg = err.response?.data?.message
       if (msg) {
@@ -55,6 +57,7 @@ export const useSettingsStore = defineStore('settings', () => {
       } else {
         showToastKey('errors.logoutDeviceFailed', undefined, 'error')
       }
+      return false
     }
   }
 
