@@ -1,6 +1,7 @@
 import apiClient from './client'
 import type { TranslateReaderRequest, TranslateReaderResponse } from '../features/library/services/smartReaderTranslation.types'
 import type { PdfImportProgressResponse } from './moderationApi'
+import type { PdfProcessingResponse } from './academicSourceProcessing.types'
 
 export interface ContributeSourcePayload {
   doi?: string
@@ -89,8 +90,29 @@ export interface GetApprovedSourcesParams {
   limit?: number
 }
 
+export interface ApprovedSourceCatalogItem {
+  _id: string
+  title?: string
+  authors?: string[]
+  year?: number
+  journal?: string
+  doi?: string
+  url?: string
+  sourceOrigin?: string
+  originalFile?: Record<string, unknown>
+  fullTextSourceType?: string
+  allowedUse?: string
+  verificationStatus?: string
+  copyrightStatus?: string
+  progress?: number
+  metadata?: {
+    authors?: string[]
+    category?: string
+  }
+}
+
 export interface ApprovedSourcesResponse {
-  items: any[]
+  items: ApprovedSourceCatalogItem[]
   pagination: {
     page: number
     limit: number
@@ -191,8 +213,17 @@ export const deleteApprovedSourceOriginalPdf = async (id: string): Promise<any> 
 /**
  * Triggers PDF ingestion processing for approved academic sources.
  */
-export const processUploadedPdfForApprovedSource = async (id: string, forceReplace = false, structuredFirst = false, signal?: AbortSignal): Promise<any> => {
-  const { data } = await apiClient.post<any>(`/sources/approved/${id}/process-uploaded-pdf`, { forceReplace, structuredFirst }, { signal })
+export const processUploadedPdfForApprovedSource = async (
+  id: string,
+  forceReplace = false,
+  structuredFirst = false,
+  signal?: AbortSignal,
+): Promise<PdfProcessingResponse> => {
+  const { data } = await apiClient.post<PdfProcessingResponse>(
+    `/sources/approved/${id}/process-uploaded-pdf`,
+    { forceReplace, structuredFirst },
+    { signal },
+  )
   return data
 }
 

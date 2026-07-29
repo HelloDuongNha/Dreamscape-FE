@@ -23,6 +23,7 @@ export default {
   // Notification action phrases — sender name is prepended by the template
   liked: 'liked your dream',
   commented: 'commented on your dream',
+  replied: 'replied to your comment',
   followed: 'followed you',
   // Oracle system notification
   oracleAnalyzed: 'Oracle has finished analyzing your dream',

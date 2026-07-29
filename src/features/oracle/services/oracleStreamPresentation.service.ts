@@ -4,17 +4,14 @@ import type { OracleShellMessage } from '../oracleShell.types'
 export function applyOracleStreamEvent(input: {
   event: OracleStreamEvent
   target: OracleShellMessage
-  waitForComplete: boolean
-  enqueueText: (text: string) => void
-  releasePresentation: () => void
-  clearPresentation: (flush: boolean) => void
   responseUnavailable: string
   responseCancelled: string
 }): void {
   const { event, target } = input
   if (event.type === 'token') {
     target.firstTokenAt ||= Date.now()
-    input.enqueueText(String(event.payload.text || ''))
+    target.runState = 'responding'
+    target.content += String(event.payload.text || '')
     return
   }
   if (event.type === 'tool_progress' && event.payload.stage === 'preparing_answer') {
@@ -30,9 +27,7 @@ export function applyOracleStreamEvent(input: {
     return
   }
   if (event.type === 'done') {
-    target.presentationStartedAt = Date.now()
-    target.runState = input.waitForComplete ? 'completed' : 'responding'
-    input.releasePresentation()
+    target.runState = 'completed'
     target.completedAt = eventTime(event.payload, 'completedAt')
     target.suggestedPrompts = Array.isArray(event.payload.suggestedPrompts)
       ? event.payload.suggestedPrompts.map(String)
@@ -43,7 +38,6 @@ export function applyOracleStreamEvent(input: {
     return
   }
   if (event.type !== 'error' && event.type !== 'cancelled') return
-  if (input.waitForComplete) input.clearPresentation(true)
   target.runState = event.type === 'error' ? 'failed' : 'cancelled'
   target.completedAt = Date.now()
   target.content ||= event.type === 'error'

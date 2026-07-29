@@ -3,7 +3,7 @@
     <!-- Unauthorized Fallback Screen -->
     <div v-if="isUnauthorized" class="unauthorized-container">
       <div class="unauthorized-card">
-        <div class="unauthorized-icon" aria-hidden="true">🔒</div>
+        <AppIcon class="unauthorized-icon" name="lock" :size="34" />
         <h3 class="unauthorized-title">{{ t('library.moderation.unauthorizedTitle') }}</h3>
         <p class="unauthorized-desc">{{ t('library.moderation.unauthorizedDesc') }}</p>
       </div>
@@ -141,27 +141,35 @@
                   </strong>
                   <q>{{ source.excerpt }}</q>
                 </span>
-                <small>{{ t('oracle.evidenceInspectLinkedSource') }} ↗</small>
+              <small>{{ t('oracle.evidenceInspectLinkedSource') }}</small>
               </button>
-              <details v-if="gap.usageExcerpts.length" class="evidence-gap-usage">
-                <summary>
-                  {{ t('oracle.evidenceUsageTitle', { count: gap.usageExcerpts.length }) }}
-                </summary>
-                <p>{{ t('oracle.evidenceUsagePrivacy') }}</p>
-                <div class="evidence-gap-usage__list">
-                  <article
-                    v-for="(usage, index) in gap.usageExcerpts"
-                    :key="`${usage.surfaceType}-${usage.citationIndex}-${index}`"
-                  >
-                    <header>
-                      <span>{{ usage.surfaceType === 'oracle' ? t('oracle.evidenceUsageOracle') : t('oracle.evidenceUsageDream') }}</span>
-                      <strong>[{{ usage.citationIndex }}]</strong>
-                    </header>
-                    <blockquote>{{ usage.excerpt }}</blockquote>
-                  </article>
-                </div>
-              </details>
             </section>
+
+            <details v-if="gap.usageExcerpts.length" class="evidence-gap-usage">
+              <summary>
+                {{
+                  t(
+                    gap.status === 'resolved'
+                      ? 'oracle.evidenceUsageTitle'
+                      : 'oracle.evidencePendingUsageTitle',
+                    { count: gap.usageExcerpts.length },
+                  )
+                }}
+              </summary>
+              <p>{{ t('oracle.evidenceUsagePrivacy') }}</p>
+              <div class="evidence-gap-usage__list">
+                <article
+                  v-for="(usage, index) in gap.usageExcerpts"
+                  :key="`${usage.surfaceType}-${usage.citationIndex ?? 'pending'}-${index}`"
+                >
+                  <header>
+                    <span>{{ usage.surfaceType === 'oracle' ? t('oracle.evidenceUsageOracle') : t('oracle.evidenceUsageDream') }}</span>
+                    <strong>[{{ usage.citationIndex ?? '?' }}]</strong>
+                  </header>
+                  <blockquote>{{ usage.excerpt }}</blockquote>
+                </article>
+              </div>
+            </details>
 
             <details v-if="gap.status !== 'resolved'" class="deep-research-preview">
               <summary>{{ t('oracle.evidenceViewPrompt') }}</summary>
@@ -189,7 +197,7 @@
 
       <!-- Empty State -->
       <div v-else-if="sources.length === 0" class="moderation-empty">
-        <div class="moderation-empty__icon" aria-hidden="true">🗂️</div>
+        <AppIcon class="moderation-empty__icon" name="folder" :size="28" />
         <h3 class="moderation-empty__title">{{ t('library.moderation.emptyTitle') }}</h3>
         <p class="moderation-empty__desc">
           {{ t('library.moderation.emptyDesc', { tab: activeTabLabel }) }}
@@ -323,7 +331,7 @@
               <span class="grid-label">{{ t('library.moderation.card.uploadedPdf') }}</span>
               <div class="pdf-info-box">
                 <div class="pdf-info-header">
-                  <span class="pdf-file-icon" aria-hidden="true">📄</span>
+                  <AppIcon class="pdf-file-icon" name="document" :size="20" />
                   <div class="pdf-file-details">
                     <span class="pdf-file-name" :title="source.originalFile.originalFileName">
                       {{ source.originalFile.originalFileName }}
@@ -525,7 +533,7 @@
     />
     <AcademicContributionModal
       :open="showContributionModal"
-      :is-moderator="true"
+      :is-admin="true"
       @close="showContributionModal = false"
       @submitted="handleContributionSubmitted"
     />
@@ -552,12 +560,14 @@ import AppInput from '@/components/common/AppInput.vue'
 import AppStatusBadge from '@/components/common/AppStatusBadge.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 import AppCopyButton from '@/components/common/AppCopyButton.vue'
+import AppIcon from '@/components/common/AppIcon.vue'
 import AcademicContributionModal from '@/components/academic/AcademicContributionModal.vue'
 import {
   buildEvidenceResearchPrompt,
   type EvidenceResearchLanguage,
 } from './services/evidenceResearchPrompt.service'
 import { isSourceReaderBuildInProgress } from './services/sourceReviewAvailability.service'
+import { getApiErrorMessage, getApiErrorStatus } from '@/utils/apiError'
 
 const settingsStore = useSettingsStore()
 const sourceProgressStore = useSourceProgressStore()
@@ -649,12 +659,14 @@ async function fetchSources() {
     })
     sources.value = res.sources
     pagination.value = res.pagination
-  } catch (err: any) {
-    if (err.response && err.response.status === 403) {
+  } catch (error: unknown) {
+    if (getApiErrorStatus(error) === 403) {
       isUnauthorized.value = true
     } else {
-      const errMsg = err.response?.data?.message || err.message || t('library.moderation.toast.networkError')
-      settingsStore.showToast(errMsg, 'error')
+      settingsStore.showToast(
+        getApiErrorMessage(error, t('library.moderation.toast.networkError')),
+        'error',
+      )
     }
   } finally {
     isLoading.value = false
@@ -671,9 +683,15 @@ async function fetchEvidenceGaps() {
     })
     evidenceGaps.value = result.gaps
     pagination.value = result.pagination
-  } catch (err: any) {
-    if (err.response?.status === 403) isUnauthorized.value = true
-    else settingsStore.showToast(err.response?.data?.message || t('library.moderation.toast.evidenceLoadError'), 'error')
+  } catch (error: unknown) {
+    if (getApiErrorStatus(error) === 403) {
+      isUnauthorized.value = true
+    } else {
+      settingsStore.showToast(
+        getApiErrorMessage(error, t('library.moderation.toast.evidenceLoadError')),
+        'error',
+      )
+    }
   } finally {
     isLoading.value = false
   }
@@ -838,16 +856,22 @@ async function submitReview() {
       closeReviewModal()
       fetchSources()
     }
-  } catch (err: any) {
-    if (err.response && err.response.status === 409) {
-      settingsStore.showToast(err.response.data?.message || t('library.moderation.toast.alreadyProcessed'), 'error')
-    } else if (err.response && err.response.status === 403) {
+  } catch (error: unknown) {
+    const status = getApiErrorStatus(error)
+    if (status === 409) {
+      settingsStore.showToast(
+        getApiErrorMessage(error, t('library.moderation.toast.alreadyProcessed')),
+        'error',
+      )
+    } else if (status === 403) {
       settingsStore.showToast(t('library.moderation.toast.noPermission'), 'error')
       isUnauthorized.value = true
       closeReviewModal()
     } else {
-      const errMsg = err.response?.data?.message || err.response?.data?.error || err.message || t('library.moderation.toast.reviewError')
-      settingsStore.showToast(errMsg, 'error')
+      settingsStore.showToast(
+        getApiErrorMessage(error, t('library.moderation.toast.reviewError')),
+        'error',
+      )
     }
   } finally {
     isSubmitting.value = false
@@ -894,9 +918,12 @@ async function openStoredPdf(source: SourceContribution) {
     previewWindow.opener = null
     previewWindow.location.href = blobUrl
     window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
-  } catch (error: any) {
+  } catch (error: unknown) {
     previewWindow?.close()
-    settingsStore.showToast(error.message || t('library.moderation.toast.openPdfFailed'), 'error')
+    settingsStore.showToast(
+      getApiErrorMessage(error, t('library.moderation.toast.openPdfFailed')),
+      'error',
+    )
   } finally {
     activePdfActionId.value = null
   }
@@ -929,8 +956,11 @@ async function confirmPdfDownload() {
     URL.revokeObjectURL(blobUrl)
     settingsStore.showToast(t('library.moderation.toast.downloadStarted'), 'success')
     cancelPdfDownload()
-  } catch (error: any) {
-    settingsStore.showToast(error.message || t('library.moderation.toast.downloadFailed'), 'error')
+  } catch (error: unknown) {
+    settingsStore.showToast(
+      getApiErrorMessage(error, t('library.moderation.toast.downloadFailed')),
+      'error',
+    )
   } finally {
     isDownloadingPdf.value = false
     activePdfActionId.value = null

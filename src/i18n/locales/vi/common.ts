@@ -1,5 +1,7 @@
 /** Vietnamese — common shell strings */
 export default {
+  showPassword: 'Hiện mật khẩu',
+  hidePassword: 'Ẩn mật khẩu',
   appName: 'DreamScape',
   toggleNav: 'Mở/đóng điều hướng',
   scrollToTop: 'Cuộn lên đầu và làm mới trang',

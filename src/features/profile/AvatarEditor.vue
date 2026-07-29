@@ -63,7 +63,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import apiClient from '@/api/client'
-import { getAvatarBg, getInitials } from '@/data/mockUsers'
+import { getAvatarBg, getInitials } from '@/utils/avatar'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import AvatarCropModal from './AvatarCropModal.vue'

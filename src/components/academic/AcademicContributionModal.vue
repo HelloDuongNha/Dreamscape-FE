@@ -88,7 +88,7 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
 import { PDF_MAX_FILE_SIZE_BYTES, PDF_MAX_FILE_SIZE_LABEL } from '@/utils/pdfUploadLimits'
 
-const props = defineProps<{ open: boolean; isModerator?: boolean }>()
+const props = defineProps<{ open: boolean; isAdmin?: boolean }>()
 const emit = defineEmits<{ close: []; submitted: [] }>()
 const { t } = useI18n({ useScope: 'global' })
 const settingsStore = useSettingsStore()
@@ -213,7 +213,7 @@ async function submitContribution(): Promise<void> {
     if (result.success) {
       settingsStore.showToast(lookupMode.value === 'pdf' ? t('library.local.pdfSubmitted') : t('library.local.sourceSubmitted'), 'success')
       const contributionId = result.data?._id || result.data?.data?._id
-      if (props.isModerator && contributionId) {
+      if (props.isAdmin && contributionId) {
         if (lookupMode.value === 'pdf') sourceProgressStore.startPdfOnlyPipeline(contributionId, previewData.value.title, 'contribution', false, true)
         else sourceProgressStore.startPipeline(contributionId, previewData.value.title)
       }

@@ -54,6 +54,49 @@ function initialProgress(dream: ApiDream): number {
   return Math.max(0, Math.min(99, dream.analysisMetadata?.progress || 0))
 }
 
+function terminalAnalysisStatus(
+  dream: ApiDream,
+): Exclude<DreamAnalysisStatus, 'pending'> | null {
+  if (dream.ai_status === 'completed') return 'completed'
+  if (dream.ai_status === 'failed') return 'failed'
+  if (dream.ai_status === 'cancelled') return 'cancelled'
+  return null
+}
+
+function parsePersistedTasks(raw: string): PersistedDreamTask[] {
+  const saved: unknown = JSON.parse(raw)
+  if (!isRecord(saved)) return []
+
+  if (Array.isArray(saved.tasks)) {
+    return saved.tasks
+      .map(normalizePersistedTask)
+      .filter((task): task is PersistedDreamTask => task !== null)
+  }
+
+  const legacyTask = normalizePersistedTask(saved)
+  return legacyTask ? [{ ...legacyTask, presentation: 'pinned' }] : []
+}
+
+function normalizePersistedTask(value: unknown): PersistedDreamTask | null {
+  if (!isRecord(value) || typeof value.dreamId !== 'string') return null
+  const presentation: DreamTaskPresentation =
+    value.presentation === 'dialog'
+    || value.presentation === 'hidden'
+    || value.presentation === 'pinned'
+      ? value.presentation
+      : 'pinned'
+  return {
+    dreamId: value.dreamId,
+    presentation,
+    expiresAt: typeof value.expiresAt === 'number' ? value.expiresAt : null,
+    createdAt: typeof value.createdAt === 'number' ? value.createdAt : Date.now(),
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object')
+}
+
 export const useOracleStore = defineStore('oracle', () => {
   const tasks = ref<DreamAnalysisTask[]>([])
   const activeDreamId = ref<string | null>(null)
@@ -122,9 +165,7 @@ export const useOracleStore = defineStore('oracle', () => {
       existing.presentation = presentation
       existing.expiresAt = expiresAt
       existing.startedAtMs = startedAtMs(dream)
-      existing.progress = status === 'pending'
-        ? initialProgress(dream)
-        : initialProgress(dream)
+      existing.progress = initialProgress(dream)
       existing.statusMessage = dream.analysisMetadata?.statusMessage
         || existing.statusMessage
       return existing
@@ -253,30 +294,35 @@ export const useOracleStore = defineStore('oracle', () => {
         const dream = data.data
         const task = findTask(dreamId)
         if (!task) return
-        task.dream = dream
-        task.status = analysisStatus(dream)
-        const metadata = dream.analysisMetadata
-        if (metadata?.startedAt) task.startedAtMs = startedAtMs(dream)
-        if (typeof metadata?.progress === 'number') {
-          task.progress = Math.min(99, Math.max(0, metadata.progress))
-        }
-        if (metadata?.statusMessage) task.statusMessage = metadata.statusMessage
-        replaceDreamInFeed(dream)
-
-        if (dream.ai_status === 'completed') {
-          finishTask(dream, 'completed')
-          void useNotificationStore().fetchNotifications()
-        } else if (dream.ai_status === 'failed') {
-          finishTask(dream, 'failed')
-        } else if (dream.ai_status === 'cancelled') {
-          finishTask(dream, 'cancelled')
-        }
+        syncTaskFromDream(task, dream)
+        handlePolledTerminalDream(dream)
       } catch (error) {
         console.warn(`Dream analysis polling continues for ${dreamId}:`, error)
       } finally {
         pollingDreamIds.delete(dreamId)
       }
     }, 2500))
+  }
+
+  function syncTaskFromDream(task: DreamAnalysisTask, dream: ApiDream) {
+    task.dream = dream
+    task.status = analysisStatus(dream)
+    const metadata = dream.analysisMetadata
+    if (metadata?.startedAt) task.startedAtMs = startedAtMs(dream)
+    if (typeof metadata?.progress === 'number') {
+      task.progress = Math.min(99, Math.max(0, metadata.progress))
+    }
+    if (metadata?.statusMessage) task.statusMessage = metadata.statusMessage
+    replaceDreamInFeed(dream)
+  }
+
+  function handlePolledTerminalDream(dream: ApiDream) {
+    const terminalStatus = terminalAnalysisStatus(dream)
+    if (!terminalStatus) return
+    finishTask(dream, terminalStatus)
+    if (terminalStatus === 'completed') {
+      void useNotificationStore().fetchNotifications()
+    }
   }
 
   function startPendingTask(task: DreamAnalysisTask) {
@@ -287,14 +333,7 @@ export const useOracleStore = defineStore('oracle', () => {
   }
 
   function startTracking(dream: ApiDream) {
-    const previousActive = activeTask.value
-    if (
-      previousActive
-      && previousActive.dreamId !== dream._id
-      && previousActive.presentation === 'dialog'
-    ) {
-      previousActive.presentation = 'pinned'
-    }
+    pinPreviousDialog(dream._id)
 
     const task = createOrUpdateTask(dream, 'dialog')
     activeDreamId.value = dream._id
@@ -309,23 +348,21 @@ export const useOracleStore = defineStore('oracle', () => {
     persistTasks()
   }
 
+  function pinPreviousDialog(nextDreamId: string) {
+    const previousActive = activeTask.value
+    if (!previousActive || previousActive.dreamId === nextDreamId) return
+    if (previousActive.presentation === 'dialog') {
+      previousActive.presentation = 'pinned'
+    }
+  }
+
   async function restoreTracking() {
     const raw = localStorage.getItem(ORACLE_DREAM_TASK_KEY)
       || localStorage.getItem(LEGACY_ORACLE_DREAM_TASK_KEY)
     if (!raw) return
 
     try {
-      const saved = JSON.parse(raw)
-      const savedTasks: PersistedDreamTask[] = Array.isArray(saved?.tasks)
-        ? saved.tasks
-        : saved?.dreamId
-          ? [{
-              dreamId: saved.dreamId,
-              presentation: 'pinned',
-              expiresAt: saved.expiresAt || null,
-              createdAt: Date.now(),
-            }]
-          : []
+      const savedTasks = parsePersistedTasks(raw)
 
       const restoredTasks = await Promise.all(savedTasks.map(async persisted => {
         if (persisted.expiresAt && persisted.expiresAt <= Date.now()) return
@@ -376,14 +413,7 @@ export const useOracleStore = defineStore('oracle', () => {
   function openTask(dreamId: string) {
     const task = findTask(dreamId)
     if (!task) return
-    const previousActive = activeTask.value
-    if (
-      previousActive
-      && previousActive.dreamId !== dreamId
-      && previousActive.presentation === 'dialog'
-    ) {
-      previousActive.presentation = 'pinned'
-    }
+    pinPreviousDialog(dreamId)
     clearCompletionTimer(dreamId)
     task.presentation = 'dialog'
     task.expiresAt = null

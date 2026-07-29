@@ -37,6 +37,7 @@ export default {
   usernameInvalid: 'Username can only contain letters, numbers, and underscores.',
   usernameLength: 'Username must be between 2 and 29 characters.',
   followStatusFailed: 'Failed to update follow status.',
+  followRequestReviewFailed: 'Could not review this follow request.',
   profileSaveFailed: 'Failed to update profile.',
   usernameEmpty: 'Username cannot be empty.',
   displayNameEmpty: 'Display name cannot be empty.',

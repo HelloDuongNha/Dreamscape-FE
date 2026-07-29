@@ -65,14 +65,30 @@
           </label>
           <label v-if="form.provider === 'openai_compatible'">
             <span>{{ t('oracle.apiKey') }}</span>
-            <input
-              v-model="form.apiKey"
-              required
-              type="password"
-              autocomplete="new-password"
-              spellcheck="false"
-              @input="detectProvider"
-            />
+            <span class="oracle-secret-field">
+              <input
+                v-model="form.apiKey"
+                required
+                :type="apiKeyVisible ? 'text' : 'password'"
+                autocomplete="new-password"
+                spellcheck="false"
+                @input="detectProvider"
+              />
+              <button
+                type="button"
+                :aria-label="t(apiKeyVisible ? 'common.hidePassword' : 'common.showPassword')"
+                :aria-pressed="apiKeyVisible"
+                @click="apiKeyVisible = !apiKeyVisible"
+              >
+                <svg v-if="apiKeyVisible" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 4.2A10.8 10.8 0 0 1 12 4c5.5 0 9 5.2 9 5.2a14 14 0 0 1-2.1 2.6M6.2 6.2C4.2 7.5 3 9.2 3 9.2S6.5 16 12 16c1.3 0 2.5-.3 3.5-.7"/>
+                </svg>
+                <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/>
+                  <circle cx="12" cy="12" r="2.5"/>
+                </svg>
+              </button>
+            </span>
             <small>{{ detectedHint }}</small>
           </label>
           <label class="oracle-connection-consent">
@@ -112,6 +128,7 @@ const credentials = ref<OracleCredentialDto[]>([])
 const saving = ref(false)
 const busyId = ref('')
 const error = ref('')
+const apiKeyVisible = ref(false)
 const form = reactive({
   provider: 'openai_compatible' as OracleCredentialDto['provider'],
   label: '',
@@ -165,6 +182,7 @@ async function save() {
     const created = await createOracleCredential({ ...form })
     credentials.value.unshift(created)
     form.apiKey = ''
+    apiKeyVisible.value = false
     form.label = ''
     form.modelName = ''
     form.privateContextAcknowledged = false
@@ -210,4 +228,5 @@ onMounted(() => { if (props.modelValue) void load() })
 .oracle-connection-modal h2{margin:0 0 5px;font-size:18px}.oracle-connection-modal p{margin:0;color:var(--color-text-muted);font-size:12px}.oracle-connection-modal>header button{border:0;background:transparent;color:var(--color-text-muted);font-size:24px;cursor:pointer}
 .oracle-connection-list{display:grid;gap:8px;padding:16px 22px 0}.oracle-connection-list article{display:grid;grid-template-columns:1fr auto;gap:8px 14px;padding:12px;border:1px solid var(--color-border);border-radius:12px}.oracle-connection-list article>div:first-child{display:grid;gap:3px}.oracle-connection-list span,.oracle-connection-list small{color:var(--color-text-muted);font-size:11px}.oracle-connection-status--active{color:#54d98c!important}.oracle-connection-status--failed{color:#ff7b7b!important}.oracle-connection-actions{grid-column:1/-1;display:flex;align-items:center;gap:8px}.oracle-connection-actions button{padding:5px 9px;border:1px solid var(--color-border);border-radius:7px;background:transparent;color:var(--color-text-secondary);cursor:pointer}.oracle-connection-actions .danger{margin-left:auto;color:#ff8585}
 .oracle-connection-modal form{display:grid;gap:13px;padding:20px 22px}.oracle-connection-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.oracle-connection-modal label{display:grid;gap:6px;color:var(--color-text-secondary);font-size:12px}.oracle-connection-modal input,.oracle-connection-modal select{width:100%;padding:10px 11px;border:1px solid var(--color-border-input);border-radius:9px;background:var(--color-bg-surface);color:var(--color-text-primary);outline:none}.oracle-connection-modal small{color:var(--color-text-muted)}.oracle-connection-consent{grid-template-columns:auto 1fr!important;align-items:start}.oracle-connection-consent input{width:auto;margin-top:2px}.oracle-connection-error{color:#ff8585!important}.oracle-connection-modal form footer{display:flex;justify-content:flex-end;gap:8px;margin-top:5px}@media(max-width:600px){.oracle-connection-grid{grid-template-columns:1fr}}
+.oracle-secret-field{position:relative;display:block}.oracle-secret-field input{padding-right:44px}.oracle-secret-field button{position:absolute;top:50%;right:5px;display:grid;place-items:center;width:34px;height:34px;padding:0;transform:translateY(-50%);border:0;border-radius:7px;background:transparent;color:var(--color-text-muted);cursor:pointer}.oracle-secret-field button:hover,.oracle-secret-field button:focus-visible{background:var(--color-bg-hover);color:var(--color-text-primary);outline:none}.oracle-secret-field svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 </style>

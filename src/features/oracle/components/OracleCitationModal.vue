@@ -40,12 +40,12 @@
                 <div class="oracle-citation-rule__heading">
                   <p>{{ localizedStatement(rule) }}</p>
                   <div
-                    :class="['oracle-score', { 'is-admin-link': isModerator }]"
-                    :title="isModerator
+                    :class="['oracle-score', { 'is-admin-link': hasAdminAccess }]"
+                    :title="hasAdminAccess
                       ? t('oracle.sourceArgumentScoreAdminHelp')
                       : t('oracle.sourceArgumentScoreHelp')"
-                    :role="isModerator ? 'link' : undefined"
-                    :tabindex="isModerator ? 0 : undefined"
+                    :role="hasAdminAccess ? 'link' : undefined"
+                    :tabindex="hasAdminAccess ? 0 : undefined"
                     @click="openRuleScore(rule)"
                     @keydown.enter.prevent="openRuleScore(rule)"
                   >
@@ -96,7 +96,7 @@
 
           <footer>
             <AppButton variant="ghost" @click="close">{{ t('oracle.close') }}</AppButton>
-            <AppButton suffix-icon="↗" @click="$emit('open-source', citation.sourceId)">
+            <AppButton suffix-icon="external-link" @click="$emit('open-source', citation.sourceId)">
               {{ t('oracle.openFullSource') }}
             </AppButton>
           </footer>
@@ -119,7 +119,7 @@ import {
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useRouter } from 'vue-router'
-import { isModeratorUserId } from '@/utils/moderatorAccess'
+import { isAdminUser } from '@/utils/adminAccess'
 import apiClient from '@/api/client'
 import {
   inferOracleTextLanguage,
@@ -152,7 +152,7 @@ let translationRun = 0
 const interactiveRules = computed(() =>
   (props.citation?.ruleLinks || []).filter((rule) => Boolean(rule.verificationQuestion)),
 )
-const isModerator = computed(() => isModeratorUserId(authStore.user?._id))
+const hasAdminAccess = computed(() => isAdminUser(authStore.user))
 
 watch([
   () => props.modelValue,
@@ -177,7 +177,7 @@ function close() {
 }
 
 function openRuleScore(rule: OracleCitationRuleLinkDto) {
-  if (!isModerator.value) return
+  if (!hasAdminAccess.value) return
   close()
   void router.push({
     name: 'moderation-rule-candidates',

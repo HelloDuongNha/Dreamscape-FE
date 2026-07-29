@@ -28,17 +28,17 @@ const badgeClass = computed(() => {
 
   if (resolvedType === 'uploaded_pdf') {
     if (props.kind === 'allowedUse') {
-      if (s === 'open_access_fulltext') return 'completed'
+      if (s === 'open_access_fulltext') return 'hidden'
       if (s === 'metadata_only') return 'private'
     }
     if (props.kind === 'copyright') {
       return 'hidden' // hide copyright badge to avoid "paywalled" contradiction
     }
     if (props.kind === 'verification') {
-      if (s === 'manual') return 'completed'
+      if (s === 'manual') return 'hidden'
     }
     if (props.kind === 'fullTextStatus') {
-      if (s === 'available' || s === 'imported') return 'completed'
+      if (s === 'available' || s === 'imported') return 'hidden'
       return 'private'
     }
   }
@@ -116,7 +116,7 @@ const badgeLabel = computed(() => {
       if (s === 'manual') return 'Đã duyệt thủ công'
     }
     if (props.kind === 'fullTextStatus') {
-      if (s === 'available' || s === 'imported') return 'PDF đã được moderator duyệt'
+      if (s === 'available' || s === 'imported') return 'PDF đã được quản trị viên duyệt'
       return 'Chưa có bản đọc'
     }
   }

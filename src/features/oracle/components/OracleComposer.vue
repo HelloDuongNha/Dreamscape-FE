@@ -62,32 +62,6 @@
               <span>{{ t('oracle.contextCapacity') }}: {{ contextUsage.maxTokens.toLocaleString() }} token</span>
             </span>
           </div>
-          <div class="oracle-composer__delivery-option">
-            <button
-              type="button"
-              :class="['oracle-composer__delivery-toggle', { 'oracle-composer__delivery-toggle--active': waitForComplete }]"
-              role="switch"
-              :aria-checked="waitForComplete"
-              :aria-label="t('oracle.waitForComplete')"
-              @click="$emit('update:waitForComplete', !waitForComplete)"
-            >
-              <span class="oracle-composer__delivery-track"><i /></span>
-              <span>{{ waitForComplete ? t('oracle.showWhenReady') : t('oracle.showProgressively') }}</span>
-            </button>
-            <button
-              type="button"
-              class="oracle-composer__delivery-help"
-              :aria-label="t('oracle.waitForCompleteHelp')"
-              @click="showDeliveryHelp = !showDeliveryHelp"
-              @blur="showDeliveryHelp = false"
-            >?</button>
-            <div v-show="showDeliveryHelp" class="oracle-composer__delivery-popover" role="tooltip">
-              <strong>{{ t('oracle.waitForCompleteHelp') }}</strong>
-              <span>- {{ t('oracle.waitForCompleteOnHelp') }}</span>
-              <span>- {{ t('oracle.waitForCompleteOffHelp') }}</span>
-            </div>
-          </div>
-
           <AppButton
             variant="smart"
             size="sm"
@@ -118,7 +92,6 @@ import AppButton from '@/components/common/AppButton.vue'
 const props = withDefaults(
   defineProps<{
     isSending?: boolean
-    waitForComplete?: boolean
     contextUsage?: {
       usedTokens: number
       maxTokens: number
@@ -130,7 +103,6 @@ const props = withDefaults(
   }>(),
   {
     isSending: false,
-    waitForComplete: false,
     contextUsage: undefined,
     contextMessageCount: 0,
   }
@@ -139,13 +111,11 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'send', content: string): void
   (e: 'cancel'): void
-  (e: 'update:waitForComplete', value: boolean): void
 }>()
 
 const { t } = useI18n()
 const inputContent = ref('')
 const textarea = ref<HTMLTextAreaElement | null>(null)
-const showDeliveryHelp = ref(false)
 const isComposing = ref(false)
 
 async function submit() {
@@ -289,86 +259,10 @@ defineExpose({ focus, setContent, clear })
   gap: var(--space-3);
 }
 
-.oracle-composer__delivery-option {
-  position: relative;
-  display: inline-flex;
-  width: 126px;
-  flex: 0 0 126px;
-  align-items: center;
-  gap: 0.35rem;
-}
-
 .oracle-composer__send-btn :deep(.app-btn__label) {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.oracle-composer__delivery-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42rem;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.oracle-composer__delivery-track {
-  position: relative;
-  width: 28px;
-  height: 16px;
-  border-radius: 999px;
-  background: var(--color-bg-active);
-  box-shadow: inset 0 0 0 1px var(--color-border);
-}
-
-.oracle-composer__delivery-track i {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-  transition: transform 160ms ease, background 160ms ease;
-}
-
-.oracle-composer__delivery-toggle--active {
-  color: var(--color-text-primary);
-}
-
-.oracle-composer__delivery-toggle--active .oracle-composer__delivery-track {
-  background: var(--color-primary, #617dff);
-}
-
-.oracle-composer__delivery-toggle--active .oracle-composer__delivery-track i {
-  transform: translateX(12px);
-  background: #fff;
-}
-
-.oracle-composer__delivery-help {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  place-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: 50%;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: help;
-  font: inherit;
-  font-size: 10px;
-}
-
-.oracle-composer__delivery-help:hover + .oracle-composer__delivery-popover,
-.oracle-composer__delivery-help:focus + .oracle-composer__delivery-popover {
-  display: grid !important;
 }
 
 .oracle-composer__context {
@@ -441,27 +335,6 @@ defineExpose({ focus, setContent, clear })
   stroke-dashoffset: 97.4;
   stroke-linecap: round;
   transition: stroke-dashoffset 220ms ease;
-}
-
-.oracle-composer__delivery-popover {
-  position: absolute;
-  z-index: 20;
-  right: 0;
-  bottom: calc(100% + 10px);
-  width: min(310px, calc(100vw - 40px));
-  gap: 0.45rem;
-  padding: 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-bg-elevated);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.oracle-composer__delivery-popover strong {
-  color: var(--color-text-primary);
 }
 
 @media (max-width: 640px) {

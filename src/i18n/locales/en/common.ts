@@ -1,5 +1,7 @@
 /** English — common shell strings (identical key set to vi/common.ts) */
 export default {
+  showPassword: 'Show password',
+  hidePassword: 'Hide password',
   appName: 'DreamScape',
   toggleNav: 'Toggle navigation',
   scrollToTop: 'Scroll to top and refresh feed',

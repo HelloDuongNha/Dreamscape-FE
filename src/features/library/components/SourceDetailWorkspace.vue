@@ -128,7 +128,7 @@
                       {{ t('library.reader.notSavedCloudinary') }}
                     </span>
                   </div>
-                  <div v-if="isModeratorUser && !hasValidOriginalFilePdf(source) && hasPdfCandidate" style="display: flex; gap: 8px;">
+                  <div v-if="hasAdminAccess && !hasValidOriginalFilePdf(source) && hasPdfCandidate" style="display: flex; gap: 8px;">
                     <button 
                       v-if="cacheStatus !== 'failed'"
                       class="sidebar-action-btn sidebar-action-btn--primary" 
@@ -249,12 +249,12 @@
                     <!-- Action Buttons -->
                     <div style="display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-4); width: 100%; max-width: 400px; align-items: center;">
                       <a v-if="preferredExternalDocumentUrl" :href="preferredExternalDocumentUrl" target="_blank" rel="noopener noreferrer" class="sidebar-action-btn sidebar-action-btn--primary" style="text-align: center; text-decoration: none; width: 100%; justify-content: center;">
-                        {{ preferredExternalDocumentLabel }} ↗
+                      {{ preferredExternalDocumentLabel }}
                       </a>
                       
                       <!-- Manual Upload action button -->
                       <button 
-                        v-if="isModeratorUser"
+                        v-if="hasAdminAccess"
                         class="sidebar-action-btn sidebar-action-btn--primary" 
                         style="width: 100%; justify-content: center; margin-top: var(--space-2);"
                         :disabled="isUploadingPdf || isCachingPdf || isDeletingOriginalPdf"
@@ -325,7 +325,7 @@
                     class="sidebar-action-btn sidebar-action-btn--primary"
                     style="text-align: center; display: block; width: 100%; max-width: 400px; text-decoration: none; margin-top: var(--space-3);"
                   >
-                    {{ preferredExternalDocumentLabel }} ↗
+                    {{ preferredExternalDocumentLabel }}
                   </a>
                 </div>
               </div>
@@ -408,7 +408,7 @@
                 </div>
 
                 <!-- Warnings banner - Moderator/Admin only -->
-                <div v-if="isModeratorUser && readerWarnings && readerWarnings.length > 0" class="reader-warning-banner">
+                <div v-if="hasAdminAccess && readerWarnings && readerWarnings.length > 0" class="reader-warning-banner">
                   <template v-for="(warning, wIdx) in readerWarnings" :key="wIdx">
                     <div v-if="!warning.includes('bố cục') && !warning.includes('cấu trúc') && !warning.includes('thứ tự')" class="warning-item">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-top: 2px; flex-shrink: 0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
@@ -761,9 +761,9 @@
           </label>
           
           <div class="meta-table">
-            <div v-if="source.authors && source.authors.length > 0" class="attribute-row">
+            <div class="attribute-row">
               <span class="meta-key">{{ t('library.labels.authors') }}</span>
-              <span class="attribute-value" translate="no">{{ source.authors.join(', ') }}</span>
+              <span class="attribute-value" translate="no">{{ displaySourceAuthors }}</span>
             </div>
             <div v-if="source.year" class="attribute-row">
               <span class="meta-key">{{ t('library.labels.year') }}</span>
@@ -815,36 +815,7 @@
           </div>
 
           <!-- Moderator RAG and Re-import actions -->
-          <div v-if="isModeratorUser" class="sidebar-moderation-row" style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border, #262626);">
-            <div v-if="source.readableInApp" class="moderation-tech-info" style="margin-bottom: var(--space-3); font-size: 0.85rem; line-height: 1.4;">
-              <div class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">{{ t('library.labels.ragStatus') }}</span>
-                <span :style="statusStyle" style="font-weight: 500;">{{ statusLabel }}</span>
-              </div>
-              <div v-if="source.chunkCount" class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">{{ t('library.labels.chunkCount') }}</span>
-                <span>{{ source.chunkCount }}</span>
-              </div>
-              <div v-if="source.chunkEmbeddingModel" class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">Model Vector:</span>
-                <span style="font-family: monospace;">{{ source.chunkEmbeddingModel }}</span>
-              </div>
-              <div v-if="extractionEngine" class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">Engine:</span>
-                <span style="font-family: monospace;">{{ extractionEngine }}</span>
-              </div>
-              <div v-if="layoutQuality" class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">{{ t('library.labels.layoutQuality') }}</span>
-                <span>{{ layoutQuality }}</span>
-              </div>
-              <div v-if="sourceUrlUsed" class="tech-row" style="display: flex; flex-direction: column; margin-bottom: var(--space-1); gap: 2px;">
-                <span style="color: var(--color-text-muted);">{{ t('library.labels.sourceUrl') }}</span>
-                <a :href="sourceUrlUsed" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary, #60a5fa); word-break: break-all; font-family: monospace; font-size: 0.75rem;">
-                  {{ sourceUrlUsed }}
-                </a>
-              </div>
-            </div>
-
+          <div v-if="hasAdminAccess" class="sidebar-moderation-row" style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border, #262626);">
             <div
               v-if="props.actionMode === 'moderation-preview'"
               class="moderation-review-actions"
@@ -878,7 +849,7 @@
               variant="secondary"
               size="sm"
               block
-              suffix-icon="⌄"
+              suffix-icon="chevron-down"
               @click="showDebugActions = !showDebugActions"
               style="margin-bottom: 8px;"
             >
@@ -886,133 +857,18 @@
             </AppButton>
 
             <div v-if="showDebugActions" class="reader-debug-actions">
-              <div class="reader-build-comparison">
-                <div class="reader-build-comparison__title">{{ t('library.system.readerBuilds') }}</div>
-                <div v-if="readerBuildHistory.length" class="reader-build-history">
-                  <details
-                    v-for="build in readerBuildHistory"
-                    :key="`${build.builtAt}-${build.engine}-${build.sourceType}`"
-                    :class="['history-accordion', { 'history-accordion--active': build.isActive }]"
-                  >
-                    <summary>
-                      <span class="history-accordion__chevron" aria-hidden="true">⌄</span>
-                      <span class="history-accordion__main">
-                        <strong>{{ build.label }}</strong>
-                        <small>{{ t('library.system.buildNumber', { number: build.number }) }}</small>
-                      </span>
-                      <span class="history-accordion__meta">
-                        <strong :class="build.status === 'failed' ? 'run-status--failed' : ''">
-                          {{ build.status === 'failed' ? t('library.statuses.failed') : t('library.system.sectionsChunks', { sections: build.sectionCount, chunks: build.chunkCount }) }}
-                        </strong>
-                        <small>{{ build.timing ? formatRuleDuration(build.timing.durationMs) : t('library.system.durationUnavailable') }}</small>
-                      </span>
-                    </summary>
-                    <dl class="history-detail-grid">
-                      <div><dt>{{ t('library.system.completedAt') }}</dt><dd>{{ formatRuleRunDate(build.builtAt) }}</dd></div>
-                      <div><dt>{{ t('library.system.readerEngine') }}</dt><dd>{{ build.engine }}</dd></div>
-                      <div><dt>{{ t('library.system.readerSourceType') }}</dt><dd>{{ build.sourceType }}</dd></div>
-                      <div v-if="build.status === 'failed'"><dt>{{ t('library.system.stopReason') }}</dt><dd>{{ build.failureMessage || build.failureCode || t('library.rule.failure.unknown') }}</dd></div>
-                      <div v-if="build.status !== 'failed' && build.isPdf && build.timing?.pageCount"><dt>{{ t('library.system.pdfDetails') }}</dt><dd>{{ build.timing.pageCount }} {{ t('library.readerLocal.pagesShort') }} · {{ build.timing.ocrUsed ? 'OCR' : (build.engine || 'PDF') }}</dd></div>
-                      <div v-if="build.status !== 'failed' && build.hasEstimate"><dt>{{ t('library.system.estimateDifference') }}</dt><dd :class="build.timing.estimatedDurationSeconds * 1000 >= build.timing.durationMs ? 'timing-early' : 'timing-late'">{{ formatReaderTimingDelta(build.timing) }}</dd></div>
-                    </dl>
-                  </details>
-                </div>
-                <div v-else class="reader-build-comparison__empty">
-                  {{ t('library.system.noReaderHistory') }}
-                </div>
-              </div>
-
-              <div class="rule-analysis-summary">
-                <div class="reader-build-comparison__title">{{ t('library.system.ruleRuns') }}</div>
-                <div v-if="ruleV3SummaryLoading" class="reader-build-comparison__empty">{{ t('library.system.loadingResults') }}</div>
-                <template v-else-if="ruleV3Summary">
-                  <div v-if="ruleV3Summary.totalRuleCount > 0" class="rule-analysis-counts">
-                    <span class="rule-count rule-count--pending"><strong>{{ ruleV3Summary.counts.pending }}</strong> {{ t('library.system.pending') }}</span>
-                    <span class="rule-count rule-count--approved"><strong>{{ ruleV3Summary.counts.verified }}</strong> {{ t('library.system.approved') }}</span>
-                    <span class="rule-count rule-count--rejected"><strong>{{ ruleV3Summary.counts.rejected }}</strong> {{ t('library.system.rejected') }}</span>
-                    <span
-                      v-if="ruleV3Summary.evidenceGapMatches.candidateFound > 0"
-                      class="rule-count rule-count--evidence"
-                    >
-                      <strong>{{ ruleV3Summary.evidenceGapMatches.candidateFound }}</strong>
-                      {{ t('library.system.evidenceNeedsMatched') }}
-                    </span>
-                    <span
-                      v-if="ruleV3Summary.evidenceGapMatches.resolved > 0"
-                      class="rule-count rule-count--resolved"
-                    >
-                      <strong>{{ ruleV3Summary.evidenceGapMatches.resolved }}</strong>
-                      {{ t('library.system.evidenceNeedsResolved') }}
-                    </span>
-                  </div>
-                  <details v-if="ruleV3Summary.evidenceGapDetails.length" class="evidence-match-details">
-                    <summary>
-                      <span class="history-accordion__chevron" aria-hidden="true">⌄</span>
-                      <span>
-                        <strong>{{ t('library.system.evidenceMatchDetails') }}</strong>
-                        <small>{{ t('library.system.evidenceMatchDetailsHint') }}</small>
-                      </span>
-                    </summary>
-                    <div class="evidence-match-list">
-                      <article v-for="gap in ruleV3Summary.evidenceGapDetails" :key="gap.gapId" class="evidence-match-item">
-                        <div>
-                          <span :class="['status-chip', gap.status === 'resolved' ? 'status-verified' : 'status-pending']">
-                            {{ gap.status === 'resolved' ? t('library.system.evidenceResolved') : t('library.system.evidenceCandidateOnly') }}
-                          </span>
-                          <small v-if="gap.occurrenceCount > 1">{{ t('library.system.evidenceOccurrenceCount', { count: gap.occurrenceCount }) }}</small>
-                        </div>
-                        <strong>{{ gap.localizedClaim ? (locale === 'vi' ? gap.localizedClaim.vi : gap.localizedClaim.en) : gap.claim }}</strong>
-                        <ul>
-                          <li v-for="rule in gap.rules" :key="rule.ruleId">
-                            <span translate="no">{{ rule.ruleCode }}</span>
-                            <span>{{ rule.statement }}</span>
-                            <small>{{ rule.evidenceScore }}/100 · {{ rule.resolutionRole === 'resolved' ? t('library.system.directlyResolved') : t('library.system.candidateMatch') }}</small>
-                          </li>
-                        </ul>
-                      </article>
-                    </div>
-                  </details>
-                  <div v-if="ruleV3Summary.runHistory.length" class="rule-run-history">
-                    <details v-for="(run, index) in ruleV3Summary.runHistory" :key="run.runId" class="rule-run-history__item">
-                      <summary>
-                        <span class="history-accordion__chevron" aria-hidden="true">⌄</span>
-                        <span class="history-accordion__main">
-                          <strong>{{ t('library.system.runNumber', { number: ruleV3Summary.runHistory.length - index }) }}</strong>
-                          <small>{{ t('library.system.runCompact', { chunks: run.targetChunkCount ?? '—', saved: run.savedCandidateCount }) }}</small>
-                        </span>
-                        <span class="history-accordion__meta">
-                          <strong :class="`run-status--${run.status}`">{{ ruleRunStatusText(run.status) }}</strong>
-                          <small>{{ formatRuleDuration(run.durationMs) }}</small>
-                        </span>
-                      </summary>
-                      <dl class="history-detail-grid">
-                        <div><dt>{{ t('library.system.startedAt') }}</dt><dd>{{ formatRuleRunDate(run.startedAt) }}</dd></div>
-                        <div><dt>{{ t('library.system.batchProgress') }}</dt><dd>{{ run.processedBatches }}/{{ run.totalBatches }}</dd></div>
-                        <div><dt>{{ t('library.system.rawVerified') }}</dt><dd>{{ run.rawCandidateCount }} / {{ run.verifiedCandidateCount }}</dd></div>
-                        <div><dt>{{ t('library.system.createdMergedRejected') }}</dt><dd>{{ run.savedCandidateCount }} / {{ run.mergedCandidateCount }} / {{ run.rejectedCandidateCount }}</dd></div>
-                        <div><dt>{{ t('library.system.targetEvidenceChunks') }}</dt><dd>{{ run.targetChunkCount ?? '—' }} / {{ run.evidenceChunkCount ?? '—' }}</dd></div>
-                        <div v-if="run.status === 'failed'"><dt>{{ t('library.system.stopReason') }}</dt><dd>{{ ruleRunFailureText(run.sanitizedErrorCode) }}</dd></div>
-                      </dl>
-                      <div v-if="run.rejectionDiagnostics.length" class="rule-run-rejections">
-                        <strong>{{ t('library.system.rejectionReasons') }}</strong>
-                        <ul>
-                          <li v-for="(item, itemIndex) in run.rejectionDiagnostics" :key="`${item.batchId}-${itemIndex}`">
-                            <span translate="no">{{ item.safeMessage }}</span>
-                            <small v-if="item.proposedStatement" translate="no">{{ item.proposedStatement }}</small>
-                            <small>{{ t('library.system.evidenceBatch', { id: item.batchId }) }}</small>
-                          </li>
-                        </ul>
-                      </div>
-                    </details>
-                  </div>
-                  <div v-else class="reader-build-comparison__empty">{{ t('library.system.noRunRecord') }}</div>
-                  <button v-if="ruleV3Summary.totalRuleCount > 0" type="button" class="rule-summary-link" @click="openRuleCandidatesForSource">
-                    {{ t('library.system.viewRules') }}
-                  </button>
-                  <div v-if="!ruleV3Summary.latestRun && ruleV3Summary.totalRuleCount === 0" class="reader-build-comparison__empty">{{ t('library.system.noRuleRun') }}</div>
-                </template>
-                <div v-else class="reader-build-comparison__empty">{{ t('library.system.ruleHistoryError') }}</div>
-              </div>
+              <SourceProcessingHistory
+                :reader-builds="readerBuildHistory"
+                :rule-summary="ruleV3Summary"
+                :rule-summary-loading="ruleV3SummaryLoading"
+                :format-duration="formatRuleDuration"
+                :format-date="formatRuleRunDate"
+                :status-text="ruleRunStatusText"
+                :failure-text="ruleRunFailureText"
+                :is-timing-early="isReaderTimingEarly"
+                :format-timing-delta="formatReaderTimingDelta"
+                @open-rules="openRuleCandidatesForSource"
+              />
 
               <AppButton
                 variant="secondary"
@@ -1089,12 +945,6 @@
                 {{ t('library.system.openPdf') }}
               </button>
               
-              <div v-if="source.originalFile?.originalFileName" class="source-link-row" style="font-size: 0.75rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-2); margin-top: 2px;">
-                <span>{{ t('library.labels.originalFileName') }} </span>
-                <span style="color: var(--color-text-secondary); word-break: break-all;" translate="no">
-                  {{ source.originalFile.originalFileName }}
-                </span>
-              </div>
             </template>
             
             <!-- Case 2: External PDF Link or PMC PDF download (not cached yet) -->
@@ -1107,7 +957,7 @@
                 class="sidebar-action-btn sidebar-action-btn--primary"
                 style="text-align: center; display: block; text-decoration: none;"
               >
-                {{ preferredExternalDocumentLabel }} ↗
+                {{ preferredExternalDocumentLabel }}
               </a>
             </template>
             
@@ -1133,7 +983,7 @@
             </template>
             
             <!-- Moderator Manual Upload Button inside Sidebar Card -->
-            <div v-if="isModeratorUser" style="border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-3); margin-top: var(--space-1); width: 100%;">
+            <div v-if="hasAdminAccess" style="border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-3); margin-top: var(--space-1); width: 100%;">
               <button 
                 class="sidebar-action-btn sidebar-action-btn--secondary" 
                 style="font-size: 0.8rem; width: 100%; justify-content: center; margin: 0;"
@@ -1312,7 +1162,18 @@ import { getApprovedSourceById, getApprovedSourceRead, getApprovedSourceOriginal
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
-import { getSourcePreview, reviewSource, updateSourceContributionTitle, getModerationSourcePdfInline, cacheModerationSourceOriginalPdf, uploadModerationSourcePdf, deleteModerationSourceOriginalPdf } from '@/api/moderationApi'
+import { isAdminUser } from '@/utils/adminAccess'
+import {
+  getSourcePreview,
+  reviewSource,
+  updateSourceContributionTitle,
+  getModerationSourcePdfInline,
+  cacheModerationSourceOriginalPdf,
+  uploadModerationSourcePdf,
+  deleteModerationSourceOriginalPdf,
+  type PdfImportHistoryEntry,
+  type ReaderBuildSnapshot,
+} from '@/api/moderationApi'
 import { useSmartReaderTranslation } from '../composables/useSmartReaderTranslation'
 import { repairOcrHtml, repairOcrText } from '../services/ocrTextRepair.service'
 import { estimateRuleSecondsPerBatch } from '../services/ruleExtractionTiming.service'
@@ -1325,6 +1186,7 @@ import { useExtractionStore } from '@/store/useExtractionStore'
 import AppButton from '@/components/common/AppButton.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 import AppCopyButton from '@/components/common/AppCopyButton.vue'
+import SourceProcessingHistory from './SourceProcessingHistory.vue'
 import {
   PDF_MAX_FILE_SIZE_BYTES,
   PDF_MAX_FILE_SIZE_LABEL,
@@ -2211,6 +2073,14 @@ function stripLeadingReferenceNumberHtml(html: string): string {
 
 
 const source = ref<any>(null)
+const displaySourceAuthors = computed(() => {
+  const authors = Array.isArray(source.value?.authors) && source.value.authors.length
+    ? source.value.authors
+    : Array.isArray(source.value?.metadata?.authors)
+      ? source.value.metadata.authors
+      : []
+  return authors.map(String).filter(Boolean).join(', ') || t('library.unknownAuthor')
+})
 const isLoading = ref(true)
 const hasError = ref(false)
 const isImporting = ref(false)
@@ -3023,7 +2893,6 @@ async function openPdfInNewTab() {
     window.open(externalPdfUrl, '_blank', 'noopener,noreferrer')
     return
   }
-  const previewWindow = window.open('', '_blank')
   try {
     let url = ''
     if (originalDocState.value.status === 'pdf_inline_ready' && originalDocState.value.pdfViewUrl) {
@@ -3039,24 +2908,26 @@ async function openPdfInNewTab() {
           const parsed = JSON.parse(text)
           if (parsed && parsed.success === false) {
             settingsStore.showToast(parsed.message || t('library.readerLocal.loadPdfError'), 'error')
-            previewWindow?.close()
             return
           }
         } catch {}
         settingsStore.showToast(t('library.readerLocal.notPdf'), 'error')
-        previewWindow?.close()
         return
       }
       url = URL.createObjectURL(blob)
     }
-    if (previewWindow) {
-      previewWindow.opener = null
-      previewWindow.location.href = url
-    } else {
-      window.open(url, '_blank', 'noopener,noreferrer')
+    if (!url || url === 'about:blank') {
+      settingsStore.showToast(t('library.readerLocal.openFailed'), 'error')
+      return
     }
+    const link = document.createElement('a')
+    link.href = url
+    link.target = '_blank'
+    link.rel = 'noopener noreferrer'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   } catch (err: any) {
-    previewWindow?.close()
     console.error('Error opening PDF in new tab:', err)
     settingsStore.showToast(t('library.readerLocal.openFailed'), 'error')
   }
@@ -3508,7 +3379,7 @@ function onPageChange(e: any) {
 }
 
 async function handleRetryImport() {
-  if (isModeratorUser.value) {
+  if (hasAdminAccess.value) {
     if (source.value?.readableInApp) {
       await promptReimport()
     } else {
@@ -3523,11 +3394,7 @@ const displayDoi = computed(() => {
   return !source.value || !source.value.doi ? '' : source.value.doi.replace(/^(doi|DOI):\s*/, '').trim()
 })
 
-const isModeratorUser = computed(() => {
-  const moderators = '6a0fc84bd37aacb66092be0e'.split(',')
-  const currentUserId = authStore.user?._id
-  return !!(currentUserId && moderators.map(e => e.trim().toLowerCase()).includes(currentUserId.toLowerCase()))
-})
+const hasAdminAccess = computed(() => isAdminUser(authStore.user))
 
 const showDebugActions = ref(false)
 const isCurrentlyExtractingV3 = computed(() =>
@@ -3590,7 +3457,7 @@ const ruleExtractionConfirmLabel = computed(() => {
 })
 
 async function loadRuleV3Summary() {
-  if (!source.value?._id || (!isModeratorUser.value && props.actionMode !== 'moderation-preview')) return
+  if (!source.value?._id || (!hasAdminAccess.value && props.actionMode !== 'moderation-preview')) return
   ruleV3SummaryLoading.value = true
   try {
     const response = await getRuleV3SourceAnalysisSummary(source.value._id)
@@ -3651,23 +3518,32 @@ watch([extractionEngine, smartReaderSourceType], ([engine, sourceType]) => {
   }
 })
 
-const readerBuildSnapshots = computed(() => Array.isArray(source.value?.readerBuildSnapshots)
-  ? [...source.value.readerBuildSnapshots].sort((a: any, b: any) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime())
+interface ReaderBuildTiming {
+  durationMs: number
+  estimatedDurationSeconds: number
+  pageCount: number
+  ocrUsed: boolean
+}
+
+const readerBuildSnapshots = computed<ReaderBuildSnapshot[]>(() => Array.isArray(source.value?.readerBuildSnapshots)
+  ? [...source.value.readerBuildSnapshots as ReaderBuildSnapshot[]]
+      .sort((a, b) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime())
   : [])
-const pdfImportHistory = computed(() => Array.isArray(source.value?.pdfImportHistory)
-  ? [...source.value.pdfImportHistory].sort((a: any, b: any) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+const pdfImportHistory = computed<PdfImportHistoryEntry[]>(() => Array.isArray(source.value?.pdfImportHistory)
+  ? [...source.value.pdfImportHistory as PdfImportHistoryEntry[]]
+      .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
   : [])
 const readerBuildHistory = computed(() => {
   const usedTimingIndexes = new Set<number>()
   let markedPdfActive = false
   let markedStructuredActive = false
   const total = readerBuildSnapshots.value.length
-  return readerBuildSnapshots.value.map((build: any, index: number) => {
+  return readerBuildSnapshots.value.map((build, index) => {
     const provenance = `${build.engine || ''} ${build.sourceType || ''}`.toLowerCase()
     const isPdf = /docling|pdf|ocr/.test(provenance)
     const isDocling = /docling/.test(String(build.engine || '').toLowerCase())
     const isStructured = /jats|xml|html|plos|frontiers|pmc/.test(provenance)
-    let timing: any = Number.isFinite(Number(build.durationMs))
+    let timing: ReaderBuildTiming | PdfImportHistoryEntry | null = Number.isFinite(Number(build.durationMs))
       ? {
           durationMs: Number(build.durationMs),
           estimatedDurationSeconds: Number(build.estimatedDurationSeconds) || 0,
@@ -3680,7 +3556,7 @@ const readerBuildHistory = computed(() => {
       const builtAt = new Date(build.builtAt).getTime()
       let bestIndex = -1
       let bestDistance = Number.POSITIVE_INFINITY
-      pdfImportHistory.value.forEach((candidate: any, timingIndex: number) => {
+      pdfImportHistory.value.forEach((candidate, timingIndex) => {
         if (usedTimingIndexes.has(timingIndex)) return
         const completedAt = new Date(candidate.completedAt).getTime()
         const distance = Math.abs(completedAt - builtAt)
@@ -3725,7 +3601,12 @@ const latestPdfTiming = computed(() => {
   return history.length ? history[history.length - 1] : null
 })
 
-function formatReaderTimingDelta(timing: any) {
+function isReaderTimingEarly(timing: ReaderBuildTiming | PdfImportHistoryEntry | null): boolean {
+  if (!timing) return false
+  return timing.estimatedDurationSeconds * 1000 >= timing.durationMs
+}
+
+function formatReaderTimingDelta(timing: ReaderBuildTiming | PdfImportHistoryEntry | null) {
   const estimateMs = Number(timing?.estimatedDurationSeconds || 0) * 1000
   const actualMs = Number(timing?.durationMs || 0)
   if (!estimateMs || !actualMs) return t('library.system.durationUnavailable')
@@ -3749,7 +3630,7 @@ const isEligibleForImport = computed(() => {
 })
 
 async function handleImport() {
-  if (source.value && (isEligibleForImport.value || isModeratorUser.value)) {
+  if (source.value && (isEligibleForImport.value || hasAdminAccess.value)) {
     isImporting.value = true
     try {
       const sourceProgressStore = useSourceProgressStore()
@@ -3918,26 +3799,6 @@ async function handleModerationReject() {
     isReviewing.value = false
   }
 }
-
-const statusLabel = computed(() => {
-  if (!source.value) return t('library.statuses.notCreated')
-  switch (source.value.chunkBuildStatus) {
-    case 'completed': return t('library.statuses.built')
-    case 'failed': return t('library.statuses.failed')
-    case 'building': return t('library.statuses.building')
-    default: return t('library.statuses.notCreated')
-  }
-})
-
-const statusStyle = computed(() => {
-  if (!source.value) return { color: 'var(--color-text-muted)' }
-  switch (source.value.chunkBuildStatus) {
-    case 'completed': return { color: '#10b981' }
-    case 'failed': return { color: '#ef4444' }
-    case 'building': return { color: '#f59e0b' }
-    default: return { color: 'var(--color-text-muted)' }
-  }
-})
 
 /**
  * Merge an incoming partial source payload into the existing source ref,
@@ -4152,47 +4013,6 @@ onUnmounted(() => {
   border-radius: var(--radius-md, 6px);
   background: rgba(255, 255, 255, 0.02);
 }
-
-.reader-build-comparison { display: grid; gap: 7px; padding: 10px; border: 1px solid #2f3744; border-radius: 9px; background: rgba(15, 23, 42, .5); }
-.reader-build-comparison__title { color: #94a3b8; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.reader-build-comparison__empty { color: var(--color-text-muted); font-size: 11px; line-height: 1.45; }
-.reader-build-history { display: grid; gap: 6px; max-height: 270px; overflow-y: auto; padding-right: 3px; overscroll-behavior: contain; }
-.history-accordion { border: 1px solid #30364a; border-radius: 7px; background: rgba(15, 23, 42, .54); font-size: 10px; }
-.history-accordion--active { border-color: rgba(16, 185, 129, .7); background: rgba(16, 185, 129, .07); }
-.history-accordion summary, .rule-run-history__item summary { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 8px; cursor: pointer; color: #cbd5e1; list-style: none; }
-.history-accordion summary::-webkit-details-marker, .rule-run-history__item summary::-webkit-details-marker { display: none; }
-.history-accordion__chevron { color: #94a3b8; font-size: 12px; line-height: 1; transform: rotate(-90deg); transition: transform 150ms ease; }
-details[open] > summary .history-accordion__chevron { transform: rotate(0deg); }
-.history-accordion__main, .history-accordion__meta { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.history-accordion__main strong { overflow: hidden; color: #e2e8f0; text-overflow: ellipsis; white-space: nowrap; }
-.history-accordion__main small, .history-accordion__meta small { color: #94a3b8; font-size: 9px; font-weight: 500; }
-.history-accordion__meta { align-items: flex-end; text-align: right; }
-.history-accordion__meta strong { color: #e2e8f0; font-size: 10px; white-space: nowrap; }
-.history-detail-grid { display: grid; gap: 5px; margin: 0; padding: 0 9px 9px 29px; }
-.history-detail-grid div { display: flex; justify-content: space-between; gap: 10px; }
-.history-detail-grid dt { color: #94a3b8; }
-.history-detail-grid dd { margin: 0; color: #e2e8f0; text-align: right; }
-.rule-analysis-summary { display: grid; gap: 9px; padding: 10px; border: 1px solid #312e81; border-radius: 9px; background: rgba(30, 27, 75, .28); }
-.rule-analysis-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
-.rule-count { display: flex; flex-direction: column; gap: 2px; padding: 7px 5px; border-radius: 7px; background: rgba(15, 23, 42, .64); color: #94a3b8; text-align: center; font-size: 9px; }
-.rule-count strong { font-size: 14px; }.rule-count--pending strong { color: #fbbf24; }.rule-count--approved strong { color: #34d399; }.rule-count--rejected strong { color: #f87171; }.rule-count--evidence strong { color: #60a5fa; }.rule-count--resolved strong { color: #2dd4bf; }
-.evidence-match-details { border: 1px solid rgba(96, 165, 250, .25); border-radius: 8px; background: rgba(15, 23, 42, .38); }
-.evidence-match-details > summary { display: flex; align-items: center; gap: 7px; padding: 8px; cursor: pointer; color: #dbeafe; list-style: none; }
-.evidence-match-details > summary span:last-child { display: grid; gap: 2px; }
-.evidence-match-details > summary small { color: #94a3b8; font-size: 9px; font-weight: 450; }
-.evidence-match-list { display: grid; gap: 6px; max-height: 300px; overflow-y: auto; padding: 0 7px 7px; }
-.evidence-match-item { display: grid; gap: 6px; padding: 8px; border-radius: 7px; background: rgba(2, 6, 23, .52); }
-.evidence-match-item > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #94a3b8; font-size: 9px; }
-.evidence-match-item > strong { color: #e2e8f0; font-size: 10px; line-height: 1.45; }
-.evidence-match-item ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
-.evidence-match-item li { display: grid; grid-template-columns: auto 1fr; gap: 3px 7px; padding-top: 5px; border-top: 1px solid rgba(148, 163, 184, .13); color: #cbd5e1; font-size: 9px; }
-.evidence-match-item li small { grid-column: 2; color: #93c5fd; }
-.run-status--success { color: #34d399 !important; }.run-status--failed { color: #f87171 !important; }.run-status--pending { color: #fbbf24 !important; }
-.rule-summary-link { padding: 7px 8px; border: 1px solid #4338ca; border-radius: 7px; background: rgba(67, 56, 202, .14); color: #c7d2fe; cursor: pointer; font-size: 10px; font-weight: 650; }.rule-summary-link:hover { background: rgba(67, 56, 202, .24); }
-.rule-run-history { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; padding-right: 3px; overscroll-behavior: contain; }
-.rule-run-history__item { border: 1px solid #30364a; border-radius: 7px; background: rgba(15,23,42,.54); font-size: 10px; }
-.rule-run-rejections { margin: 0 8px 8px; padding: 8px; border-left: 2px solid #f59e0b; background: rgba(120,53,15,.12); color: #fcd34d; }.rule-run-rejections ul { display: grid; gap: 7px; margin: 6px 0 0; padding-left: 15px; }.rule-run-rejections span, .rule-run-rejections small { display: block; }.rule-run-rejections small { margin-top: 2px; color: #cbd5e1; line-height: 1.35; }
-
 
 :deep(.reader-debug-action--active) {
   border-color: var(--color-primary, #ffffff) !important;

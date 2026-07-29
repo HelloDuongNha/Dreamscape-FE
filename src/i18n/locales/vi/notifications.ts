@@ -26,6 +26,7 @@ export default {
   // Notification action phrases — sender name is prepended by the template
   liked: 'đã thích giấc mơ của bạn',
   commented: 'đã bình luận về giấc mơ của bạn',
+  replied: 'đã trả lời bình luận của bạn',
   followed: 'đã theo dõi bạn',
   // Oracle system notification
   oracleAnalyzed: 'Oracle đã phân tích xong giấc mơ',

@@ -105,19 +105,19 @@ const router = createRouter({
           path: 'moderation/sources',
           name: 'moderation-sources',
           component: () => import('@/features/moderation/ModerationSourcesView.vue'),
-          meta: { titleKey: 'navigation.titleModerationSources' },
+          meta: { titleKey: 'navigation.titleModerationSources', adminOnly: true },
         },
         {
           path: 'moderation/sources/:id/preview',
           name: 'moderation-source-preview',
           component: () => import('@/features/moderation/ModerationSourcePreviewView.vue'),
-          meta: { titleKey: 'navigation.titleModerationSourcePreview' },
+          meta: { titleKey: 'navigation.titleModerationSourcePreview', adminOnly: true },
         },
         {
           path: 'moderation/rule-candidates',
           name: 'moderation-rule-candidates',
           component: () => import('@/features/moderation/RuleCandidatesView.vue'),
-          meta: { titleKey: 'navigation.titleModerationRuleCandidates' },
+          meta: { titleKey: 'navigation.titleModerationRuleCandidates', adminOnly: true },
         },
         {
           path: 'moderation/knowledge-evidence',
@@ -150,6 +150,10 @@ router.beforeEach((to) => {
   // Not logged in → redirect to login
   if (!to.meta.public && !auth.isLoggedIn) {
     return { name: 'login' }
+  }
+
+  if (to.meta.adminOnly && auth.user?.role !== 'admin') {
+    return { name: 'home' }
   }
 })
 

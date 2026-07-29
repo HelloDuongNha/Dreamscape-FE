@@ -26,7 +26,6 @@ export interface OracleShellMessage {
   runState?: 'thinking' | 'preparing' | 'responding' | 'completed' | 'cancelled' | 'failed';
   startedAt?: number;
   thoughtCompletedAt?: number;
-  presentationStartedAt?: number;
   firstTokenAt?: number;
   completedAt?: number;
   expectedMinMs?: number;

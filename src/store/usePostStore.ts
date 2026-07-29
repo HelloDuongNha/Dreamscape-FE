@@ -11,6 +11,7 @@ export const usePostStore = defineStore('post', () => {
   const isLoadingComments = ref(false)
   const fetchedDream    = ref<ApiDream | null>(null)
   const editRequested   = ref(false)
+  const focusedCommentId = ref<string | null>(null)
 
   // ── Live comments for the focused post ──────────────────────────
   // Populated from GET /api/dreams/:id/comments when a post is opened.
@@ -41,9 +42,13 @@ export const usePostStore = defineStore('post', () => {
    * Open a post detail modal.
    * Immediately sets the focused ID and fetches comments and dream details.
    */
-  async function openPost(id: string, options?: { edit?: boolean }): Promise<void> {
+  async function openPost(
+    id: string,
+    options?: { edit?: boolean; commentId?: string },
+  ): Promise<void> {
     focusedId.value       = id
     editRequested.value   = options?.edit === true
+    focusedCommentId.value = options?.commentId || null
     focusedComments.value = []
     fetchedDream.value    = null
     isLoadingComments.value = true
@@ -89,6 +94,7 @@ export const usePostStore = defineStore('post', () => {
     focusedComments.value = []
     fetchedDream.value    = null
     editRequested.value   = false
+    focusedCommentId.value = null
   }
 
   function consumeEditRequest(): boolean {
@@ -102,15 +108,22 @@ export const usePostStore = defineStore('post', () => {
    * Appends the server-returned comment object to the local list immediately
    * and increments comments_count on the dream in useDreamStore.
    */
-  async function addComment(content: string): Promise<void> {
-    if (!focusedId.value || !content.trim()) return
+  async function addComment(
+    content: string,
+    replyToCommentId?: string,
+  ): Promise<ApiComment | null> {
+    if (!focusedId.value || !content.trim()) return null
     const { data } = await apiClient.post<{ success: boolean; data: ApiComment }>(
       `/dreams/${focusedId.value}/comments`,
-      { content: content.trim() }
+      {
+        content: content.trim(),
+        ...(replyToCommentId ? { replyToCommentId } : {}),
+      },
     )
     focusedComments.value.push(data.data)
     // Keep the feed card's comment count in sync
     useDreamStore().incrementCommentCount(focusedId.value)
+    return data.data
   }
 
   async function editComment(commentId: string, content: string): Promise<void> {
@@ -126,18 +139,32 @@ export const usePostStore = defineStore('post', () => {
 
   async function deleteComment(commentId: string): Promise<void> {
     const focusedDreamId = focusedId.value
-    await apiClient.delete(`/comments/${commentId}`)
-    focusedComments.value = focusedComments.value.filter(comment => comment._id !== commentId)
+    const { data } = await apiClient.delete<{
+      success: boolean
+      data: { deletedCommentIds?: string[] }
+    }>(`/comments/${commentId}`)
+    const deletedIds = new Set(data.data.deletedCommentIds || [commentId])
+    focusedComments.value = focusedComments.value.filter(
+      comment => !deletedIds.has(comment._id),
+    )
+    if (focusedCommentId.value && deletedIds.has(focusedCommentId.value)) {
+      focusedCommentId.value = null
+    }
     if (focusedDreamId) {
       const dreamStore = useDreamStore()
       const storedDream = dreamStore.dreams.find(dream => dream._id === focusedDreamId)
-      dreamStore.decrementCommentCount(focusedDreamId)
+      for (const _commentId of deletedIds) {
+        dreamStore.decrementCommentCount(focusedDreamId)
+      }
       if (
         fetchedDream.value
         && fetchedDream.value._id === focusedDreamId
         && fetchedDream.value !== storedDream
       ) {
-        fetchedDream.value.comments_count = Math.max(0, fetchedDream.value.comments_count - 1)
+        fetchedDream.value.comments_count = Math.max(
+          0,
+          fetchedDream.value.comments_count - deletedIds.size,
+        )
       }
     }
   }
@@ -158,6 +185,7 @@ export const usePostStore = defineStore('post', () => {
     focusedDream,
     focusedUser,
     focusedComments,
+    focusedCommentId,
     isLoadingComments,
     editRequested,
     openPost,

@@ -37,6 +37,7 @@ export default {
   usernameInvalid: 'Tên người dùng chỉ được chứa chữ cái, chữ số và dấu gạch dưới.',
   usernameLength: 'Tên người dùng phải từ 2 đến 29 ký tự.',
   followStatusFailed: 'Không thể cập nhật trạng thái theo dõi.',
+  followRequestReviewFailed: 'Không thể xử lý yêu cầu theo dõi này.',
   profileSaveFailed: 'Cập nhật hồ sơ thất bại.',
   usernameEmpty: 'Tên người dùng không được để trống.',
   displayNameEmpty: 'Tên hiển thị không được để trống.',

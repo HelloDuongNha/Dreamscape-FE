@@ -18,7 +18,7 @@ export default {
   collapseLabel: 'Collapse',
   // Badge aria-label — {count} is interpolated
   unreadCount: '{count} unread',
-  // Moderation (moderator-only nav items)
+  // Moderation (administrator-only nav items)
   moderationSources: 'Source review',
   ruleReview: 'Argument review',
   // Header page titles — keyed by Vue Router route name

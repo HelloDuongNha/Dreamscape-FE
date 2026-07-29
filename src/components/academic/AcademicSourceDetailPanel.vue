@@ -121,7 +121,7 @@
                     class="sidebar-action-btn sidebar-action-btn--primary"
                     style="text-align: center; display: block; width: 100%; max-width: 400px; text-decoration: none; margin-top: var(--space-2);"
                   >
-                    Mở bài viết gốc ↗
+                    Mở bài viết gốc
                   </a>
                 </div>
 
@@ -258,7 +258,7 @@
                 </div>
 
                 <!-- Warnings banner - Moderator/Admin only -->
-                <div v-if="isModeratorUser && readerWarnings && readerWarnings.length > 0" class="reader-warning-banner">
+                <div v-if="hasAdminAccess && readerWarnings && readerWarnings.length > 0" class="reader-warning-banner">
                   <template v-for="(warning, wIdx) in readerWarnings" :key="wIdx">
                     <div v-if="!warning.includes('bố cục') && !warning.includes('cấu trúc') && !warning.includes('thứ tự')" class="warning-item">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-top: 2px; flex-shrink: 0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
@@ -335,7 +335,7 @@
                             rel="noopener noreferrer" 
                             class="supplementary-action-chip"
                           >
-                            {{ act.label }} ↗
+                            {{ act.label }}
                           </a>
                         </div>
                       </div>
@@ -364,7 +364,7 @@
                             rel="noopener noreferrer" 
                             class="reference-action-chip"
                           >
-                            {{ act.label }} ↗
+                              {{ act.label }}
                           </a>
                         </div>
                       </div>
@@ -442,9 +442,9 @@
           <h3 class="card-title">Thuộc tính tài liệu</h3>
           
           <div class="meta-table">
-            <div v-if="source.authors && source.authors.length > 0" class="attribute-row">
+            <div class="attribute-row">
               <span class="meta-key">Tác giả:</span>
-              <span class="attribute-value">{{ source.authors.join(', ') }}</span>
+              <span class="attribute-value">{{ displaySourceAuthors }}</span>
             </div>
             <div v-if="source.year" class="attribute-row">
               <span class="meta-key">Năm xuất bản:</span>
@@ -480,36 +480,6 @@
 
           <!-- Actions Slot (Phân tích, Duyệt, Từ chối, Nhập lại) -->
           <div class="sidebar-moderation-row" style="margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border, #262626);">
-            <!-- Technical details (RAG, vector info) for mods -->
-            <div v-if="isModeratorUser && (source.readableInApp || source.smartReaderAvailable)" class="moderation-tech-info" style="margin-bottom: var(--space-3); font-size: 0.85rem; line-height: 1.4;">
-              <div class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">Trạng thái RAG:</span>
-                <span :style="statusStyle" style="font-weight: 500;">{{ statusLabel }}</span>
-              </div>
-              <div v-if="source.chunkCount" class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">Số chunk:</span>
-                <span>{{ source.chunkCount }}</span>
-              </div>
-              <div v-slot:vector-model v-if="source.chunkEmbeddingModel" class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">Model Vector:</span>
-                <span style="font-family: monospace;">{{ source.chunkEmbeddingModel }}</span>
-              </div>
-              <div v-if="extractionEngine" class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">Engine:</span>
-                <span style="font-family: monospace;">{{ extractionEngine }}</span>
-              </div>
-              <div v-if="layoutQuality" class="tech-row" style="display: flex; justify-content: space-between; margin-bottom: var(--space-1);">
-                <span style="color: var(--color-text-muted);">Chất lượng layout:</span>
-                <span>{{ layoutQuality }}</span>
-              </div>
-              <div v-if="sourceUrlUsed" class="tech-row" style="display: flex; flex-direction: column; margin-bottom: var(--space-1); gap: 2px;">
-                <span style="color: var(--color-text-muted);">Nguồn URL sử dụng:</span>
-                <a :href="sourceUrlUsed" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary, #60a5fa); word-break: break-all; font-family: monospace; font-size: 0.75rem;">
-                  {{ sourceUrlUsed }}
-                </a>
-              </div>
-            </div>
-
             <slot name="actions" :source="source"></slot>
           </div>
         </div>
@@ -538,17 +508,9 @@
               :disabled="originalDocState.status === 'resolving'"
               class="sidebar-action-btn sidebar-action-btn--text"
             >
-              Mở PDF trong tab mới ↗
+                  Mở PDF trong tab mới
             </button>
 
-            <!-- Original Filename Metadata -->
-            <div v-if="source.originalFile?.originalFileName" class="source-link-row" style="font-size: 0.75rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-2); margin-top: 2px;">
-              <span>Tên tệp gốc: </span>
-              <span style="color: var(--color-text-secondary); word-break: break-all;">
-                {{ source.originalFile.originalFileName }}
-              </span>
-            </div>
-            
             <div v-if="originalDocState.sourceLabel" class="source-link-row" style="font-size: 0.75rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-2); margin-top: 2px;">
               <span>Nguồn PDF: </span>
               <span style="color: var(--color-text-secondary); word-break: break-all;">
@@ -571,7 +533,7 @@
               class="sidebar-action-btn sidebar-action-btn--primary"
               style="text-align: center; display: block;"
             >
-              Mở trang nguồn ↗
+                  Mở trang nguồn
             </a>
             
             <div v-if="originalDocState.sourceLabel" class="source-link-row" style="font-size: 0.75rem; color: var(--color-text-muted); border-top: 1px solid var(--color-border, #262626); padding-top: var(--space-2); margin-top: 2px;">
@@ -600,10 +562,13 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useOriginalPdfViewer } from '@/composables/useOriginalPdfViewer'
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
 import AppButton from '@/components/common/AppButton.vue'
 import AppCopyButton from '@/components/common/AppCopyButton.vue'
+import { useAuthStore } from '@/store/useAuthStore'
+import { isAdminUser } from '@/utils/adminAccess'
 
 // Helpers duplicate of LibrarySourceDetailView to process content
 function countWords(str: string): number {
@@ -1358,8 +1323,16 @@ const props = defineProps<{
   hasError: boolean
 }>()
 
-const isModeratorUser = computed(() => {
-  return true // All moderators / librarians can access actions
+const { t } = useI18n({ useScope: 'global' })
+const authStore = useAuthStore()
+const hasAdminAccess = computed(() => isAdminUser(authStore.user))
+const displaySourceAuthors = computed(() => {
+  const authors = Array.isArray(props.source?.authors) && props.source.authors.length
+    ? props.source.authors
+    : Array.isArray(props.source?.metadata?.authors)
+      ? props.source.metadata.authors
+      : []
+  return authors.map(String).filter(Boolean).join(', ') || t('library.unknownAuthor')
 })
 
 // Font size control
@@ -1439,28 +1412,6 @@ const displayDoi = computed(() => {
 // Technical metadata fields mapping
 const extractionEngine = computed(() => {
   return props.source?.metadata?.extractionEngine || props.source?.metadata?.parserEngine || ''
-})
-
-const layoutQuality = computed(() => {
-  const q = props.source?.metadata?.extractionQuality || props.source?.metadata?.layoutQuality || ''
-  return q === 'low' ? 'Trung bình (Cần đối chiếu)' : q === 'high' ? 'Tốt' : q
-})
-
-const sourceUrlUsed = computed(() => {
-  return props.source?.metadata?.sourceUrlUsed || props.source?.url || props.source?.sourceUrl || ''
-})
-
-const statusLabel = computed(() => {
-  if (props.source?.chunkBuildStatus === 'completed') return 'Đã Vector hóa'
-  if (props.source?.chunkBuildStatus === 'failed') return 'Lỗi Vector hóa'
-  if (props.source?.chunkBuildStatus === 'building') return 'Đang xử lý...'
-  return 'Chưa Vector'
-})
-
-const statusStyle = computed(() => {
-  if (props.source?.chunkBuildStatus === 'completed') return { color: '#10b981' }
-  if (props.source?.chunkBuildStatus === 'failed') return { color: '#ef4444' }
-  return { color: '#e5e7eb' }
 })
 
 // Reader content reactive processing

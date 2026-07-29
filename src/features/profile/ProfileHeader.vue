@@ -47,6 +47,11 @@
           </svg>
           <span class="profile-header__streak-count">{{ streak }}</span>
         </div>
+        <span
+          v-if="isProfileOnline"
+          class="profile-header__online-indicator"
+          :aria-label="t('messages.activeNow')"
+        />
       </div>
 
       <!-- Action buttons (top-right) -->
@@ -72,12 +77,12 @@
         <template v-else>
           <AppButton
             id="follow-btn"
-            :variant="isFollowing ? 'secondary' : 'primary'"
+            :variant="followStatus === 'none' ? 'primary' : 'secondary'"
             size="sm"
             :disabled="isTogglingFollow"
             @click="toggleFollow"
           >
-            {{ isFollowing ? t('profile.followingLabel') : t('profile.followBtn') }}
+            {{ followButtonLabel }}
           </AppButton>
           <AppButton
             id="message-btn"
@@ -124,7 +129,19 @@
 
       <!-- Read-only -->
       <template v-else>
-        <h1 class="profile-header__name" translate="no">{{ user.display_name }}</h1>
+        <div class="profile-header__name-row">
+          <h1 class="profile-header__name" translate="no">{{ user.display_name }}</h1>
+          <svg
+            v-if="user.isPrivateAccount"
+            class="profile-header__private-icon"
+            viewBox="0 0 24 24"
+            :aria-label="t('profile.privateTitle')"
+            role="img"
+          >
+            <rect x="5" y="10" width="14" height="10" rx="2" />
+            <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+          </svg>
+        </div>
         <span class="profile-header__handle" translate="no">{{ user.username }}</span>
       </template>
     </div>
@@ -149,7 +166,8 @@
     </div>
 
     <!-- Stats row -->
-    <div class="profile-header__stats">
+    <div v-if="statsVisible || isMe" class="profile-header__stats">
+      <template v-if="statsVisible">
       <div class="profile-header__stat">
         <span class="profile-header__stat-value">{{ dreamCount }}</span>
         <span class="profile-header__stat-label">{{ t('profile.dreamsLabel') }}</span>
@@ -176,11 +194,25 @@
         <span class="profile-header__stat-value">{{ user.following ? user.following.length : 0 }}</span>
         <span class="profile-header__stat-label">{{ t('profile.followingLabel') }}</span>
       </div>
+      </template>
+      <template v-if="isMe">
+      <div class="profile-header__stat-divider" aria-hidden="true" />
+      <div
+        class="profile-header__stat profile-header__stat--clickable"
+        role="button"
+        tabindex="0"
+        @click="emit('open-followers', 'pending')"
+        @keydown.enter="emit('open-followers', 'pending')"
+      >
+        <span class="profile-header__stat-value">{{ pendingFollowCount }}</span>
+        <span class="profile-header__stat-label">{{ t('profile.pendingRequestsLabel') }}</span>
+      </div>
       <div class="profile-header__stat-divider" aria-hidden="true" />
       <div class="profile-header__stat">
         <span class="profile-header__stat-value">{{ approvedSourceCount || 0 }}</span>
         <span class="profile-header__stat-label">{{ t('profile.contributionsLabel') }}</span>
       </div>
+      </template>
     </div>
 
   </div>
@@ -191,30 +223,34 @@ import { ref, computed, watch } from 'vue'
 import { useRouter }     from 'vue-router'
 import { useI18n }       from 'vue-i18n'
 import AppButton         from '@/components/common/AppButton.vue'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
-import type { User }     from '@/data/mockUsers'
+import type { ApiUser }  from '@/api/types'
+import { getInitials, getAvatarBg } from '@/utils/avatar'
+import { getStreakColor } from '@/utils/streak'
 import { useAuthStore }  from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { useChatStore } from '@/store/useChatStore'
 import AvatarEditor from './AvatarEditor.vue'
 import { useLocaleStore }   from '@/store/useLocaleStore'
 import apiClient from '@/api/client'
 
 const props = defineProps<{
-  user:       User
+  user:       ApiUser
   isMe:       boolean
   dreamCount: number
   approvedSourceCount?: number
+  pendingFollowCount?: number
 }>()
 
 const emit = defineEmits<{
-  (e: 'updated', patch: Partial<User>): void
-  (e: 'open-followers', tab: 'followers' | 'following'): void
+  (e: 'updated', patch: Partial<ApiUser>): void
+  (e: 'open-followers', tab: 'followers' | 'following' | 'pending'): void
 }>()
 
 const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const chatStore = useChatStore()
 const localeStore = useLocaleStore()
 
 const formattedJoinedDate = computed(() => {
@@ -228,6 +264,9 @@ const initials  = computed(() => getInitials(props.user.display_name))
 const avatarBg  = computed(() => getAvatarBg(props.user._id))
 const currentAvatar = computed(() => (
   props.isMe ? (authStore.myUser?.avatar || props.user.avatar) : props.user.avatar
+))
+const isProfileOnline = computed(() => (
+  props.isMe || chatStore.isUserOnline(props.user._id, props.user.lastHeartbeatAt)
 ))
 
 const streak = computed(() => {
@@ -292,12 +331,7 @@ const rankColor = computed(() => {
 })
 
 const flameColor = computed(() => {
-  const s = streak.value
-  if (s >= 15) return '#06B6D4' // Cyber Cyan/Blue
-  if (s >= 8)  return '#A855F7' // Deep Purple
-  if (s >= 4)  return '#EF4444' // Crimson Red
-  if (s >= 1)  return '#F97316' // Matte Orange
-  return ''
+  return getStreakColor(streak.value)
 })
 
 const isFollowing = computed(() => {
@@ -305,6 +339,15 @@ const isFollowing = computed(() => {
   const followersList = props.user.followers || []
   return followersList.includes(myId)
 })
+const followStatus = computed(() => (
+  props.user.followStatus || (isFollowing.value ? 'following' : 'none')
+))
+const followButtonLabel = computed(() => {
+  if (followStatus.value === 'pending') return t('profile.followPendingBtn')
+  if (followStatus.value === 'following') return t('profile.followingLabel')
+  return t('profile.followBtn')
+})
+const statsVisible = computed(() => props.user.statsVisible !== false)
 
 // ── Edit mode (my profile) ─────────────────────────────────────────
 const editing = ref(false)
@@ -422,13 +465,20 @@ const isTogglingFollow = ref(false)
 
 async function toggleFollow() {
   if (isTogglingFollow.value) return
+  const previousStatus = followStatus.value
   isTogglingFollow.value = true
   try {
     const { data } = await apiClient.post(`/users/${props.user._id}/follow`)
     if (data.success) {
       emit('updated', data.user)
       settingsStore.showToastKey(
-        data.following ? 'toasts.followSuccess' : 'toasts.unfollowSuccess',
+        data.followStatus === 'pending'
+          ? 'toasts.followRequestSent'
+          : previousStatus === 'pending'
+            ? 'toasts.followRequestCancelled'
+          : data.following
+            ? 'toasts.followSuccess'
+            : 'toasts.unfollowSuccess',
         { name: props.user.display_name },
         'success'
       )
@@ -477,6 +527,19 @@ function openMessage() {
   position: relative;
   display: inline-block;
   flex-shrink: 0;
+}
+
+.profile-header__online-indicator {
+  position: absolute;
+  left: 1px;
+  bottom: 1px;
+  z-index: 11;
+  width: 15px;
+  height: 15px;
+  border: 3px solid var(--color-bg-base);
+  border-radius: var(--radius-full);
+  background: #22c55e;
+  box-sizing: border-box;
 }
 
 .profile-header__streak-flame {
@@ -550,6 +613,23 @@ function openMessage() {
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
   letter-spacing: var(--letter-spacing-tight);
+}
+
+.profile-header__name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.profile-header__private-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--color-text-secondary);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
 }
 
 .profile-header__handle {

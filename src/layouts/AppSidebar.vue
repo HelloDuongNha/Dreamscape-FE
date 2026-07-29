@@ -148,6 +148,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useChatStore } from '@/store/useChatStore'
+import { isAdminUser } from '@/utils/adminAccess'
 
 withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
 defineEmits<{ toggle: [] }>()
@@ -205,11 +206,7 @@ const navItems = computed(() => {
     },
   ]
 
-  const allowlist = (import.meta.env.VITE_MODERATOR_USER_IDS || '').split(',')
-  const myId = authStore.user?._id
-  const isMod = myId && allowlist.map((id: string) => id.trim().toLowerCase()).includes(myId.toLowerCase())
-
-  if (isMod) {
+  if (isAdminUser(authStore.user)) {
     items.push({
       id:    'moderation-sources',
       to:    '/moderation/sources',

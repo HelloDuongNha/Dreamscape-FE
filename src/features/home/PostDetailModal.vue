@@ -20,12 +20,16 @@
               class="modal-author"
               @click="postStore.closePost()"
             >
-              <div class="modal-author__avatar" :style="{ background: avatarBg }" translate="no">
-                {{ initials }}
-              </div>
+              <UserAvatar
+                v-if="postStore.focusedUser"
+                :user="postStore.focusedUser"
+                size="sm"
+                show-streak
+                class="modal-author__avatar"
+              />
               <div class="modal-author__info" translate="no">
                 <span class="modal-author__name">{{ postStore.focusedUser?.display_name }}</span>
-                <span class="modal-author__username">@{{ postStore.focusedUser?.username }}</span>
+                <span class="modal-author__username">{{ formatUsername(postStore.focusedUser?.username) }}</span>
               </div>
             </RouterLink>
 
@@ -216,7 +220,7 @@
                 <span>{{ t('home.oracleAnalyzing') }}</span>
               </div>
               <div v-else-if="displayedVersion.ai_status === 'failed' || displayedVersion.ai_status === 'cancelled'" class="modal-oracle-failed">
-                <span class="warning-icon" aria-hidden="true">⚠️</span>
+                <AppIcon class="warning-icon" name="warning" :size="20" />
                 <span class="error-msg-text">{{ displayedVersion.ai_status === 'cancelled' ? t('home.oracleCancelled') : t('home.oracleFailed') }}</span>
                 <button
                   v-if="isOwner && isCurrentVersion"
@@ -328,18 +332,28 @@
                 <!-- Comment items -->
                 <ul v-else class="modal-comments-list" :aria-label="t('home.commentsAria')">
                   <li
-                    v-for="comment in postStore.focusedComments"
+                    v-for="comment in displayedComments"
                     :key="comment._id"
                     class="modal-comment"
+                    :class="{
+                      'modal-comment--reply': Boolean(comment.parentCommentId),
+                      'modal-comment--focused': postStore.focusedCommentId === comment._id,
+                    }"
+                    :data-comment-id="comment._id"
                   >
-                    <div
-                      class="modal-comment__avatar"
-                      :style="{ background: getAvatarBg(comment.userId._id) }"
-                      aria-hidden="true"
-                      translate="no"
-                    >
-                      {{ getInitials(comment.userId.display_name) }}
-                    </div>
+                    <span class="modal-comment__avatar-wrap">
+                      <UserAvatar
+                        :user="comment.userId"
+                        size="sm"
+                        class="modal-comment__avatar"
+                      />
+                      <span
+                        v-if="isPostOwnerComment(comment)"
+                        class="modal-comment__owner-crown"
+                        :title="t('home.postOwnerComment')"
+                        aria-label="post owner"
+                      >♛</span>
+                    </span>
                     <div class="modal-comment__body">
                       <div class="modal-comment__meta">
                         <RouterLink
@@ -349,6 +363,10 @@
                         >
                           <span translate="no">{{ comment.userId.display_name }}</span>
                         </RouterLink>
+                        <span
+                          v-if="isPostOwnerComment(comment)"
+                          class="modal-comment__admin-badge"
+                        >{{ t('home.adminLabel') }}</span>
                         <span class="modal-comment__time">{{ timeAgo(comment.created_at, localeStore.currentLocale) }}</span>
                         <span
                           v-if="comment.edit_history?.length"
@@ -408,6 +426,13 @@
                       </template>
                       <template v-else>
                         <p class="modal-comment__text" translate="no">
+                          <RouterLink
+                            v-if="comment.replyToUserId"
+                            :to="`/profile/${comment.replyToUserId._id}`"
+                            class="modal-comment__mention"
+                            @click="postStore.closePost()"
+                          >{{ formatUsername(comment.replyToUserId.username) }}</RouterLink>
+                          <span v-if="comment.replyToUserId"> </span>
                           {{ displayedCommentContent(comment) }}
                         </p>
                         <nav
@@ -434,6 +459,14 @@
                             @click="moveCommentVersion(comment, 1)"
                           >›</button>
                         </nav>
+                        <button
+                          v-if="commentsEnabled"
+                          type="button"
+                          class="modal-comment__reply"
+                          @click="startReply(comment)"
+                        >
+                          {{ t('home.replyComment') }}
+                        </button>
                       </template>
                     </div>
                   </li>
@@ -445,6 +478,17 @@
 
           <!-- ── Comment input (fixed at bottom) ── -->
           <div v-if="commentsEnabled" class="modal-input-bar">
+            <div v-if="replyingToComment" class="modal-reply-context" role="status">
+              <span>
+                {{ t('home.replyingTo') }}
+                <strong translate="no">{{ formatUsername(replyingToComment.userId.username) }}</strong>
+              </span>
+              <button
+                type="button"
+                :aria-label="t('home.cancelReply')"
+                @click="cancelReply"
+              >×</button>
+            </div>
             <div
               class="modal-input-avatar"
               :style="{ background: currentAvatarBg }"
@@ -455,10 +499,11 @@
             </div>
             <input
               id="modal-comment-input"
+              ref="commentInputRef"
               v-model="commentText"
               type="text"
               class="modal-input-field"
-              :placeholder="t('home.commentPlaceholder')"
+              :placeholder="commentPlaceholder"
               maxlength="500"
               autocomplete="off"
               :disabled="isSubmitting"
@@ -502,13 +547,16 @@ import { useOracleStore } from '@/store/useOracleStore'
 import { useLocaleStore } from '@/store/useLocaleStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import apiClient         from '@/api/client'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
+import { getInitials, getAvatarBg } from '@/utils/avatar'
 import { timeAgo }       from '@/utils/timeAgo'
+import { formatUsername } from '@/utils/username'
 import OracleAnalysisResult  from '@/components/common/OracleAnalysisResult.vue'
 import DreamMoodTag from '@/components/common/DreamMoodTag.vue'
+import UserAvatar from '@/components/common/UserAvatar.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 import AppDropdown from '@/components/common/AppDropdown.vue'
+import AppIcon from '@/components/common/AppIcon.vue'
 import type { ApiComment, ApiDream } from '@/api/types'
 import type { DropdownItem, DropdownOption } from '@/components/common/AppDropdown.vue'
 
@@ -525,6 +573,8 @@ const isSubmitting = ref(false)
 const isLiking     = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
 const bodyRef      = ref<HTMLElement | null>(null)
+const commentInputRef = ref<HTMLInputElement | null>(null)
+const replyingToComment = ref<ApiComment | null>(null)
 const isRetryingAnalysis = ref(false)
 const selectedVersionIndex = ref(0)
 const isContextEditing = ref(false)
@@ -689,6 +739,33 @@ const isOwner = computed(() => {
 const commentsEnabled = computed(() =>
   postStore.focusedDream?.comments_enabled !== false
 )
+const commentPlaceholder = computed(() =>
+  replyingToComment.value
+    ? t('home.replyPlaceholder', { name: formatUsername(replyingToComment.value.userId.username) })
+    : t('home.commentPlaceholder')
+)
+const displayedComments = computed<ApiComment[]>(() => {
+  const comments = postStore.focusedComments
+  const roots = comments.filter(comment => !comment.parentCommentId)
+  const rootIds = new Set(roots.map(comment => comment._id))
+  const threads = roots.map(root => [
+    root,
+    ...comments.filter(comment => comment.parentCommentId === root._id),
+  ])
+  for (const orphan of comments.filter(comment =>
+    comment.parentCommentId && !rootIds.has(comment.parentCommentId))) {
+    threads.push([orphan])
+  }
+
+  const target = comments.find(comment => comment._id === postStore.focusedCommentId)
+  const targetRootId = target?.parentCommentId || target?._id
+  if (targetRootId) {
+    const targetIndex = threads.findIndex(thread =>
+      thread.some(comment => comment._id === targetRootId))
+    if (targetIndex > 0) threads.unshift(...threads.splice(targetIndex, 1))
+  }
+  return threads.flat()
+})
 const canSaveCommentEdit = computed(() =>
   editCommentText.value.trim().length > 0
   && editCommentText.value.trim().length <= 500
@@ -861,8 +938,6 @@ async function retryAnalysis(dreamId: string) {
 // ── Derived from focused post ─────────────────────────────────────────────────
 
 
-const initials  = computed(() => getInitials(postStore.focusedUser?.display_name ?? ''))
-const avatarBg  = computed(() => getAvatarBg(postStore.focusedUser?._id ?? ''))
 const timestamp = computed(() =>
   postStore.focusedDream ? timeAgo(postStore.focusedDream.created_at, localeStore.currentLocale) : ''
 )
@@ -904,6 +979,14 @@ const currentAvatarBg = computed(() =>
 
 function canManageComment(comment: ApiComment): boolean {
   return comment.userId._id === authStore.myId || isOwner.value
+}
+
+function isPostOwnerComment(comment: ApiComment): boolean {
+  const postOwnerId = postStore.focusedDream?.userId
+  const ownerId = typeof postOwnerId === 'object' && postOwnerId !== null
+    ? postOwnerId._id
+    : postOwnerId
+  return Boolean(ownerId && comment.userId._id === ownerId)
 }
 
 function commentMenuOptions(comment: ApiComment): DropdownItem[] {
@@ -970,6 +1053,12 @@ async function confirmDeleteComment(): Promise<void> {
     await postStore.deleteComment(comment._id)
     delete commentHistoryIndexes.value[comment._id]
     if (editingCommentId.value === comment._id) cancelCommentEdit()
+    if (
+      replyingToComment.value
+      && !postStore.focusedComments.some(item => item._id === replyingToComment.value?._id)
+    ) {
+      cancelReply()
+    }
     pendingDeleteComment.value = null
     showDeleteCommentConfirm.value = false
     settingsStore.showToastKey('home.commentDeletedSuccess', undefined, 'success')
@@ -996,7 +1085,19 @@ function commentVersionIndex(comment: ApiComment): number {
 }
 
 function displayedCommentContent(comment: ApiComment): string {
-  return commentVersions(comment)[commentVersionIndex(comment)] || comment.content
+  const content = commentVersions(comment)[commentVersionIndex(comment)] || comment.content
+  if (!comment.replyToUserId) return content
+  const username = comment.replyToUserId.username.replace(/^@+/, '')
+  const escapedUsername = escapeRegExp(username)
+  const mentionPrefix = new RegExp(
+    `^(?:@+${escapedUsername}|\\[(?:\\*\\*)?@+${escapedUsername}(?:\\*\\*)?\\]\\([^)]*\\))\\s*`,
+    'i',
+  )
+  return content.replace(mentionPrefix, '')
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function moveCommentVersion(comment: ApiComment, delta: -1 | 1): void {
@@ -1006,22 +1107,41 @@ function moveCommentVersion(comment: ApiComment, delta: -1 | 1): void {
   )
 }
 
+function startReply(comment: ApiComment): void {
+  replyingToComment.value = comment
+  nextTick(() => commentInputRef.value?.focus())
+}
+
+function cancelReply(): void {
+  replyingToComment.value = null
+}
+
 // ── Submit comment ────────────────────────────────────────────────────────────
 
 async function submitComment(): Promise<void> {
   if (!commentText.value.trim() || isSubmitting.value || !commentsEnabled.value) return
   isSubmitting.value = true
   try {
-    await postStore.addComment(commentText.value)
+    const created = await postStore.addComment(
+      commentText.value,
+      replyingToComment.value?._id,
+    )
     commentText.value = ''
-    // Scroll to bottom of comment list
+    cancelReply()
+    cancelReply()
     nextTick(() => {
-      if (bodyRef.value) bodyRef.value.scrollTop = bodyRef.value.scrollHeight
+      if (!created) return
+      containerRef.value
+        ?.querySelector<HTMLElement>(`[data-comment-id="${created._id}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
   } catch (error: any) {
     if (error?.response?.data?.code === 'comments_disabled') {
       if (postStore.focusedDream) postStore.focusedDream.comments_enabled = false
       settingsStore.showToastKey('home.commentsDisabledStaleError', undefined, 'error')
+    } else if (error?.response?.data?.code === 'reply_not_found') {
+      cancelReply()
+      settingsStore.showToastKey('home.replyUnavailable', undefined, 'error')
     } else {
       settingsStore.showToastKey('home.commentCreateError', undefined, 'error')
     }
@@ -1051,6 +1171,19 @@ watch(() => postStore.focusedId, (val) => {
     cancelContextEdit()
   }
 })
+
+watch(
+  [() => postStore.focusedCommentId, () => postStore.isLoadingComments],
+  ([commentId, loading]) => {
+    if (!commentId || loading) return
+    nextTick(() => {
+      containerRef.value
+        ?.querySelector<HTMLElement>(`[data-comment-id="${commentId}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  },
+  { immediate: true },
+)
 
 watch(
   () => postStore.editRequested && Boolean(postStore.focusedDream),
@@ -1556,6 +1689,34 @@ onBeforeUnmount(() => {
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
+  position: relative;
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  transition: background-color 240ms ease, box-shadow 240ms ease;
+  scroll-margin-top: var(--space-4);
+}
+.modal-comment--reply {
+  margin-left: 38px;
+}
+.modal-comment--reply::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: -20px;
+  width: 15px;
+  height: 28px;
+  border-left: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom-left-radius: 10px;
+}
+.modal-comment--focused {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+.modal-comment__avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
 }
 .modal-comment__avatar {
   width: 30px;
@@ -1568,6 +1729,17 @@ onBeforeUnmount(() => {
   font-weight: var(--font-weight-bold);
   color: #fff;
   flex-shrink: 0;
+}
+.modal-comment__owner-crown {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #f5c542;
+  font-size: 15px;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 55%);
+  pointer-events: none;
 }
 .modal-comment__body { flex: 1; min-width: 0; }
 .modal-comment__meta {
@@ -1584,6 +1756,18 @@ onBeforeUnmount(() => {
   text-decoration: none;
 }
 .modal-comment__name:hover { text-decoration: underline; }
+.modal-comment__admin-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgb(245 197 66 / 18%);
+  border: 1px solid rgb(245 197 66 / 42%);
+  color: #e9b832;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
 .modal-comment__time { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 .modal-comment__edited {
   color: var(--color-text-muted);
@@ -1616,6 +1800,30 @@ onBeforeUnmount(() => {
   line-height: var(--line-height-relaxed);
   word-break: break-word;
   white-space: pre-wrap;
+}
+.modal-comment__mention {
+  color: #7db7ff;
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+.modal-comment__mention:hover {
+  text-decoration: underline;
+}
+.modal-comment__reply {
+  margin-top: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+.modal-comment__reply:hover,
+.modal-comment__reply:focus-visible {
+  color: var(--color-text-primary);
+  outline: none;
+  text-decoration: underline;
 }
 .modal-comment__editor {
   width: 100%;
@@ -1677,11 +1885,45 @@ onBeforeUnmount(() => {
 .modal-input-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-5);
   border-top: 1px solid #262626;
   background: #181818;
   flex-shrink: 0;
+}
+.modal-reply-context {
+  flex: 0 0 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  padding: 0 4px 6px 42px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+.modal-reply-context strong {
+  color: #7db7ff;
+  font-weight: var(--font-weight-semibold);
+}
+.modal-reply-context button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+.modal-reply-context button:hover,
+.modal-reply-context button:focus-visible {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+  outline: none;
 }
 .modal-input-avatar {
   width: 30px;

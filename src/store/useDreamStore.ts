@@ -138,18 +138,12 @@ export const useDreamStore = defineStore('dream', () => {
 
   async function refreshDream(dreamId: string): Promise<ApiDream | null> {
     const index = dreams.value.findIndex(dream => dream._id === dreamId)
-    const searchItem = searchResults.value.find(item => item.dream._id === dreamId)
-    if (index === -1 && !searchItem) return null
+    const hasSearchItem = searchResults.value.some(item => item.dream._id === dreamId)
+    if (index === -1 && !hasSearchItem) return null
     const { data } = await apiClient.get<{ success: boolean; data: ApiDream }>(
       `/dreams/${dreamId}`,
     )
-    if (index !== -1) {
-      dreams.value[index] = { ...data.data, userId: dreams.value[index].userId }
-    }
-    if (searchItem) {
-      searchItem.dream = { ...data.data, userId: searchItem.dream.userId }
-    }
-    return index !== -1 ? dreams.value[index] : searchItem!.dream
+    return updateDreamCollections(dreamId, data.data)
   }
 
   /** Create a dream and prepend it to the feed */
@@ -226,15 +220,7 @@ export const useDreamStore = defineStore('dream', () => {
   }
 
   async function applyContextualDreamUpdate(dreamId: string, response: ApiDream): Promise<ApiDream> {
-    const idx = dreams.value.findIndex(d => d._id === dreamId)
-    const updatedDream = idx === -1
-      ? response
-      : { ...response, userId: dreams.value[idx].userId }
-    if (idx !== -1) dreams.value[idx] = updatedDream
-    const searchItem = searchResults.value.find(item => item.dream._id === dreamId)
-    if (searchItem) {
-      searchItem.dream = { ...response, userId: searchItem.dream.userId }
-    }
+    const updatedDream = updateDreamCollections(dreamId, response)
     if (updatedDream.ai_analysis_enabled && updatedDream.ai_status === 'pending') {
       const { useOracleStore } = await import('@/store/useOracleStore')
       useOracleStore().startTracking(updatedDream)
@@ -278,15 +264,7 @@ export const useDreamStore = defineStore('dream', () => {
       `/dreams/${dreamId}/privacy`,
       { privacy }
     )
-    const idx = dreams.value.findIndex(d => d._id === dreamId)
-    const updatedDream = idx === -1
-      ? data.data
-      : { ...data.data, userId: dreams.value[idx].userId }
-    if (idx !== -1) dreams.value[idx] = updatedDream
-    const searchItem = searchResults.value.find(item => item.dream._id === dreamId)
-    if (searchItem) {
-      searchItem.dream = { ...data.data, userId: searchItem.dream.userId }
-    }
+    const updatedDream = updateDreamCollections(dreamId, data.data)
     const { useSettingsStore } = await import('@/store/useSettingsStore')
     useSettingsStore().showToastKey(
       privacy === 'public' ? 'home.madePublicSuccess' : 'home.madePrivateSuccess',
@@ -320,6 +298,22 @@ export const useDreamStore = defineStore('dream', () => {
     return dreams.value.filter(d =>
       Array.isArray(d.likes) && d.likes.includes(myUserId)
     )
+  }
+
+  function updateDreamCollections(dreamId: string, response: ApiDream): ApiDream {
+    const feedIndex = dreams.value.findIndex(dream => dream._id === dreamId)
+    const feedDream = feedIndex === -1 ? null : dreams.value[feedIndex]
+    const updatedDream = feedDream
+      ? { ...response, userId: feedDream.userId }
+      : response
+    if (feedIndex !== -1) dreams.value[feedIndex] = updatedDream
+
+    const searchItem = searchResults.value.find(item => item.dream._id === dreamId)
+    if (searchItem) {
+      searchItem.dream = { ...response, userId: searchItem.dream.userId }
+      if (feedIndex === -1) return searchItem.dream
+    }
+    return updatedDream
   }
 
   function currentSearchCriteria(): { query: string; mood: DreamMoodLevel | null } {

@@ -106,7 +106,7 @@
                   </span>
                   <span v-else>{{ citation.excerpt }}</span>
                 </span>
-                <span aria-hidden="true">↗</span>
+                      <AppIcon name="external-link" :size="13" />
               </button>
             </div>
           </div>
@@ -144,10 +144,8 @@
       <OracleComposer
         ref="composer"
         :is-sending="isSending"
-        :wait-for-complete="waitForComplete"
         :context-usage="contextUsage"
         :context-message-count="contextMessageCount"
-        @update:wait-for-complete="$emit('update:waitForComplete', $event)"
         @send="handleComposerSend"
         @cancel="$emit('cancel')"
       />
@@ -161,6 +159,7 @@ import { useI18n } from 'vue-i18n'
 import OracleComposer from './OracleComposer.vue'
 import OracleMessageContent from './OracleMessageContent.vue'
 import AppCopyButton from '@/components/common/AppCopyButton.vue'
+import AppIcon from '@/components/common/AppIcon.vue'
 import type { OracleShellMessage } from '../oracleShell.types'
 
 const props = withDefaults(
@@ -170,7 +169,6 @@ const props = withDefaults(
     threadTitle?: string
     isSending?: boolean
     suggestedPrompts?: string[]
-    waitForComplete?: boolean
     contextUsage?: OracleShellMessage['contextUsage']
     contextMessageCount?: number
     runEstimate?: { expectedMinMs?: number | null; expectedMaxMs?: number | null }
@@ -181,7 +179,6 @@ const props = withDefaults(
     threadTitle: '',
     isSending: false,
     suggestedPrompts: () => [],
-    waitForComplete: false,
     contextUsage: undefined,
     contextMessageCount: 0,
     runEstimate: undefined,
@@ -193,7 +190,6 @@ const emit = defineEmits<{
   (e: 'send', content: string): void
   (e: 'cancel'): void
   (e: 'open-citation', message: OracleShellMessage, index: number): void
-  (e: 'update:waitForComplete', value: boolean): void
   (e: 'edit-message', message: OracleShellMessage, content: string): void
   (e: 'select-branch', leafId: string): void
 }>()
@@ -291,10 +287,9 @@ function timingLabel(message: OracleShellMessage): string {
   }
   if (message.runState === 'responding') {
     const thoughtEnd = message.thoughtCompletedAt || message.firstTokenAt || start
-    const revealStart = message.presentationStartedAt || thoughtEnd
     return t('oracle.thoughtThenRevealing', {
       thought: Math.max(0, Math.ceil((thoughtEnd - start) / 1000)),
-      revealing: Math.max(0, Math.floor((end - revealStart) / 1000)),
+      revealing: Math.max(0, Math.floor((end - thoughtEnd) / 1000)),
     })
   }
   if (message.runState === 'completed' && message.thoughtCompletedAt) {

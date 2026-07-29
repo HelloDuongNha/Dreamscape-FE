@@ -433,7 +433,8 @@ import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/common/AppButton.vue'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
-import { isModeratorUserId } from '@/utils/moderatorAccess'
+import { getApiErrorCode, getApiErrorMessage } from '@/utils/apiError'
+import { isAdminUser } from '@/utils/adminAccess'
 import { createHighlightedExcerpt, findLiteralTextRanges } from '@/utils/highlightText'
 import {
   createBrowserTranslator,
@@ -460,7 +461,7 @@ const settingsStore = useSettingsStore()
 const { t, locale } = useI18n({ useScope: 'global' })
 
 const isUnauthorized = computed(() => {
-  return !isModeratorUserId(authStore.user?._id)
+  return !isAdminUser(authStore.user)
 })
 
 const statusTabs = computed(() => [
@@ -807,8 +808,8 @@ async function confirmBulkAction() {
       : t('rules.toasts.bulkDone', { processed: response.data.processed }), failed ? 'error' : 'success')
     bulkAction.value = null
     await fetchCandidates()
-  } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.bulkFailed'), 'error')
+  } catch (error: unknown) {
+    settingsStore.showToast(getApiErrorMessage(error, t('rules.toasts.bulkFailed')), 'error')
   } finally {
     isBulkRunning.value = false
   }
@@ -855,8 +856,8 @@ async function fetchCandidates() {
       ruleRelationships.value = []
       evidenceGapMatches.value = []
     }
-  } catch (error: any) {
-    if (requestId !== listRequestId || error?.code === 'ERR_CANCELED') return
+  } catch (error: unknown) {
+    if (requestId !== listRequestId || getApiErrorCode(error) === 'ERR_CANCELED') return
     listError.value = true
   } finally {
     if (requestId === listRequestId) isLoadingList.value = false
@@ -892,8 +893,8 @@ async function selectCandidate(id: string) {
     ruleRelationships.value = response.data.ruleRelationships || []
     evidenceGapMatches.value = response.data.evidenceGapMatches || []
     visibleContexts.value = {}
-  } catch (error: any) {
-    if (requestId !== detailRequestId || error?.code === 'ERR_CANCELED') return
+  } catch (error: unknown) {
+    if (requestId !== detailRequestId || getApiErrorCode(error) === 'ERR_CANCELED') return
     selectedCandidate.value = null
     ruleRelationships.value = []
     evidenceGapMatches.value = []
@@ -917,8 +918,8 @@ async function confirmApproval() {
       reconciliationFailed ? 'error' : 'success',
     )
     await fetchCandidates()
-  } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.approveFailed'), 'error')
+  } catch (error: unknown) {
+    settingsStore.showToast(getApiErrorMessage(error, t('rules.toasts.approveFailed')), 'error')
   } finally {
     isApproving.value = false
   }
@@ -932,8 +933,8 @@ async function confirmRejection() {
     showRejectModal.value = false
     settingsStore.showToast(t('rules.toasts.rejected'), 'success')
     await fetchCandidates()
-  } catch (error: any) {
-    settingsStore.showToast(error.response?.data?.message || t('rules.toasts.rejectFailed'), 'error')
+  } catch (error: unknown) {
+    settingsStore.showToast(getApiErrorMessage(error, t('rules.toasts.rejectFailed')), 'error')
   } finally {
     isRejecting.value = false
   }

@@ -5,11 +5,17 @@ export interface ApiUser {
   _id:            string
   username:       string
   display_name:   string
+  role?:           'admin' | 'user'
   avatar:         string
   bio:            string
   follower_count: number
   followers?:     string[]
   following?:     string[]
+  followRequests?: ApiUser[]
+  followRequestCount?: number
+  followStatus?: 'none' | 'pending' | 'following'
+  statsVisible?: boolean
+  canViewPrivateContent?: boolean
   isPrivateAccount?: boolean;
   dmPrivacy?:     'everyone' | 'following' | 'friends';
   followersPrivacy?: 'everyone' | 'following' | 'only_me';
@@ -410,6 +416,9 @@ export interface ApiComment {
   _id:        string
   dreamId:    string | ApiDream  // populated when fetched via GET /comments/user/:id
   userId:     ApiUser    // always populated by the server
+  parentCommentId?: string
+  replyToCommentId?: string
+  replyToUserId?: ApiUser
   content:    string
   edit_history?: Array<{
     content: string
@@ -463,6 +472,12 @@ export interface SocketStatusUpdate {
   status:           'sent' | 'delivered' | 'seen'
 }
 
+export interface SocketPresenceUpdate {
+  userId:       string
+  isOnline:     boolean
+  lastActiveAt: string
+}
+
 export interface MessagingConversationSearchResult {
   user:           ApiUser
   conversationId: string | null
@@ -486,9 +501,10 @@ export interface ApiNotification {
   _id:         string
   recipientId: string
   senderId:    ApiUser
-  type:        'like' | 'comment' | 'follow' | 'dream_analysis'
+  type:        'like' | 'comment' | 'comment_reply' | 'follow' | 'dream_analysis'
   postId?:     string
   commentId?:  string
+  replyId?:    string
   isRead:      boolean
   timestamp:   string
 }

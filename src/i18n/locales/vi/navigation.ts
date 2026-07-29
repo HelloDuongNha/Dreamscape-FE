@@ -17,7 +17,7 @@ export default {
   collapseLabel: 'Thu gọn',
   // Badge aria-label — {count} is interpolated
   unreadCount: '{count} chưa đọc',
-  // Moderation (moderator-only nav items)
+  // Moderation (administrator-only nav items)
   moderationSources: 'Duyệt nguồn',
   ruleReview: 'Duyệt lập luận',
   // Header page titles — keyed by Vue Router route name

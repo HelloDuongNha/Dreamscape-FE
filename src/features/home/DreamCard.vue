@@ -10,15 +10,15 @@
         role="link"
         style="cursor: pointer"
       >
-        <div class="dream-card__avatar" :style="{ background: avatarBg }" translate="no" @click.stop="navigateToProfile">
-          {{ initials }}
+        <div class="dream-card__avatar" @click.stop="navigateToProfile">
+          <UserAvatar :user="user" size="md" show-streak />
         </div>
       </div>
 
       <div class="dream-card__meta">
         <div class="dream-card__name-row">
           <span class="dream-card__name" role="link" style="cursor: pointer" translate="no" @click.stop="navigateToProfile">{{ user.display_name }}</span>
-          <span class="dream-card__username" role="link" style="cursor: pointer" translate="no" @click.stop="navigateToProfile">{{ user.username }}</span>
+          <span class="dream-card__username" role="link" style="cursor: pointer" translate="no" @click.stop="navigateToProfile">{{ formatUsername(user.username) }}</span>
         </div>
         <span class="dream-card__time">{{ timestamp }}</span>
       </div>
@@ -143,7 +143,7 @@
         <span>{{ t('home.oracleAnalyzing') }}</span>
       </div>
       <div v-else-if="dream.ai_status === 'failed' || dream.ai_status === 'cancelled'" class="dream-card__status-failed">
-        <span class="warning-icon" aria-hidden="true">⚠️</span>
+        <AppIcon class="warning-icon" name="warning" :size="20" />
         <span class="error-msg-text">{{ dream.ai_status === 'cancelled' ? t('home.oracleCancelled') : t('home.oracleFailed') }}</span>
         <button
           v-if="isOwner"
@@ -223,7 +223,7 @@ import { ref, computed }     from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { timeAgo }           from '@/utils/timeAgo'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
+import { formatUsername }    from '@/utils/username'
 import { usePostStore }      from '@/store/usePostStore'
 import { useDreamStore }     from '@/store/useDreamStore'
 import { useAuthStore }      from '@/store/useAuthStore'
@@ -232,15 +232,17 @@ import { useLocaleStore }    from '@/store/useLocaleStore'
 import apiClient             from '@/api/client'
 import AppDropdown           from '@/components/common/AppDropdown.vue'
 import AppConfirm            from '@/components/common/AppConfirm.vue'
+import AppIcon               from '@/components/common/AppIcon.vue'
 import OracleAnalysisResult  from '@/components/common/OracleAnalysisResult.vue'
 import DreamMoodTag          from '@/components/common/DreamMoodTag.vue'
+import UserAvatar            from '@/components/common/UserAvatar.vue'
 import type { DropdownOption } from '@/components/common/AppDropdown.vue'
 import type {
   ApiDream,
+  ApiUser,
   DreamSearchCommentMatch,
   SearchTextRange,
 } from '@/api/types'
-import type { User }         from '@/data/mockUsers'
 import { createHighlightedExcerpt } from '@/utils/highlightText'
 
 const oracleStore = useOracleStore()
@@ -275,7 +277,7 @@ function navigateToProfile() {
 
 const props = withDefaults(defineProps<{
   dream: ApiDream
-  user: User
+  user: ApiUser
   contentHighlights?: SearchTextRange[]
   matchedComments?: DreamSearchCommentMatch[]
   matchedCommentCount?: number
@@ -296,8 +298,6 @@ const authStore  = useAuthStore()
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 
-const initials  = computed(() => getInitials(props.user.display_name))
-const avatarBg  = computed(() => getAvatarBg(props.user._id))
 const timestamp = computed(() => timeAgo(props.dream.created_at, localeStore.currentLocale))
 
 const isOwner = computed(() => {

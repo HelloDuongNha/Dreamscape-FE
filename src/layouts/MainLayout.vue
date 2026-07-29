@@ -84,16 +84,16 @@
             </div>
 
             <slot name="header-actions">
-              <!-- Locale switch — immediately left of bell -->
               <button
                 id="locale-switch-btn"
-                class="main-layout__icon-btn locale-switch"
+                class="locale-switch"
                 :aria-label="localeStore.currentLocale === 'vi' ? t('common.switchToEnglish') : t('common.switchToVietnamese')"
                 :title="localeStore.currentLocale === 'vi' ? t('common.switchToEnglish') : t('common.switchToVietnamese')"
                 @click="localeStore.toggleLocale()"
               >
-                <span class="locale-switch__label" aria-hidden="true">
-                  {{ localeStore.currentLocale === 'vi' ? 'EN' : 'VI' }}
+                <span class="locale-switch__track" aria-hidden="true">
+                  <span :class="{ 'is-active': localeStore.currentLocale === 'en' }">En</span>
+                  <span :class="{ 'is-active': localeStore.currentLocale === 'vi' }">Vi</span>
                 </span>
               </button>
 
@@ -174,6 +174,7 @@
                             </template>
                             <span v-if="notif.type === 'like'"> {{ t('notifications.liked') }}</span>
                             <span v-else-if="notif.type === 'comment'"> {{ t('notifications.commented') }}</span>
+                            <span v-else-if="notif.type === 'comment_reply'"> {{ t('notifications.replied') }}</span>
                             <span v-else-if="notif.type === 'follow'"> {{ t('notifications.followed') }}</span>
                           </p>
                           <span class="notifications-dropdown__time">{{ timeAgo(notif.timestamp, localeStore.currentLocale) }}</span>
@@ -290,7 +291,7 @@ import { useLocaleStore } from '@/store/useLocaleStore'
 import { usePostStore } from '@/store/usePostStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import type { ApiNotification, ApiNotificationTarget } from '@/api/types'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
+import { getInitials, getAvatarBg } from '@/utils/avatar'
 import { timeAgo } from '@/utils/timeAgo'
 import apiClient from '@/api/client'
 
@@ -404,7 +405,9 @@ async function presentNotificationTarget(target: ApiNotificationTarget) {
     return
   }
   if (route.path !== '/') await router.push('/')
-  await postStore.openPost(target.dream._id)
+  await postStore.openPost(target.dream._id, {
+    ...(target.commentId ? { commentId: target.commentId } : {}),
+  })
 }
 
 async function handleMarkAllNotificationsRead() {
@@ -443,7 +446,8 @@ async function sendHeartbeat() {
     if (data.success && authStore.user) {
       authStore.updateCurrentUser({
         ...authStore.user,
-        timeOnlineToday: data.timeOnlineToday
+        timeOnlineToday: data.timeOnlineToday,
+        role: data.role,
       })
     }
   } catch (err) {
@@ -618,13 +622,41 @@ defineProps<{ title?: string }>()
 }
 
 /* ── Locale switch label ────────────────────────────────────────── */
-.locale-switch__label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.06em;
+.locale-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 3px 6px 3px 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.locale-switch:hover {
+  border-color: var(--color-text-muted);
+  background: var(--color-bg-hover);
+}
+.locale-switch__track {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1;
-  pointer-events: none;
-  user-select: none;
+}
+.locale-switch__track span {
+  min-width: 25px;
+  padding: 5px 4px;
+  border-radius: 999px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+.locale-switch__track span.is-active {
+  background: var(--color-primary);
+  color: var(--color-bg-base);
 }
 
 /* Notification dot — solid red, no glow */

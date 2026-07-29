@@ -15,13 +15,17 @@
       <slot />
     </span>
     <span v-if="suffixIcon" class="app-btn__icon app-btn__icon--suffix" aria-hidden="true">
-      {{ suffixIcon }}
+      <AppIcon v-if="namedSuffixIcon" :name="namedSuffixIcon" :size="14" />
+      <template v-else>{{ suffixIcon }}</template>
     </span>
   </button>
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{
+import { computed } from 'vue'
+import AppIcon from './AppIcon.vue'
+
+const props = withDefaults(defineProps<{
   id?:         string
   type?:       'button' | 'submit' | 'reset'
   variant?:    'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-outline' | 'neon' | 'smart'
@@ -35,6 +39,13 @@ withDefaults(defineProps<{
   type:    'button',
   variant: 'primary',
   size:    'md',
+})
+
+const namedSuffixIcon = computed<'external-link' | 'chevron-down' | null>(() => {
+  if (props.suffixIcon === 'external-link' || props.suffixIcon === 'chevron-down') {
+    return props.suffixIcon
+  }
+  return null
 })
 
 defineEmits<{ click: [e: MouseEvent] }>()

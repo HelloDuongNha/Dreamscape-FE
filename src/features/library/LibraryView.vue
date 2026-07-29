@@ -7,8 +7,8 @@
           {{ t('library.description') }}
         </p>
       </div>
-      <div class="library-header-right">
-        <AppButton id="open-wizard-btn" variant="primary" size="sm" @click="openWizard">
+      <div v-if="hasAdminAccess" class="library-header-right">
+        <AppButton id="open-wizard-btn" variant="primary" size="sm" @click="showModal = true">
           {{ t('library.contribute') }}
         </AppButton>
       </div>
@@ -70,21 +70,28 @@
           class="catalog-card"
           @click="router.push('/library/sources/' + source._id)"
         >
-          <!-- Cover placeholder illustration area -->
-          <div class="book-cover-placeholder">
-            <span class="book-cover-tag" translate="no">{{ source.metadata?.category || t('library.academicSource') }}</span>
+          <div class="catalog-card__heading">
+            <span :class="['catalog-card__source-icon', { 'catalog-card__source-icon--pdf': isPdfSource(source) }]" aria-hidden="true">
+              <svg v-if="isPdfSource(source)" viewBox="0 0 24 24">
+                <path d="M6 2.75h8l4 4V21.25H6z" />
+                <path d="M14 2.75v4h4M8.5 16.5h7M8.5 13h7M8.5 9.5h2.5" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8.5" />
+                <path d="M3.5 12h17M12 3.5c2.2 2.3 3.2 5.1 3.2 8.5S14.2 18.2 12 20.5C9.8 18.2 8.8 15.4 8.8 12S9.8 5.8 12 3.5Z" />
+              </svg>
+            </span>
+            <h4 class="catalog-card__title">
+              <span translate="no">{{ source.title || t('library.untitled') }}</span>
+            </h4>
+            <AcademicCategoryBadge :category="resolveAcademicSourceCategory(source)" />
           </div>
-
-          <!-- Title -->
-          <h4 class="catalog-card__title">
-            <span translate="no">{{ source.title || t('library.untitled') }}</span>
-          </h4>
           
           <!-- Metadata details -->
           <div class="catalog-card__meta">
-            <div v-if="source.authors && source.authors.length > 0" class="meta-row">
+            <div class="meta-row">
               <span class="meta-label">{{ t('library.labels.authors') }}</span>
-              <span class="meta-value" translate="no">{{ source.authors.join(', ') }}</span>
+              <span class="meta-value" translate="no">{{ displayAuthors(source) }}</span>
             </div>
             <div v-if="source.year" class="meta-row">
               <span class="meta-label">{{ t('library.labels.yearShort') }}</span>
@@ -111,7 +118,6 @@
             <AppStatusBadge :status="source.allowedUse || 'metadata_only'" kind="allowedUse" :source-type="resolveSourceType(source)" :full-text-source-type="source.fullTextSourceType" />
             <AppStatusBadge :status="source.verificationStatus || 'unverified'" kind="verification" :source-type="resolveSourceType(source)" :full-text-source-type="source.fullTextSourceType" />
             <AppStatusBadge :status="source.copyrightStatus || 'paywalled'" kind="copyright" :source-type="resolveSourceType(source)" :full-text-source-type="source.fullTextSourceType" />
-            <AppStatusBadge :status="source.fullTextStatus || 'none'" kind="fullTextStatus" :source-type="resolveSourceType(source)" :full-text-source-type="source.fullTextSourceType" />
           </div>
 
           <!-- Future Reading Progress (Future Use Placeholder) -->
@@ -122,15 +128,11 @@
             <span class="progress-text">{{ t('library.readProgress', { progress: source.progress }) }}</span>
           </div>
 
-          <!-- Muted Footnote & Moderator Action -->
-          <div class="catalog-card__footer-container" style="display: flex; justify-content: space-between; align-items: center; margin-top: var(--space-4);">
-            <div class="catalog-card__footer-note" style="margin-top: 0;">
-              {{ t('library.viewDetails') }}
-            </div>
+          <!-- Clear reading affordance; moderation action stays on the right. -->
+          <div class="catalog-card__footer-container">
             <button
-              v-if="isModeratorUser"
+              v-if="hasAdminAccess"
               class="delete-source-btn"
-              style="background: transparent; border: none; color: #ed4956; padding: 4px; cursor: pointer; display: flex; align-items: center; transition: opacity 0.2s;"
               @click.stop="promptDelete(source)"
               :title="t('library.deleteDocument')"
             >
@@ -141,6 +143,8 @@
                 <line x1="14" y1="11" x2="14" y2="17"></line>
               </svg>
             </button>
+            <span v-else aria-hidden="true"></span>
+            <span class="catalog-card__read-cta">{{ t('library.readNow') }} →</span>
           </div>
         </div>
       </div>
@@ -170,212 +174,10 @@
 
     <AcademicContributionModal
       :open="showModal"
-      :is-moderator="isModeratorUser"
+      :is-admin="hasAdminAccess"
       @close="showModal = false"
       @submitted="fetchApprovedSources"
     />
-    <!-- Legacy wizard is disabled while the shared contribution modal is active. -->
-    <Teleport to="body">
-      <Transition name="modal-fade">
-        <div
-          v-if="false && showModal"
-          id="contribution-wizard-modal"
-          class="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          :aria-label="t('library.wizard.aria')"
-          @click.self="closeWizard"
-        >
-          <div class="modal-container" tabindex="-1">
-            <!-- Modal Header -->
-            <div class="modal-header">
-              <div class="modal-header__title-wrap">
-                <button
-                  v-if="step > 1"
-                  class="modal-back-btn"
-                  :aria-label="t('library.wizard.back')"
-                  @click="goBack"
-                >
-                  ←
-                </button>
-                <h3 class="modal-header__title">
-                  {{ stepTitle }}
-                </h3>
-              </div>
-              <button
-                id="modal-close-btn"
-                class="modal-close-btn"
-                :aria-label="t('library.wizard.close')"
-                @click="closeWizard"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-
-            <!-- Modal Content Area -->
-            <div class="modal-body">
-              <!-- Step 2: Form Inputs -->
-              <div v-if="step === 2" class="wizard-step-2">
-                <div class="form-fields">
-                  <AppInput
-                    v-if="contribType === 'lookup'"
-                    id="input-academic-source"
-                    v-model="lookupValue"
-                    :label="t('library.wizard.lookupLabel')"
-                    :placeholder="t('library.wizard.lookupPlaceholder')"
-                    :error="lookupError"
-                    maxlength="500"
-                    required
-                    @keydown.enter.prevent="fetchPreview"
-                  />
-
-                  <!-- PDF upload selection & optional fields -->
-                  <div v-if="contribType === 'pdf'" class="pdf-upload-fields">
-                    <div class="file-select-container">
-                      <label class="app-input__label">{{ t('library.wizard.pdfFileLabel') }} <span style="color: var(--color-error, #ed4956);">*</span></label>
-                      <div class="file-dropzone" :class="{ 'file-dropzone--has-file': !!selectedFile, 'file-dropzone--error': !!pdfFileError }">
-                        <input
-                          id="input-pdf-file"
-                          type="file"
-                          accept=".pdf"
-                          class="file-input-hidden"
-                          @change="onFileChange"
-                        />
-                        <div class="file-dropzone-content">
-                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="file-icon" aria-hidden="true">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                            <polyline points="14 2 14 8 20 8"></polyline>
-                            <line x1="16" y1="13" x2="8" y2="13"></line>
-                            <line x1="16" y1="17" x2="8" y2="17"></line>
-                          </svg>
-                          <div v-if="selectedFile" class="file-info-text">
-                            <span class="file-name">{{ selectedFile?.name }}</span>
-                            <span class="file-size">({{ formatBytes(selectedFile?.size || 0) }})</span>
-                          </div>
-                          <div v-else class="file-prompt-text">
-                            {{ t('library.wizard.pdfDrop', { maxSize: PDF_MAX_FILE_SIZE_LABEL }) }}
-                          </div>
-                        </div>
-                      </div>
-                      <span v-if="pdfFileError" class="app-input__error" style="display: block; margin-top: 4px;">{{ pdfFileError }}</span>
-                    </div>
-
-                  </div>
-                </div>
-
-                <div class="wizard-actions">
-                  <AppButton
-                    id="search-metadata-btn"
-                    variant="smart"
-                    size="md"
-                    :disabled="!isInputValid || isFetchingPreview"
-                    :loading="isFetchingPreview"
-                    @click="fetchPreview"
-                  >
-                    {{ contribType === 'pdf' ? t('library.wizard.previewContribution') : t('library.wizard.findDocument') }}
-                  </AppButton>
-                </div>
-              </div>
-
-              <!-- Step 3: Metadata Preview -->
-              <div v-if="step === 3 && previewData" class="wizard-step-3">
-                <p class="preview-prompt">{{ t('library.wizard.confirmPrompt') }}</p>
-                
-                <div class="preview-grid">
-                  <div class="preview-row">
-                    <span class="preview-label">{{ t('library.labels.title') }}</span>
-                    <span class="preview-value preview-value--bold" translate="no">{{ previewData.title }}</span>
-                  </div>
-                  <div v-if="previewData.authors && previewData.authors.length > 0" class="preview-row">
-                    <span class="preview-label">{{ t('library.labels.authors') }}</span>
-                    <span class="preview-value" translate="no">{{ previewData.authors.join(', ') }}</span>
-                  </div>
-                  <div v-if="previewData.year" class="preview-row">
-                    <span class="preview-label">{{ t('library.labels.year') }}</span>
-                    <span class="preview-value">{{ previewData.year }}</span>
-                  </div>
-                  <div v-if="previewData.journal" class="preview-row">
-                    <span class="preview-label">{{ t('library.labels.journal') }}</span>
-                    <span class="preview-value" translate="no">{{ previewData.journal }}</span>
-                  </div>
-                  <div v-if="previewData.doi" class="preview-row">
-                    <span class="preview-label">DOI:</span>
-                    <span class="preview-value code-font" translate="no">{{ previewData.doi }}</span>
-                  </div>
-                  <div v-if="contribType === 'pdf' && previewData.fileName" class="preview-row">
-                    <span class="preview-label">{{ t('library.labels.fileName') }}</span>
-                    <span class="preview-value" translate="no">{{ previewData.fileName }}</span>
-                  </div>
-                  <div v-if="contribType === 'pdf' && previewData.fileSize" class="preview-row">
-                    <span class="preview-label">{{ t('library.labels.fileSize') }}</span>
-                    <span class="preview-value">{{ formatBytes(previewData.fileSize) }}</span>
-                  </div>
-                  <div v-if="contribType !== 'pdf'" class="preview-row">
-                    <span class="preview-label">{{ t('library.labels.smartReader') }}</span>
-                    <span class="preview-value" :class="previewData.fullTextAvailable ? 'badge-status badge-status--verified' : 'badge-status badge-status--unverified'">
-                      {{ previewData.fullTextAvailable ? t('library.wizard.autoImportable') : t('library.wizard.checkAfterSubmit') }}
-                    </span>
-                  </div>
-                  <div v-if="contribType !== 'pdf'" class="preview-row">
-                    <span class="preview-label">PDF online:</span>
-                    <span class="preview-value badge-status badge-status--unverified">{{ t('library.wizard.checkPdfAfterSubmit') }}</span>
-                  </div>
-                </div>
-
-                <!-- Upload progress bar -->
-                <div v-if="isSubmitting && contribType === 'pdf'" class="upload-progress-container" style="margin-bottom: var(--space-4);">
-                  <div class="progress-bar-bg" style="height: 8px;">
-                    <div class="progress-bar-fill" :style="{ width: `${uploadProgress}%` }"></div>
-                  </div>
-                  <div style="display: flex; justify-content: space-between; font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 4px;">
-                    <span>{{ t('library.wizard.uploading') }}</span>
-                    <span>{{ uploadProgress }}%</span>
-                  </div>
-                </div>
-
-                <!-- Duplicate DOI alert with direct redirect link -->
-                <div v-if="duplicateSourceId" class="preview-warning-alert preview-warning-alert--danger" style="margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start;">
-                  <span>* {{ duplicateSourceError || t('library.wizard.duplicate') }}</span>
-                  <router-link
-                    :to="`/library/sources/${duplicateSourceId}`"
-                    class="pdf-action-btn pdf-action-btn--primary"
-                    style="display: inline-flex; text-decoration: none; text-align: center; margin-top: 4px;"
-                    @click="closeWizard"
-                  >
-                    {{ t('library.wizard.openDuplicate') }}
-                  </router-link>
-                </div>
-
-                <div class="wizard-actions wizard-actions--split">
-                  <AppButton
-                    id="reject-preview-btn"
-                    variant="secondary"
-                    size="md"
-                    :disabled="isSubmitting"
-                    @click="step = 2"
-                  >
-                    {{ t('library.wizard.wrong') }}
-                  </AppButton>
-                  
-                  <AppButton
-                    id="confirm-submit-btn"
-                    variant="smart"
-                    size="md"
-                    :disabled="isSubmitting"
-                    :loading="isSubmitting"
-                    @click="submitContribution"
-                  >
-                    {{ t('library.wizard.submit') }}
-                  </AppButton>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
     <!-- AppConfirm Deletion Dialog -->
     <AppConfirm
       v-model="showDeleteConfirm"
@@ -396,37 +198,30 @@ import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
-import {
-  parseAcademicLookupInput,
-  parseDoiSearchInput,
-  type AcademicLookupError,
-} from './utils/academicContributionLookup'
+import { parseDoiSearchInput } from './utils/academicContributionLookup'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
-import { useSourceProgressStore } from '@/store/useSourceProgressStore'
-import { previewSource, contributeSource, contributePdfSource, getApprovedSources } from '@/api/sourceApi'
+import { isAdminUser } from '@/utils/adminAccess'
+import {
+  getApprovedSources,
+  type ApprovedSourceCatalogItem,
+} from '@/api/sourceApi'
 import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
 import AppStatusBadge from '@/components/common/AppStatusBadge.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 import AcademicContributionModal from '@/components/academic/AcademicContributionModal.vue'
+import AcademicCategoryBadge from '@/components/academic/AcademicCategoryBadge.vue'
+import { resolveAcademicSourceCategory } from './utils/academicSourceCategory'
 import apiClient from '@/api/client'
-import {
-  PDF_MAX_FILE_SIZE_BYTES,
-  PDF_MAX_FILE_SIZE_LABEL,
-} from '@/utils/pdfUploadLimits'
+import { getApiErrorMessage } from '@/utils/apiError'
 
 const router = useRouter()
 const { t, n } = useI18n({ useScope: 'global' })
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 
-// Moderator check
-const isModeratorUser = computed(() => {
-  const allowlist = (import.meta.env.VITE_MODERATOR_USER_IDS || '').split(',')
-  const myId = authStore.user?._id
-  return !!(myId && allowlist.map((id: string) => id.trim().toLowerCase()).includes(myId.toLowerCase()))
-})
+const hasAdminAccess = computed(() => isAdminUser(authStore.user))
 
 // Category filter tabs
 const activeTab = ref('all')
@@ -436,7 +231,6 @@ const categoryTabs = computed(() => [
   { id: 'psychology', label: t('library.tabs.psychology') },
   { id: 'symbol', label: t('library.tabs.symbol') },
   { id: 'culture', label: t('library.tabs.culture') },
-  { id: 'community', label: t('library.tabs.community') },
 ])
 
 function formatNumber(value: number) {
@@ -453,7 +247,7 @@ const searchValidationError = computed(() => (
     ? t('library.validation.doiSearchFormat')
     : ''
 ))
-const sources = ref<any[]>([])
+const sources = ref<ApprovedSourceCatalogItem[]>([])
 const currentPage = ref(1)
 const pagination = ref({
   page: 1,
@@ -467,35 +261,23 @@ const filteredSources = computed(() => {
   if (activeTab.value === 'all') {
     return sources.value
   }
-  return sources.value.filter((source) => {
-    const category = (source.metadata?.category || '').toLowerCase()
-    const title = (source.title || '').toLowerCase()
-    const journal = (source.journal || '').toLowerCase()
-    const txt = `${title} ${journal}`
-
-    if (activeTab.value === 'science') {
-      return category === 'science' || category === 'khoa học' || 
-             /sleep|neuro|brain|science|clinical|medical|biology|physiol|y học|khoa học|thần kinh/i.test(txt)
-    }
-    if (activeTab.value === 'psychology') {
-      return category === 'psychology' || category === 'tâm lý' ||
-             /psych|cognit|behavior|mental|therapy|tâm lý|hành vi|nhận thức/i.test(txt)
-    }
-    if (activeTab.value === 'symbol') {
-      return category === 'symbol' || category === 'biểu tượng' ||
-             /symbol|archetype|meaning|biểu tượng|mẫu gốc|giải mã/i.test(txt)
-    }
-    if (activeTab.value === 'culture') {
-      return category === 'culture' || category === 'văn hóa' ||
-             /cultur|myth|anthropo|history|văn hóa|thần thoại|lịch sử/i.test(txt)
-    }
-    if (activeTab.value === 'community') {
-      return category === 'community' || category === 'cộng đồng' ||
-             /communit|social|cộng đồng|xã hội/i.test(txt)
-    }
-    return false
-  })
+  return sources.value.filter(source => resolveAcademicSourceCategory(source) === activeTab.value)
 })
+
+function isPdfSource(source: ApprovedSourceCatalogItem): boolean {
+  return source.sourceOrigin === 'uploaded_pdf'
+    || Boolean(source.originalFile)
+    || String(source.fullTextSourceType || '').toLowerCase().includes('pdf')
+}
+
+function displayAuthors(source: ApprovedSourceCatalogItem): string {
+  const authors = Array.isArray(source.authors) && source.authors.length
+    ? source.authors
+    : Array.isArray(source.metadata?.authors)
+      ? source.metadata.authors
+      : []
+  return authors.map(String).filter(Boolean).join(', ') || t('library.unknownAuthor')
+}
 
 async function fetchApprovedSources() {
   const parsedSearch = parseDoiSearchInput(searchQuery.value)
@@ -523,11 +305,13 @@ async function fetchApprovedSources() {
     if (requestId !== sourceListRequestId) return
     sources.value = res.items
     pagination.value = res.pagination
-  } catch (err: any) {
-    if (requestId !== sourceListRequestId || err?.code === 'ERR_CANCELED') return
+  } catch (error) {
+    if (
+      requestId !== sourceListRequestId
+      || (error && typeof error === 'object' && 'code' in error && error.code === 'ERR_CANCELED')
+    ) return
     hasErrorSources.value = true
-    const errMsg = err.response?.data?.message || err.message || t('library.local.listLoadError')
-    settingsStore.showToast(errMsg, 'error')
+    settingsStore.showToast(getApiErrorMessage(error, t('library.local.listLoadError')), 'error')
   } finally {
     if (requestId === sourceListRequestId) {
       isLoadingSources.value = false
@@ -567,10 +351,10 @@ onBeforeUnmount(() => {
 })
 
 const showDeleteConfirm = ref(false)
-const sourceToDelete = ref<any>(null)
+const sourceToDelete = ref<ApprovedSourceCatalogItem | null>(null)
 const isDeleting = ref(false)
 
-function promptDelete(source: any) {
+function promptDelete(source: ApprovedSourceCatalogItem) {
   sourceToDelete.value = source
   showDeleteConfirm.value = true
 }
@@ -590,10 +374,8 @@ async function handleDeleteConfirm() {
       sourceToDelete.value = null
       await fetchApprovedSources()
     }
-  } catch (err: any) {
-    console.error('Delete source error:', err)
-    const errMsg = err.response?.data?.message || err.message || t('library.local.deleteError')
-    settingsStore.showToast(errMsg, 'error')
+  } catch (error) {
+    settingsStore.showToast(getApiErrorMessage(error, t('library.local.deleteError')), 'error')
   } finally {
     isDeleting.value = false
   }
@@ -601,315 +383,6 @@ async function handleDeleteConfirm() {
 
 
 const showModal = ref(false)
-const step = ref(1)
-const contribType = ref<'lookup' | 'pdf' | null>(null)
-
-const lookupValue = ref('')
-const lookupAttempted = ref(false)
-const lookupRequestError = ref('')
-const submittedNote = ref('')
-
-// PDF-specific states
-const selectedFile = ref<File | null>(null)
-const pdfFileError = ref('')
-const pdfTitle = ref('')
-const pdfAuthors = ref('')
-const pdfYear = ref('')
-const pdfJournal = ref('')
-const pdfPublisher = ref('')
-const pdfDoi = ref('')
-const pdfUrl = ref('')
-const uploadProgress = ref(0)
-const duplicateSourceId = ref<string | null>(null)
-const duplicateSourceError = ref<string | null>(null)
-
-const isFetchingPreview = ref(false)
-const isSubmitting = ref(false)
-const previewData = ref<any>(null)
-
-// Step titles
-const stepTitle = computed(() => {
-  if (step.value === 1) return t('library.wizard.step1')
-  if (step.value === 2) {
-    if (contribType.value === 'lookup') return t('library.wizard.stepLookup')
-    if (contribType.value === 'pdf') return t('library.wizard.stepPdf')
-  }
-  return t('library.wizard.stepConfirm')
-})
-
-const lookupError = computed(() => {
-  if (!lookupAttempted.value || contribType.value !== 'lookup') return ''
-  if (lookupRequestError.value) return lookupRequestError.value
-  const parsed = parseAcademicLookupInput(lookupValue.value)
-  return parsed.error ? lookupErrorMessage(parsed.error) : ''
-})
-
-const noteError = computed(() => {
-  const n = submittedNote.value.trim()
-  if (n.length > 1000) return t('library.validation.noteTooLong')
-  return ''
-})
-
-// Input check for Step 2
-const isInputValid = computed(() => {
-  if (noteError.value) return false
-  if (contribType.value === 'lookup') {
-    return lookupValue.value.trim().length > 0
-  }
-  if (contribType.value === 'pdf') {
-    return !!selectedFile.value && !pdfFileError.value
-  }
-  return false
-})
-
-function onFileChange(event: any) {
-  const file = event.target.files?.[0]
-  if (!file) {
-    selectedFile.value = null
-    pdfFileError.value = t('library.validation.pdfRequired')
-    return
-  }
-  
-  const ext = file.name.split('.').pop()?.toLowerCase()
-  if (ext !== 'pdf') {
-    selectedFile.value = null
-    pdfFileError.value = t('library.validation.pdfOnly')
-    return
-  }
-  
-  if (file.size > PDF_MAX_FILE_SIZE_BYTES) {
-    selectedFile.value = null
-    pdfFileError.value = t('library.validation.pdfTooLarge', { maxSize: PDF_MAX_FILE_SIZE_LABEL })
-    return
-  }
-  
-  selectedFile.value = file
-  pdfFileError.value = ''
-}
-
-function formatBytes(bytes: number, decimals = 2) {
-  if (!bytes) return '0 Bytes'
-  const k = 1024
-  const dm = decimals < 0 ? 0 : decimals
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]
-}
-
-function openWizard() {
-  showModal.value = true
-  step.value = 1
-  contribType.value = null
-  resetLookup()
-  submittedNote.value = ''
-  selectedFile.value = null
-  pdfFileError.value = ''
-  pdfTitle.value = ''
-  pdfAuthors.value = ''
-  pdfYear.value = ''
-  pdfJournal.value = ''
-  pdfPublisher.value = ''
-  pdfDoi.value = ''
-  pdfUrl.value = ''
-  uploadProgress.value = 0
-  previewData.value = null
-}
-
-function closeWizard() {
-  showModal.value = false
-  // Complete state cleanup to prevent leaks or stale states
-  selectedFile.value = null
-  pdfFileError.value = ''
-  pdfTitle.value = ''
-  pdfAuthors.value = ''
-  pdfYear.value = ''
-  pdfJournal.value = ''
-  pdfPublisher.value = ''
-  pdfDoi.value = ''
-  pdfUrl.value = ''
-  uploadProgress.value = 0
-  resetLookup()
-  submittedNote.value = ''
-  previewData.value = null
-  duplicateSourceId.value = null
-  duplicateSourceError.value = null
-}
-
-function goBack() {
-  if (step.value > 1) {
-    step.value -= 1
-  }
-}
-
-async function fetchPreview() {
-  if (contribType.value === 'pdf') {
-    if (!isInputValid.value) return
-    // Generate mock preview locally for uploaded PDF to defer file uploads to step 3 confirm
-    const titleVal = pdfTitle.value.trim() || selectedFile.value?.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ') || t('library.local.uploadedTitle')
-    const authorsArr = pdfAuthors.value.trim() ? pdfAuthors.value.split(',').map((a: string) => a.trim()).filter(Boolean) : []
-    const yearNum = pdfYear.value ? parseInt(String(pdfYear.value), 10) : undefined
-
-    previewData.value = {
-      title: titleVal,
-      authors: authorsArr,
-      year: isNaN(Number(yearNum)) ? undefined : yearNum,
-      journal: pdfJournal.value.trim() || undefined,
-      publisher: pdfPublisher.value.trim() || undefined,
-      doi: pdfDoi.value.trim() || undefined,
-      url: pdfUrl.value.trim() || undefined,
-      sourceProvider: 'pdf_upload',
-      verificationStatus: 'manual',
-      allowedUse: 'metadata_only',
-      copyrightStatus: 'paywalled',
-      fullTextStatus: 'available',
-      fullTextUrl: '',
-      fileName: selectedFile.value?.name || '',
-      fileSize: selectedFile.value?.size || 0
-    }
-    step.value = 3
-    return
-  }
-
-  if (contribType.value !== 'lookup' || noteError.value) return
-  lookupAttempted.value = true
-  lookupRequestError.value = ''
-  const lookup = parseAcademicLookupInput(lookupValue.value)
-  if (lookup.error) {
-    const message = lookupErrorMessage(lookup.error)
-    settingsStore.showToast(message, 'error')
-    return
-  }
-
-  isFetchingPreview.value = true
-  
-  try {
-    const res = await previewSource(lookup.payload)
-    if (res.success && res.data) {
-      previewData.value = res.data
-      step.value = 3
-    }
-  } catch (err: any) {
-    let errMsg = t('library.local.findError')
-    if (err.response) {
-      const status = err.response.status
-      if (status === 404) {
-        errMsg = t('library.local.notFound')
-      } else if (status === 408) {
-        errMsg = t('library.local.timeout')
-      } else if (status === 502) {
-        errMsg = t('library.local.serverUnavailable')
-      } else {
-        errMsg = err.response.data?.message || t('library.local.noMetadata')
-      }
-    } else {
-      errMsg = t('library.local.network')
-    }
-    lookupRequestError.value = errMsg
-    settingsStore.showToast(errMsg, 'error')
-  } finally {
-    isFetchingPreview.value = false
-  }
-}
-
-async function submitContribution() {
-  if (!previewData.value) return
-  isSubmitting.value = true
-  
-  try {
-    if (contribType.value === 'pdf' && selectedFile.value) {
-      uploadProgress.value = 0
-      const payload = {
-        doi: previewData.value.doi || undefined,
-        url: previewData.value.url || undefined,
-        title: previewData.value.title || undefined,
-        authors: previewData.value.authors || undefined,
-        year: previewData.value.year || undefined,
-        journal: previewData.value.journal || undefined,
-        publisher: previewData.value.publisher || undefined,
-        submittedNote: submittedNote.value.trim() || undefined
-      }
-      
-      const res = await contributePdfSource(
-        selectedFile.value,
-        payload,
-        (progressEvent) => {
-          if (progressEvent.total) {
-            uploadProgress.value = Math.round((progressEvent.loaded * 100) / progressEvent.total)
-          }
-        }
-      )
-      if (res.success) {
-        settingsStore.showToast(t('library.local.pdfSubmitted'), 'success')
-        closeWizard()
-        await fetchApprovedSources()
-        
-        if (isModeratorUser.value) {
-          const contributionId = res.data?._id || res.data?.data?._id
-          if (contributionId) {
-            const sourceProgressStore = useSourceProgressStore()
-            sourceProgressStore.startPdfOnlyPipeline(contributionId, previewData.value?.title || t('library.local.academicDocument'), 'contribution', false, true)
-          }
-        }
-      }
-    } else {
-      const payload = {
-        doi: previewData.value.doi || undefined,
-        pmcid: previewData.value.pmcid || undefined,
-        url: previewData.value.url || undefined,
-        submittedNote: submittedNote.value.trim() || undefined,
-        metadata: previewData.value
-      }
-      
-      const res = await contributeSource(payload)
-      if (res.success) {
-        settingsStore.showToast(t('library.local.sourceSubmitted'), 'success')
-        closeWizard()
-        await fetchApprovedSources()
-        
-        if (isModeratorUser.value) {
-          const contributionId = res.data?._id || res.data?.data?._id
-          if (contributionId) {
-            const sourceProgressStore = useSourceProgressStore()
-            sourceProgressStore.startPipeline(contributionId, previewData.value?.title || t('library.local.academicDocument'))
-          }
-        }
-      }
-    }
-  } catch (err: any) {
-    if (err.response && err.response.status === 409) {
-      const data = err.response.data
-      if (data && data.code === 'DUPLICATE_SOURCE' && data.existingSourceId) {
-        duplicateSourceId.value = data.existingSourceId
-        duplicateSourceError.value = data.message || t('library.local.duplicate')
-        settingsStore.showToast(duplicateSourceError.value || t('library.local.duplicate'), 'error')
-      } else {
-        settingsStore.showToast(t('library.local.duplicateSubmitted'), 'error')
-      }
-    } else {
-      const errMsg = err.response?.data?.message || t('library.local.contributionError')
-      settingsStore.showToast(errMsg, 'error')
-    }
-  } finally {
-    isSubmitting.value = false
-  }
-}
-
-function resetLookup() {
-  lookupValue.value = ''
-  lookupAttempted.value = false
-  lookupRequestError.value = ''
-}
-
-function lookupErrorMessage(error: AcademicLookupError): string {
-  if (error === 'required') return t('library.validation.lookupRequired')
-  if (error === 'too_long') return t('library.validation.lookupTooLong')
-  return t('library.validation.lookupFormat')
-}
-
-watch(lookupValue, () => {
-  lookupAttempted.value = false
-  lookupRequestError.value = ''
-})
 </script>
 
 <style scoped>
@@ -1324,6 +797,38 @@ watch(lookupValue, () => {
   border-color: #3a3a3a;
   background-color: var(--color-bg-hover, #262626);
 }
+.catalog-card__footer-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+.catalog-card__read-cta {
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-primary) 58%, transparent);
+  text-underline-offset: 3px;
+  transition: color var(--transition-fast), text-decoration-color var(--transition-fast);
+}
+.catalog-card:hover .catalog-card__read-cta {
+  color: var(--color-text-primary);
+  text-decoration-color: currentColor;
+}
+.delete-source-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: #ed4956;
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+.delete-source-btn:hover { opacity: 0.72; }
 
 .catalog-card__title {
   font-size: var(--font-size-sm);
@@ -1555,38 +1060,39 @@ watch(lookupValue, () => {
   font-weight: var(--font-weight-semibold);
 }
 
-/* Cover placeholder design */
-.book-cover-placeholder {
-  height: 120px;
-  background: #141416;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  display: flex;
+.catalog-card__heading {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.catalog-card__source-icon {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  overflow: hidden;
-  margin-bottom: var(--space-2);
-}
-
-.book-cover-icon {
-  font-size: 2.2rem;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
-}
-
-.book-cover-tag {
-  position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
-  background: var(--color-bg-sidebar, #0a0a0a);
-  color: var(--color-text-secondary);
-  font-size: 10px;
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  padding: 2px 8px;
+  width: 32px;
+  height: 32px;
+  color: #73b8ff;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.28);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-  letter-spacing: 0.5px;
+}
+
+.catalog-card__source-icon--pdf {
+  color: #ff7d88;
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.28);
+}
+
+.catalog-card__source-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* Future Reading Progress styles */

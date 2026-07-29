@@ -23,7 +23,6 @@
       :thread-title="activeThread?.title"
       :is-sending="isSending"
       :suggested-prompts="latestSuggestions"
-      :wait-for-complete="waitForComplete"
       :context-usage="latestContextUsage"
       :context-message-count="activeMessages.length"
       :run-estimate="activeThread ? {
@@ -36,7 +35,6 @@
       @open-citation="handleOpenCitation"
       @edit-message="handleEditMessage"
       @select-branch="handleSelectBranch"
-      @update:wait-for-complete="setWaitForComplete"
     />
 
     <OracleCitationModal
@@ -114,15 +112,8 @@ const selectedCitation = ref<OracleCitationDto | null>(null)
 const selectedCitationMessageId = ref('')
 const pendingDeleteThreadId = ref<string | null>(null)
 const isSending = ref(false)
-const waitForComplete = ref(localStorage.getItem('oracle_wait_for_complete') === 'true')
 let streamController: AbortController | null = null
 let currentRunId: string | null = null
-let presentationFrame: number | null = null
-let presentationQueue = ''
-let presentationTargetId: string | null = null
-let presentationReady = false
-let lastPresentationAt = 0
-let drainResolvers: Array<() => void> = []
 let isLeavingView = false
 let routeSyncReady = false
 
@@ -144,74 +135,8 @@ const latestContextUsage = computed(() => (
   }
 ))
 
-function resolvePresentationDrain() {
-  if (presentationQueue || presentationFrame !== null) return
-  const resolvers = drainResolvers
-  drainResolvers = []
-  resolvers.forEach((resolve) => resolve())
-}
-
-function paintPresentationFrame(timestamp: number) {
-  presentationFrame = null
-  const target = activeMessages.value.find((message) => message.id === presentationTargetId)
-  if (!target || !presentationQueue) {
-    presentationQueue = ''
-    resolvePresentationDrain()
-    return
-  }
-  const elapsed = lastPresentationAt ? timestamp - lastPresentationAt : 16
-  lastPresentationAt = timestamp
-  const characters = document.hidden
-    ? presentationQueue.length
-    : Math.max(4, Math.min(48, Math.ceil(presentationQueue.length / 90), Math.floor(elapsed / 4)))
-  target.content += presentationQueue.slice(0, characters)
-  presentationQueue = presentationQueue.slice(characters)
-  if (presentationQueue) presentationFrame = requestAnimationFrame(paintPresentationFrame)
-  else resolvePresentationDrain()
-}
-
-function enqueuePresentation(targetId: string, text: string) {
-  presentationTargetId = targetId
-  presentationQueue += text
-}
-
-function setWaitForComplete(value: boolean) {
-  waitForComplete.value = value
-  localStorage.setItem('oracle_wait_for_complete', String(value))
-  if (presentationReady) releasePresentation()
-}
-
-function releasePresentation() {
-  if (!presentationReady) return
-  if (waitForComplete.value) {
-    clearPresentation(true)
-    return
-  }
-  if (presentationQueue && presentationFrame === null) {
-    lastPresentationAt = 0
-    presentationFrame = requestAnimationFrame(paintPresentationFrame)
-  }
-}
-
-function waitForPresentationDrain(): Promise<void> {
-  if (!presentationQueue && presentationFrame === null) return Promise.resolve()
-  return new Promise((resolve) => drainResolvers.push(resolve))
-}
-
-function clearPresentation(flush = false) {
-  if (presentationFrame !== null) cancelAnimationFrame(presentationFrame)
-  presentationFrame = null
-  const target = activeMessages.value.find((message) => message.id === presentationTargetId)
-  if (flush && target) target.content += presentationQueue
-  presentationQueue = ''
-  presentationTargetId = null
-  presentationReady = false
-  resolvePresentationDrain()
-}
-
 async function handleNewThread() {
   streamController?.abort()
-  clearPresentation()
   activeMode.value = 'chat'
   oracleStore.selectThread(null)
   await router.replace({ path: '/oracle', query: {} })
@@ -233,7 +158,6 @@ async function loadThreadMessages(id: string, preferredLeafId?: string) {
         runState: message.runState,
         startedAt: message.startedAt,
         thoughtCompletedAt: message.thoughtCompletedAt,
-        presentationStartedAt: message.presentationStartedAt,
         firstTokenAt: message.firstTokenAt,
         completedAt: message.completedAt,
         expectedMinMs: message.expectedMinMs,
@@ -258,7 +182,6 @@ async function loadThreadMessages(id: string, preferredLeafId?: string) {
 
 async function handleSelectThread(id: string, updateRoute = true) {
   streamController?.abort()
-  clearPresentation()
   oracleStore.selectThread(id)
   if (updateRoute) await router.replace({ path: '/oracle', query: { thread: id } })
   selectedBranchLeafId.value = null
@@ -375,19 +298,13 @@ async function handleSend(content: string) {
     await streamOracleRun(run.runId, (event) => {
       const target = activeMessages.value.find((message) => message.id === run.assistantTurnId)
       if (!target) return
-      if (event.type === 'done') presentationReady = true
       applyOracleStreamEvent({
         event,
         target,
-        waitForComplete: waitForComplete.value,
-        enqueueText: (text) => enqueuePresentation(run.assistantTurnId, text),
-        releasePresentation,
-        clearPresentation,
         responseUnavailable: t('oracle.responseUnavailable'),
         responseCancelled: t('oracle.responseCancelled'),
       })
     }, streamController.signal)
-    await waitForPresentationDrain()
     const completedTarget = activeMessages.value.find((message) => message.id === run.assistantTurnId)
     if (completedTarget?.runState === 'responding') completedTarget.runState = 'completed'
     oracleStore.completeRun(threadId)
@@ -448,19 +365,13 @@ async function handleEditMessage(message: OracleShellMessage, content: string) {
     await streamOracleRun(run.runId, (event) => {
       const target = activeMessages.value.find((item) => item.id === run.assistantTurnId)
       if (!target) return
-      if (event.type === 'done') presentationReady = true
       applyOracleStreamEvent({
         event,
         target,
-        waitForComplete: waitForComplete.value,
-        enqueueText: (text) => enqueuePresentation(target.id, text),
-        releasePresentation,
-        clearPresentation,
         responseUnavailable: t('oracle.responseUnavailable'),
         responseCancelled: t('oracle.responseCancelled'),
       })
     }, streamController.signal)
-    await waitForPresentationDrain()
     const completed = activeMessages.value.find((item) => item.id === run.assistantTurnId)
     if (completed?.runState === 'responding') completed.runState = 'completed'
     oracleStore.completeRun(threadId)
@@ -522,19 +433,13 @@ async function resumeActiveRun(
   streamController = new AbortController()
   try {
     await streamOracleRun(runId, (event) => {
-      if (event.type === 'done') presentationReady = true
       applyOracleStreamEvent({
         event,
         target,
-        waitForComplete: waitForComplete.value,
-        enqueueText: (text) => enqueuePresentation(target.id, text),
-        releasePresentation,
-        clearPresentation,
         responseUnavailable: t('oracle.responseUnavailable'),
         responseCancelled: t('oracle.responseCancelled'),
       })
     }, streamController.signal)
-    await waitForPresentationDrain()
     if (target.runState === 'responding') target.runState = 'completed'
     oracleStore.completeRun(threadId)
     await Promise.all([oracleStore.loadThreads(), loadThreadMessages(threadId)])
@@ -572,7 +477,6 @@ async function handleCancel() {
   if (!currentRunId) return
   const runId = currentRunId
   streamController?.abort()
-  clearPresentation(true)
   const pending = [...activeMessages.value].reverse().find(
     (message) => message.role === 'assistant'
       && ['thinking', 'preparing', 'responding'].includes(message.runState || ''),
@@ -613,7 +517,6 @@ watch(
     if (threadId === activeThreadId.value) return
     if (!threadId) {
       streamController?.abort()
-      clearPresentation()
       oracleStore.selectThread(null)
       activeMessages.value = []
       allThreadTurns.value = []
@@ -662,7 +565,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   isLeavingView = true
   streamController?.abort()
-  clearPresentation()
 })
 </script>
 

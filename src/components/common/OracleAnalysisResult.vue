@@ -222,7 +222,7 @@
               <strong>{{ source.title || t('oracle.academicSource') }}</strong>
               <small>{{ source.year || '' }}<template v-if="source.doi"> · {{ source.doi }}</template></small>
             </span>
-            <span class="oracle-source-card__open" aria-hidden="true">↗</span>
+            <AppIcon class="oracle-source-card__open" name="external-link" :size="14" />
           </button>
         </div>
       </section>
@@ -417,6 +417,7 @@ import { usePostStore } from '@/store/usePostStore'
 import { useDreamStore } from '@/store/useDreamStore'
 import apiClient from '@/api/client'
 import AppFeedbackChoiceGroup, { type FeedbackChoice } from '@/components/common/AppFeedbackChoiceGroup.vue'
+import AppIcon from '@/components/common/AppIcon.vue'
 import OracleCitationModal from '@/features/oracle/components/OracleCitationModal.vue'
 import type { OracleCitationDto } from '@/api/oracleApi'
 import { useDreamContinuationStore } from '@/store/useDreamContinuationStore'

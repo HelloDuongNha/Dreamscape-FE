@@ -80,6 +80,11 @@
         >
           <div class="conv-list__avatar" :style="{ background: getAvatarBg(item.user._id) }">
             {{ getInitials(item.user.display_name) }}
+            <span
+              v-if="chatStore.isUserOnline(item.user._id, item.user.lastHeartbeatAt)"
+              class="conv-list__online-indicator"
+              :aria-label="t('messages.activeNow')"
+            />
           </div>
           <div class="conv-list__user-info">
             <span class="conv-list__user-name">{{ item.user.display_name }}</span>
@@ -136,23 +141,56 @@
         :aria-pressed="activeId === item.conversation._id"
         :tabindex="0"
         @click="$emit('select', item.conversation._id)"
-        @keydown.enter="$emit('select', item.conversation._id)"
+        @keydown.enter.self="$emit('select', item.conversation._id)"
       >
         <div class="conv-list__avatar" :style="{ background: getAvatarBg(item.partner._id) }">
           {{ getInitials(item.partner.display_name) }}
+          <span
+            v-if="chatStore.isUserOnline(item.partner._id, item.partner.lastHeartbeatAt)"
+            class="conv-list__online-indicator"
+            :aria-label="t('messages.activeNow')"
+          />
         </div>
         <div class="conv-list__item-body">
           <div class="conv-list__item-top">
-            <span class="conv-list__item-name">{{ item.partner.display_name }}</span>
-            <!-- Unread badge — shown when count > 0 -->
-            <span
-              v-if="item.conversation.unread_count > 0"
-              class="conv-list__unread-badge"
-              :aria-label="`${item.conversation.unread_count} unread messages`"
-            >
-              {{ item.conversation.unread_count > 9 ? '9+' : item.conversation.unread_count }}
+            <span class="conv-list__item-identity">
+              <span class="conv-list__item-name">{{ item.partner.display_name }}</span>
+              <svg
+                v-if="isMuted(item.conversation._id)"
+                class="conv-list__mute-icon"
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                :aria-label="t('messages.muted')"
+              >
+                <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+                <line x1="22" y1="9" x2="16" y2="15" />
+                <line x1="16" y1="9" x2="22" y2="15" />
+              </svg>
             </span>
-            <span v-else class="conv-list__item-time">{{ timeAgo(item.conversation.updated_at) }}</span>
+
+            <span class="conv-list__item-meta">
+              <span
+                v-if="item.conversation.unread_count > 0"
+                class="conv-list__unread-badge"
+                :aria-label="t('messages.unreadCount', { count: item.conversation.unread_count })"
+              >
+                {{ item.conversation.unread_count > 9 ? '9+' : item.conversation.unread_count }}
+              </span>
+              <span v-else class="conv-list__item-time">{{ timeAgo(item.conversation.updated_at) }}</span>
+              <ConversationActionsMenu
+                :muted="isMuted(item.conversation._id)"
+                :deleting="isDeleting && pendingDelete?.conversation._id === item.conversation._id"
+                variant="list"
+                @toggle-mute="toggleConversationMute(item.conversation._id)"
+                @delete="requestDelete(item)"
+              />
+            </span>
           </div>
           <p
             class="conv-list__item-snippet"
@@ -171,15 +209,29 @@
       <span aria-hidden="true">◈</span>
       <p>No conversations yet.<br>Search for someone to start chatting.</p>
     </div>
+
+    <AppConfirm
+      v-model="deleteConfirmOpen"
+      :title="t('messages.deleteConversation')"
+      :message="t('messages.deleteConversationConfirm', { name: pendingDelete?.partner.display_name || '' })"
+      :confirm-label="t('messages.deleteConversation')"
+      :loading="isDeleting"
+      danger
+      @confirm="confirmDelete"
+      @cancel="clearPendingDelete"
+    />
   </aside>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getInitials, getAvatarBg } from '@/data/mockUsers'
+import AppConfirm from '@/components/common/AppConfirm.vue'
+import { getInitials, getAvatarBg } from '@/utils/avatar'
 import { timeAgo }                  from '@/utils/timeAgo'
 import { useChatStore }             from '@/store/useChatStore'
+import { useSettingsStore }         from '@/store/useSettingsStore'
+import ConversationActionsMenu      from './ConversationActionsMenu.vue'
 import type {
   MessagingConversationSearchResult,
   MessagingMessageSearchResult,
@@ -198,12 +250,16 @@ const emit = defineEmits<{
 }>()
 
 const chatStore   = useChatStore()
+const settingsStore = useSettingsStore()
 const { t } = useI18n()
 const searchId    = `conv-search-${Math.random().toString(36).slice(2, 6)}`
 const searchQuery = ref('')
 const isSearching = ref(false)
 const activeSearchTab = ref<'conversations' | 'messages'>('conversations')
 const searchResults = ref<MessagingSearchResponse>({ conversations: [], messages: [] })
+const deleteConfirmOpen = ref(false)
+const isDeleting = ref(false)
+const pendingDelete = ref<ConversationWithPartner | null>(null)
 
 // Debounce timer
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -265,6 +321,45 @@ function messageSenderLabel(item: MessagingMessageSearchResult): string {
     ? item.message.senderId._id
     : item.message.senderId
   return senderId === chatStore.currentUserId ? 'You' : item.partner.display_name
+}
+
+function isMuted(conversationId: string): boolean {
+  return chatStore.mutedConversations[conversationId] ?? false
+}
+
+function toggleConversationMute(conversationId: string): void {
+  const willMute = !isMuted(conversationId)
+  chatStore.toggleMute(conversationId)
+  settingsStore.showToastKey(
+    willMute ? 'messages.conversationMuted' : 'messages.conversationUnmuted',
+  )
+}
+
+function requestDelete(item: ConversationWithPartner): void {
+  pendingDelete.value = item
+  deleteConfirmOpen.value = true
+}
+
+function clearPendingDelete(): void {
+  if (isDeleting.value) return
+  pendingDelete.value = null
+  deleteConfirmOpen.value = false
+}
+
+async function confirmDelete(): Promise<void> {
+  const conversationId = pendingDelete.value?.conversation._id
+  if (!conversationId || isDeleting.value) return
+  isDeleting.value = true
+  try {
+    await chatStore.deleteConversation(conversationId)
+    settingsStore.showToastKey('messages.conversationDeleted')
+    deleteConfirmOpen.value = false
+    pendingDelete.value = null
+  } catch {
+    settingsStore.showToastKey('messages.conversationDeleteFailed', undefined, 'error')
+  } finally {
+    isDeleting.value = false
+  }
 }
 </script>
 
@@ -482,6 +577,7 @@ function messageSenderLabel(item: MessagingMessageSearchResult): string {
 
 /* Shared avatar */
 .conv-list__avatar {
+  position: relative;
   width: 40px;
   height: 40px;
   border-radius: var(--radius-full);
@@ -494,8 +590,27 @@ function messageSenderLabel(item: MessagingMessageSearchResult): string {
   flex-shrink: 0;
 }
 
-.conv-list__item-body   { flex: 1; min-width: 0; }
+.conv-list__online-indicator {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--color-bg-surface);
+  border-radius: var(--radius-full);
+  background: #22c55e;
+  box-sizing: border-box;
+}
+
+.conv-list__item-body   { position: relative; flex: 1; min-width: 0; }
 .conv-list__item-top    { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.conv-list__item-identity {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 5px;
+  flex: 1;
+}
 .conv-list__item-name   {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
@@ -505,6 +620,16 @@ function messageSenderLabel(item: MessagingMessageSearchResult): string {
   text-overflow: ellipsis;
   min-width: 0;
   flex: 1;
+}
+.conv-list__mute-icon {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+.conv-list__item-meta {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
 }
 .conv-list__item-time   { font-size: var(--font-size-xs); color: var(--color-text-muted); white-space: nowrap; flex-shrink: 0; }
 .conv-list__item-snippet {
@@ -541,6 +666,26 @@ function messageSenderLabel(item: MessagingMessageSearchResult): string {
   letter-spacing: 0;
   /* zero shadow, zero gradient, zero blur */
   box-shadow: none;
+}
+
+.conv-list__item :deep(.conversation-actions--list) {
+  width: 0;
+  overflow: visible;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(4px);
+  transition:
+    width var(--transition-fast),
+    opacity var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.conv-list__item:hover :deep(.conversation-actions--list),
+.conv-list__item:focus-within :deep(.conversation-actions--list) {
+  width: 28px;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
 }
 
 /* Empty state */
