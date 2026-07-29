@@ -84,6 +84,7 @@ export const contributePdfSource = async (
 
 export interface GetApprovedSourcesParams {
   q?: string
+  doi?: string
   page?: number
   limit?: number
 }
@@ -102,11 +103,12 @@ export interface ApprovedSourcesResponse {
  * Fetches approved academic sources catalog with pagination and optional query search.
  */
 export const getApprovedSources = async (
-  params: GetApprovedSourcesParams
+  params: GetApprovedSourcesParams,
+  signal?: AbortSignal
 ): Promise<ApprovedSourcesResponse> => {
   const { data } = await apiClient.get<{ success: boolean; data: ApprovedSourcesResponse }>(
     '/sources/approved',
-    { params }
+    { params, signal }
   )
   return data.data
 }

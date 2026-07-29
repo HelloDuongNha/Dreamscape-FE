@@ -58,6 +58,19 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  async function logoutOtherSessions() {
+    try {
+      const { data } = await apiClient.post('/auth/sessions/revoke-others')
+      if (data.success) {
+        sessions.value = sessions.value.filter(session => session.is_current)
+        showToastKey('toasts.otherSessionsLoggedOutSuccess', undefined, 'success')
+      }
+    } catch {
+      showToastKey('errors.logoutOtherSessionsFailed', undefined, 'error')
+      throw new Error('logout_other_sessions_failed')
+    }
+  }
+
   // ── Toast notification ────────────────────────────────────────
   const toast = ref<Toast>({ content: { kind: 'text', text: '' }, type: 'success', visible: false })
   let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -106,6 +119,7 @@ export const useSettingsStore = defineStore('settings', () => {
     isLoadingSessions,
     loadSessions,
     logoutSession,
+    logoutOtherSessions,
     toast,
     showToast,
     showToastKey,

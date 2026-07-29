@@ -37,6 +37,8 @@ export default {
   titleLogin: 'Sign in — DreamScape',
   titleRegister: 'Create Account — DreamScape',
   titleVerifyOtp: 'Verify OTP — DreamScape',
+  titleForgotPassword: 'Recover Password — DreamScape',
+  titleResetPassword: 'Reset Password — DreamScape',
   titleHome: 'Home — DreamScape',
   titleOracle: 'Oracle — DreamScape',
   titleMessages: 'Messages — DreamScape',

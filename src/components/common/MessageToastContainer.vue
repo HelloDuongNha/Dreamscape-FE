@@ -99,6 +99,10 @@ import { useOracleChatStore } from '@/store/useOracleChatStore'
 import type { DreamAnalysisTask } from '@/store/useOracleStore'
 import { useDreamContinuationStore, type DreamContinuationTask } from '@/store/useDreamContinuationStore'
 import { usePostStore } from '@/store/usePostStore'
+import { useNotificationStore } from '@/store/useNotificationStore'
+import { useSettingsStore } from '@/store/useSettingsStore'
+import apiClient from '@/api/client'
+import type { ApiDream } from '@/api/types'
 
 const toastStore = useMessageToastStore()
 const chatStore  = useChatStore()
@@ -109,6 +113,8 @@ const sourceProgressStore = useSourceProgressStore()
 const academicQueue = useAcademicJobQueueStore()
 const oracleChatStore = useOracleChatStore()
 const continuationStore = useDreamContinuationStore()
+const notificationStore = useNotificationStore()
+const settingsStore = useSettingsStore()
 const { t } = useI18n()
 const oracleClock = ref(Date.now())
 let oracleClockTimer: ReturnType<typeof setInterval> | null = null
@@ -274,7 +280,7 @@ function dreamPinnedMessage(entry: DreamPinnedEntry) {
 
 async function openDreamPinnedTask(entry: DreamPinnedEntry) {
   if (entry.kind === 'dream-analysis') {
-    handleOraclePinnedClick(entry.task)
+    await handleOraclePinnedClick(entry.task)
     return
   }
   continuationStore.showInDialog(entry.task.dreamId)
@@ -532,12 +538,52 @@ function oracleTaskStageMessage(task: DreamAnalysisTask) {
   return t(keyByStage[stage || 'preparing'] || 'oracle.dreamAnalysisStages.preparing')
 }
 
-function handleOraclePinnedClick(task: DreamAnalysisTask) {
+async function handleOraclePinnedClick(task: DreamAnalysisTask) {
   if (task.status === 'failed') {
     oracleStore.stopTracking(task.dreamId)
     return
   }
-  oracleStore.openTask(task.dreamId)
+  if (task.status === 'pending') {
+    oracleStore.openTask(task.dreamId)
+    return
+  }
+
+  try {
+    let notification = notificationStore.notifications.find(item =>
+      item.type === 'dream_analysis' && item.postId === task.dreamId
+    )
+    if (!notification) {
+      await notificationStore.fetchNotifications()
+      notification = notificationStore.notifications.find(item =>
+        item.type === 'dream_analysis' && item.postId === task.dreamId
+      )
+    }
+
+    if (notification) {
+      const target = await notificationStore.openNotification(notification._id)
+      if (target.kind !== 'dream_analysis') throw new Error('Unexpected notification target.')
+      oracleStore.openCompletedDialog(target.dream)
+      return
+    }
+
+    // Legacy local tasks may predate persisted completion notifications. The
+    // normal Dream read endpoint still applies the same owner/public policy.
+    const response = await apiClient.get<{ success: boolean; data: ApiDream }>(
+      `/dreams/${task.dreamId}`,
+    )
+    if (!response.data.success || response.data.data.ai_status !== 'completed') {
+      throw new Error('Completed analysis is unavailable.')
+    }
+    oracleStore.openCompletedDialog(response.data.data)
+  } catch (error: any) {
+    const status = error?.response?.status
+    if (status === 404 || status === 410) {
+      oracleStore.stopTracking(task.dreamId)
+      settingsStore.showToastKey('notifications.targetUnavailable', undefined, 'error')
+      return
+    }
+    settingsStore.showToastKey('notifications.openError', undefined, 'error')
+  }
 }
 
 const extractionTitle = computed(() => {

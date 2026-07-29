@@ -25,11 +25,12 @@ export function selectDreamVerificationQuestions(
   const usedKeys = new Set<string>()
   for (const entry of entries) {
     const verificationKey = String(entry.item?.verificationKey || '')
-    const active = verificationKey
-      ? bindings.some(binding => binding.verificationKey === verificationKey)
-      : questionSources(entry.item).some(source =>
-        bindings.some(binding => sameSource(source, binding.source || {}))
-        || citations.some(citation => sameSource(source, citation)))
+    const matchesVerificationKey = Boolean(verificationKey)
+      && bindings.some(binding => binding.verificationKey === verificationKey)
+    const matchesActiveSource = questionSources(entry.item).some(source =>
+      bindings.some(binding => sameSource(source, binding.source || {}))
+      || citations.some(citation => sameSource(source, citation)))
+    const active = matchesVerificationKey || matchesActiveSource
     if (!active) continue
     const key = verificationKey
       || `${entry.item?.ruleId || ''}:${entry.item?.followUpQuestion || ''}`

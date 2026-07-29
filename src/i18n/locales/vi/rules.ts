@@ -3,6 +3,8 @@ export default {
   eyebrow: 'Kiểm duyệt lập luận học thuật', title: 'Duyệt tri thức học thuật', subtitle: 'Đối chiếu kết luận với bằng chứng nguồn trước khi đưa vào phân tích giấc mơ.',
   approveAll: 'Duyệt tất cả', rejectAll: 'Từ chối tất cả', restoreAll: 'Khôi phục tất cả', deleteAll: 'Xóa tất cả', ofDocument: ' của tài liệu',
   sourceFilter: 'Đang lọc theo một tài liệu', clearFilter: 'Bỏ lọc', statusNavigation: 'Trạng thái lập luận',
+  searchLabel: 'Tìm lập luận theo tên', searchPlaceholder: 'Tìm theo tên lập luận…', clearSearch: 'Xóa nội dung tìm kiếm',
+  searchingRules: 'Đang tìm lập luận…', noSearchResults: 'Không có tên lập luận nào khớp nội dung tìm kiếm.', searchErrorTitle: 'Không thể tìm kiếm', searchErrorDescription: 'Không thể tìm trong danh sách lập luận. Các bộ lọc hiện tại vẫn được giữ nguyên.', retrySearch: 'Thử lại',
   statuses: { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Bị từ chối' },
   loadingRules: 'Đang tải lập luận…', noData: 'Không có dữ liệu', noRulesForSource: 'Tài liệu này chưa có lập luận ở trạng thái đã chọn.', noRules: 'Chưa có lập luận ở trạng thái đã chọn.',
   ruleCount: '{count} lập luận', knowledgeCluster: 'Cụm tri thức liên quan', evidenceGroupCount: '{count} cụm dẫn chứng', loadingDetail: 'Đang tải kết luận và bằng chứng…', selectRule: 'Chọn một lập luận', selectRuleDescription: 'Thông tin đánh giá và trích dẫn sẽ xuất hiện tại đây.',
@@ -51,7 +53,7 @@ export default {
   },
   criteria: { source_breadth: 'Số nguồn độc lập hỗ trợ', research_fit: 'Độ phù hợp của thiết kế nghiên cứu', evidence_breadth: 'Độ phủ dẫn chứng theo chunk', scope_definition: 'Phạm vi và giới hạn được nêu rõ', conflict_handling: 'Kiểm tra bằng chứng trái chiều' },
   relationKinds: { equivalent: 'Cùng nội dung', overlapping: 'Liên quan nhưng khác phạm vi', complementary: 'Mệnh đề bổ sung', scope_tension: 'Căng thẳng do khác phạm vi', shared_context: 'Cùng ngữ cảnh nguồn', contradictory: 'Kết luận trái chiều', reverse_direction: 'Quan hệ đảo chiều' },
-  toasts: { bulkDone: 'Đã xử lý {processed} lập luận.', bulkPartial: 'Đã xử lý {processed} lập luận; {failed} lập luận cần kiểm tra riêng.', bulkFailed: 'Không thể thực hiện thao tác hàng loạt.', listFailed: 'Không thể tải danh sách Rule V3.', detailFailed: 'Không thể tải chi tiết Rule V3.', approved: 'Đã phê duyệt lập luận.', approveFailed: 'Không thể phê duyệt lập luận.', rejected: 'Đã từ chối lập luận.', rejectFailed: 'Không thể từ chối lập luận.' },
+  toasts: { bulkDone: 'Đã xử lý {processed} lập luận.', bulkPartial: 'Đã xử lý {processed} lập luận; {failed} lập luận cần kiểm tra riêng.', bulkFailed: 'Không thể thực hiện thao tác hàng loạt.', listFailed: 'Không thể tải danh sách Rule V3.', detailFailed: 'Không thể tải chi tiết Rule V3.', approved: 'Đã phê duyệt lập luận.', approvedReconciliationPending: 'Đã duyệt lập luận, nhưng các citation liên quan chưa thể đồng bộ.', approveFailed: 'Không thể phê duyệt lập luận.', rejected: 'Đã từ chối lập luận.', rejectFailed: 'Không thể từ chối lập luận.' },
   extraction: {
     queued: 'Đang chờ tới lượt phân tích',
     queuedDetail: 'Tác vụ sẽ tự bắt đầu khi lượt phân tích trước hoàn tất.',

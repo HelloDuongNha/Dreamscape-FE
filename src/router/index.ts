@@ -25,6 +25,18 @@ const router = createRouter({
       component: () => import('@/features/auth/OtpVerifyView.vue'),
       meta: { titleKey: 'navigation.titleVerifyOtp', public: true },
     },
+    {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('@/features/auth/ForgotPasswordView.vue'),
+      meta: { titleKey: 'navigation.titleForgotPassword', public: true },
+    },
+    {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('@/features/auth/ResetPasswordView.vue'),
+      meta: { titleKey: 'navigation.titleResetPassword', public: true },
+    },
 
     // ── App routes (with sidebar via MainLayout) ──────────────────────────────
     {
@@ -126,7 +138,12 @@ router.beforeEach((to) => {
   const auth = useAuthStore()
 
   // Already logged in → don't allow re-visiting login/register (but allow verify-otp for email update)
-  if (to.meta.public && auth.isLoggedIn && to.name !== 'verify-otp') {
+  if (
+    to.meta.public &&
+    auth.isLoggedIn &&
+    to.name !== 'verify-otp' &&
+    to.name !== 'reset-password'
+  ) {
     return { name: 'home' }
   }
 

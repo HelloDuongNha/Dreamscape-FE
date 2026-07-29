@@ -134,6 +134,7 @@ export const useChatStore = defineStore('chat', () => {
 
     socket.on('connect', () => {
       console.log('🔌 Socket connected:', socket?.id)
+      void reconcileVisibleCitationState()
     })
 
     socket.on('disconnect', (reason) => {
@@ -262,8 +263,16 @@ export const useChatStore = defineStore('chat', () => {
       }
     })
 
-    socket.on('error_message', (err: { message: string }) => {
-      console.log('Socket error:', err.message)
+    socket.on('error_message', (err: { code?: string; tempId?: string }) => {
+      if (err.tempId) {
+        messages.value = messages.value.filter(message => message._id !== err.tempId)
+      }
+      void import('@/store/useSettingsStore').then(({ useSettingsStore }) => {
+        const key = err.code === 'conversation_access_denied'
+          ? 'messages.conversationUnavailable'
+          : 'messages.sendFailed'
+        useSettingsStore().showToastKey(key, undefined, 'error')
+      })
     })
 
     // ── Incoming notification ────────────────────────────────────────────────
@@ -284,6 +293,25 @@ export const useChatStore = defineStore('chat', () => {
       void import('@/store/useOracleChatStore').then(({ useOracleChatStore }) => {
         useOracleChatStore().notifyCitationStateChanged(payload)
       })
+    })
+  }
+
+  async function reconcileVisibleCitationState(): Promise<void> {
+    const postStore = usePostStore()
+    if (postStore.focusedId) {
+      try {
+        await postStore.refreshFocusedDream()
+      } catch (error) {
+        console.warn('Could not reconcile the focused Dream after reconnect.', error)
+      }
+    }
+
+    const { useOracleChatStore } = await import('@/store/useOracleChatStore')
+    const oracleStore = useOracleChatStore()
+    if (!oracleStore.activeThreadId) return
+    oracleStore.notifyCitationStateChanged({
+      threadIds: [oracleStore.activeThreadId],
+      turnIds: [],
     })
   }
 

@@ -15,7 +15,7 @@
           <button
             type="button"
             class="app-confirm__close-btn"
-            aria-label="Đóng"
+            :aria-label="t('common.confirm.close')"
             :disabled="loading"
             @click="handleCancel"
           >
@@ -46,7 +46,7 @@
               :disabled="loading"
               @click="handleCancel"
             >
-              {{ cancelLabel }}
+              {{ resolvedCancelLabel }}
             </button>
             <button
               type="button"
@@ -56,7 +56,7 @@
               :disabled="loading"
               @click="handleConfirm"
             >
-              {{ loading ? 'Please wait…' : confirmLabel }}
+              {{ loading ? t('common.confirm.loading') : resolvedConfirmLabel }}
             </button>
           </div>
         </div>
@@ -67,6 +67,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = withDefaults(defineProps<{
   modelValue:   boolean          // v-model — controls visibility
@@ -78,8 +79,8 @@ const props = withDefaults(defineProps<{
   danger?:       boolean         // if true, confirm button is red
   loading?:      boolean         // while async confirm action runs
 }>(), {
-  confirmLabel: 'Confirm',
-  cancelLabel:  'Cancel',
+  confirmLabel: '',
+  cancelLabel:  '',
   secondaryLabel: '',
   danger:       false,
   loading:      false,
@@ -92,9 +93,12 @@ const emit = defineEmits<{
   secondary: []
 }>()
 
+const { t } = useI18n()
 const uid      = `app-confirm-${Math.random().toString(36).slice(2, 7)}`
 const titleId  = computed(() => `${uid}-title`)
 const messageId = computed(() => `${uid}-msg`)
+const resolvedConfirmLabel = computed(() => props.confirmLabel || t('common.confirm.confirm'))
+const resolvedCancelLabel = computed(() => props.cancelLabel || t('common.confirm.cancel'))
 
 function handleConfirm() {
   if (props.loading) return

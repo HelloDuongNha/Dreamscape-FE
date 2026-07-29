@@ -12,6 +12,12 @@ export default {
   pinnedTaskCollapse: 'Tuck notification into the screen edge',
   pinnedTaskExpand: 'Show notification',
   pinnedTaskView: 'View',
+  confirm: {
+    close: 'Close',
+    confirm: 'Confirm',
+    cancel: 'Cancel',
+    loading: 'Please wait…',
+  },
   titleEditor: {
     update: 'Update title',
     success: 'Document title updated.',

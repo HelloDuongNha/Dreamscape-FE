@@ -12,6 +12,12 @@ export default {
   pinnedTaskCollapse: 'Thu thông báo vào cạnh màn hình',
   pinnedTaskExpand: 'Mở lại thông báo',
   pinnedTaskView: 'Xem',
+  confirm: {
+    close: 'Đóng',
+    confirm: 'Xác nhận',
+    cancel: 'Hủy',
+    loading: 'Vui lòng chờ…',
+  },
   titleEditor: {
     update: 'Cập nhật tiêu đề',
     success: 'Đã cập nhật tiêu đề tài liệu.',

@@ -4,7 +4,7 @@
     <!-- ══════════════════════════════════════════
          ① POST COMPOSER
     ═══════════════════════════════════════════ -->
-    <div v-if="!dreamStore.searchQuery" class="composer">
+    <div v-if="!isSearchMode" class="composer">
       <!-- Left: current user avatar -->
       <div
         class="composer__avatar"
@@ -73,15 +73,20 @@
     <!-- Divider -->
     <div class="home-divider" role="separator" />
 
+    <DreamMoodFilter v-model="dreamStore.searchMood" />
+
     <!-- ══════════════════════════════════════════
          ② SEARCH RESULT LABEL
     ═══════════════════════════════════════════ -->
-    <div v-if="dreamStore.searchQuery" class="search-results-label">
+    <div v-if="isSearchMode" class="search-results-label" aria-live="polite">
       <span class="search-results-label__count">
-        {{ t('home.resultsCount', filteredDreams.length) }}
+        {{ t('home.resultsCount', displayedItems.length) }}
       </span>
-      <span class="search-results-label__query">
+      <span v-if="dreamStore.searchQuery.trim()" class="search-results-label__query">
         {{ t('home.resultsFor') }} <span translate="no">“{{ dreamStore.searchQuery }}”</span>
+      </span>
+      <span v-if="dreamStore.searchMood" class="search-results-label__query">
+        · {{ t(`home.moodScale.label.${dreamStore.searchMood}`) }}
       </span>
     </div>
 
@@ -90,25 +95,36 @@
     ═══════════════════════════════════════════ -->
     <section class="dream-feed" :aria-label="t('home.feedAria')">
       <!-- Initial loading skeletons -->
-      <template v-if="dreamStore.isLoading">
+      <template v-if="isInitialLoading">
         <AppSkeleton v-for="i in 3" :key="i" type="card" />
       </template>
 
       <template v-else>
+        <div v-if="isSearchMode && dreamStore.searchError" class="feed-empty" role="alert">
+          <span class="feed-empty__icon" aria-hidden="true">⚠</span>
+          <p class="feed-empty__text">{{ t('home.searchError') }}</p>
+          <AppButton size="sm" variant="secondary" @click="dreamStore.searchDreams()">
+            {{ t('home.retrySearch') }}
+          </AppButton>
+        </div>
+
         <!-- Empty state -->
-        <div v-if="filteredDreams.length === 0" class="feed-empty">
+        <div v-else-if="displayedItems.length === 0" class="feed-empty">
           <span class="feed-empty__icon" aria-hidden="true">◈</span>
           <p class="feed-empty__text">
-            {{ dreamStore.searchQuery ? t('home.noSearchResults') : t('home.noDreams') }}
+            {{ isSearchMode ? t('home.noSearchResults') : t('home.noDreams') }}
           </p>
         </div>
 
         <!-- Dream cards -->
         <DreamCard
-          v-for="item in filteredDreams"
+          v-for="item in displayedItems"
           :key="item.dream._id"
           :dream="item.dream as any"
           :user="item.user as any"
+          :content-highlights="item.dreamRanges"
+          :matched-comments="item.matchedComments"
+          :matched-comment-count="item.matchedCommentCount"
           class="feed-card"
         />
 
@@ -116,13 +132,13 @@
         <div ref="sentinel" class="feed-sentinel" aria-hidden="true" />
 
         <!-- Load more skeletons -->
-        <template v-if="dreamStore.isLoadingMore">
+        <template v-if="isLoadingMoreResults">
           <AppSkeleton v-for="i in 2" :key="`more-${i}`" type="card" />
         </template>
 
         <!-- End of feed -->
-        <div v-if="!dreamStore.hasMore && filteredDreams.length > 0" class="feed-end">
-          <span>{{ t('home.feedEnd') }}</span>
+        <div v-if="!hasMoreResults && displayedItems.length > 0" class="feed-end">
+          <span>{{ isSearchMode ? t('home.searchEnd') : t('home.feedEnd') }}</span>
         </div>
       </template>
     </section>
@@ -138,11 +154,12 @@ import { useRoute, useRouter } from 'vue-router'
 import AppButton       from '@/components/common/AppButton.vue'
 import AppSwitch       from '@/components/common/AppSwitch.vue'
 import AppSkeleton     from '@/components/common/AppSkeleton.vue'
+import DreamMoodFilter from '@/components/common/DreamMoodFilter.vue'
 import DreamCard       from './DreamCard.vue'
 import { useDreamStore } from '@/store/useDreamStore'
 import { useAuthStore }  from '@/store/useAuthStore'
 import { usePostStore }  from '@/store/usePostStore'
-import type { ApiDream, ApiUser } from '@/api/types'
+import type { ApiDream, ApiUser, DreamSearchItem } from '@/api/types'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 
 const dreamStore = useDreamStore()
@@ -208,20 +225,45 @@ function resolveUser(dream: ApiDream): ApiUser {
   }
 }
 
-const dreamsWithUsers = computed(() =>
-  dreamStore.dreams.map(dream => ({ dream, user: resolveUser(dream) }))
+type PresentedDreamSearchItem = DreamSearchItem & { user: ApiUser }
+
+const isSearchMode = computed(() =>
+  Boolean(dreamStore.searchQuery.trim() || dreamStore.searchMood)
+)
+const feedItems = computed<PresentedDreamSearchItem[]>(() =>
+  dreamStore.dreams.map(dream => ({
+    dream,
+    user: resolveUser(dream),
+    dreamRanges: [],
+    matchedComments: [],
+    matchedCommentCount: 0,
+  }))
+)
+const displayedItems = computed<PresentedDreamSearchItem[]>(() =>
+  isSearchMode.value
+    ? dreamStore.searchResults.map(item => ({ ...item, user: resolveUser(item.dream) }))
+    : feedItems.value
+)
+const isInitialLoading = computed(() =>
+  isSearchMode.value ? dreamStore.isSearching && !dreamStore.searchResults.length : dreamStore.isLoading
+)
+const isLoadingMoreResults = computed(() =>
+  isSearchMode.value ? dreamStore.isSearchLoadingMore : dreamStore.isLoadingMore
+)
+const hasMoreResults = computed(() =>
+  isSearchMode.value ? Boolean(dreamStore.searchNextCursor) : dreamStore.hasMore
 )
 
-const filteredDreams = computed(() => {
-  const q = dreamStore.searchQuery.trim().toLowerCase()
-  if (!q) return dreamsWithUsers.value
-  return dreamsWithUsers.value.filter(({ dream, user }) =>
-    dream.content.toLowerCase().includes(q) ||
-    user.display_name.toLowerCase().includes(q) ||
-    user.username.toLowerCase().includes(q) ||
-    dream.mood_tag.toLowerCase().includes(q)
-  )
-})
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  [() => dreamStore.searchQuery, () => dreamStore.searchMood],
+  () => {
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => {
+      void dreamStore.searchDreams()
+    }, 300)
+  },
+)
 
 // ── Infinite Scroll via IntersectionObserver ──────────────────────────────────
 const sentinel = ref<HTMLElement | null>(null)
@@ -231,9 +273,14 @@ function setupObserver() {
   if (!sentinel.value) return
   observer = new IntersectionObserver(
     ([entry]) => {
-      if (entry.isIntersecting && dreamStore.hasMore && !dreamStore.isLoadingMore) {
-        dreamStore.loadMore()
+      if (!entry.isIntersecting) return
+      if (isSearchMode.value) {
+        if (dreamStore.searchNextCursor && !dreamStore.isSearchLoadingMore) {
+          void dreamStore.loadMoreSearchResults()
+        }
+        return
       }
+      if (dreamStore.hasMore && !dreamStore.isLoadingMore) void dreamStore.loadMore()
     },
     { threshold: 0.1 }
   )
@@ -243,12 +290,14 @@ function setupObserver() {
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await dreamStore.loadFeed()
+  if (isSearchMode.value) await dreamStore.searchDreams()
   // Set up observer after feed loads so sentinel is rendered
   setupObserver()
 })
 
 onUnmounted(() => {
   observer?.disconnect()
+  if (searchTimer) clearTimeout(searchTimer)
 })
 
 // Re-attach observer if it wasn't set up on initial load (rare edge case)

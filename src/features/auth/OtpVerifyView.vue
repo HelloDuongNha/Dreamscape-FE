@@ -4,7 +4,9 @@
     <div class="auth-card">
       <div class="auth-logo" aria-hidden="true">◈</div>
       <h1 class="auth-title">{{ t('auth.verifyOtpTitle') }}</h1>
-      <p class="auth-sub" v-html="t('auth.verifyOtpSub', { email: `<strong>${email}</strong>` })"></p>
+      <i18n-t keypath="auth.verifyOtpSub" tag="p" class="auth-sub">
+        <template #email><strong>{{ email }}</strong></template>
+      </i18n-t>
 
       <div v-if="localError || backendError" class="auth-error" role="alert">
         <span v-if="localError">{{ t(localError.key, localError.params || {}) }}</span>
@@ -48,8 +50,19 @@
 
       <p class="auth-switch">
         {{ t('auth.noCodeText') }}
-        <button type="button" class="resend-btn" :disabled="resending" @click="handleResend">
-          {{ resending ? t('auth.resendingBtn') : t('auth.resendBtn') }}
+        <button
+          type="button"
+          class="resend-btn"
+          :disabled="resending || resendSeconds > 0"
+          @click="handleResend"
+        >
+          {{
+            resending
+              ? t('auth.resendingBtn')
+              : resendSeconds > 0
+                ? t('auth.resendIn', { seconds: resendSeconds })
+                : t('auth.resendBtn')
+          }}
         </button>
       </p>
     </div>
@@ -57,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/common/AppButton.vue'
@@ -65,6 +78,13 @@ import AuthLocaleSwitch from '@/components/common/AuthLocaleSwitch.vue'
 import apiClient from '@/api/client'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import {
+  otpErrorKey,
+  otpResendEndpoint,
+  otpVerificationEndpoint,
+  parseOtpDate,
+  type OtpPurpose,
+} from './otpPresentation'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -73,24 +93,41 @@ const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 
 const email = computed(() => (route.query.email as string) || '')
-const purpose = computed(() => (route.query.purpose as string) || 'register')
+const purpose = computed<OtpPurpose>(() => {
+  const candidate = route.query.purpose
+  if (candidate === 'update_email' || candidate === 'forgot_password') return candidate
+  return 'register'
+})
 
 const digits = ref<string[]>(['', '', '', '', '', ''])
 const inputRefs = ref<HTMLInputElement[]>([])
 
 const loading = ref(false)
 const resending = ref(false)
+const resendAvailableAt = ref(parseOtpDate(route.query.resendAvailableAt))
+const now = ref(Date.now())
+let countdownTimer: number | undefined
 
 const localError = ref<{ key: string; params?: Record<string, string | number> } | null>(null)
 const backendError = ref<string | null>(null)
 const localSuccess = ref<{ key: string; params?: Record<string, string | number> } | null>(null)
 
 const isComplete = computed(() => digits.value.every(d => d !== ''))
+const resendSeconds = computed(() =>
+  Math.max(0, Math.ceil((resendAvailableAt.value - now.value) / 1000))
+)
 
 onMounted(() => {
   if (inputRefs.value[0]) {
     inputRefs.value[0].focus()
   }
+  countdownTimer = window.setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
+})
+
+onUnmounted(() => {
+  if (countdownTimer !== undefined) window.clearInterval(countdownTimer)
 })
 
 function handleInput(e: Event, idx: number) {
@@ -136,10 +173,11 @@ async function handleVerify() {
   const otpCode = digits.value.join('')
 
   try {
-    const { data } = await apiClient.post('/auth/verify-otp', {
+    const endpoint = otpVerificationEndpoint(purpose.value)
+    const { data } = await apiClient.post(endpoint, {
       email: email.value,
       otpCode,
-      purpose: purpose.value,
+      ...(purpose.value === 'update_email' ? {} : { purpose: purpose.value }),
     })
 
     if (data.success) {
@@ -162,20 +200,23 @@ async function handleVerify() {
         authStore.updateCurrentUser(data.user)
         settingsStore.verified = true
         settingsStore.showToastKey('toasts.emailVerifiedSuccess', undefined, 'success')
-        router.push('/settings/security')
+        router.push({ path: '/settings/security', query: { securityChange: 'email' } })
       } else {
+        if (data.recoveryGrant) {
+          sessionStorage.setItem('ds_password_recovery_grant', data.recoveryGrant)
+          sessionStorage.setItem('ds_password_recovery_email', email.value)
+        }
         settingsStore.showToastKey('toasts.otpVerifiedSuccess', undefined, 'success')
+        router.push('/reset-password')
       }
     }
   } catch (err: any) {
-    const msg = err.response?.data?.message
-    if (msg) {
-      backendError.value = msg
-      settingsStore.showToast(msg, 'error')
-    } else {
-      localError.value = { key: 'errors.verificationFailed' }
-      settingsStore.showToastKey('errors.verificationFailed', undefined, 'error')
+    const errorKey = otpErrorKey(err.response?.data?.code)
+    localError.value = {
+      key: errorKey,
+      params: { count: err.response?.data?.attemptsRemaining ?? 0 },
     }
+    settingsStore.showToastKey(errorKey, localError.value.params, 'error')
   } finally {
     loading.value = false
   }
@@ -189,14 +230,17 @@ async function handleResend() {
   localSuccess.value = null
 
   try {
-    const { data } = await apiClient.post('/auth/resend-otp', {
+    const endpoint = otpResendEndpoint(purpose.value)
+    const { data } = await apiClient.post(endpoint, {
       email: email.value,
-      purpose: purpose.value,
+      ...(purpose.value === 'update_email' ? {} : { purpose: purpose.value }),
     })
 
     if (data.success) {
       localSuccess.value = { key: 'auth.otpResentSuccess' }
-      settingsStore.showToastKey('toasts.otpVerifiedSuccess', undefined, 'success') // Resent notification
+      settingsStore.showToastKey('auth.otpResentSuccess', undefined, 'success')
+      resendAvailableAt.value = parseOtpDate(data.resendAvailableAt)
+      now.value = Date.now()
       // Reset inputs
       digits.value = ['', '', '', '', '', '']
       if (inputRefs.value[0]) {
@@ -204,18 +248,18 @@ async function handleResend() {
       }
     }
   } catch (err: any) {
-    const msg = err.response?.data?.message
-    if (msg) {
-      backendError.value = msg
-      settingsStore.showToast(msg, 'error')
-    } else {
-      localError.value = { key: 'errors.resendFailed' }
-      settingsStore.showToastKey('errors.resendFailed', undefined, 'error')
+    const errorCode = err.response?.data?.code
+    if (errorCode === 'otp_resend_cooldown') {
+      resendAvailableAt.value = Date.now() + Number(err.response?.data?.retryAfterSeconds || 0) * 1000
     }
+    const errorKey = otpErrorKey(errorCode, true)
+    localError.value = { key: errorKey }
+    settingsStore.showToastKey(errorKey, undefined, 'error')
   } finally {
     resending.value = false
   }
 }
+
 </script>
 
 <style scoped>

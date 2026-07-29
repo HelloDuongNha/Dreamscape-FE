@@ -3,6 +3,20 @@
     <h2 class="settings-section__title">{{ t('settings.accountHeading') }}</h2>
     <p class="settings-section__desc">{{ t('settings.accountDesc') }}</p>
 
+    <div class="settings-block">
+      <div class="settings-block__header">
+        <h3 class="settings-block__label">{{ t('settings.avatarHeading') }}</h3>
+        <p class="settings-block__hint">{{ t('settings.avatarHint') }}</p>
+      </div>
+      <AvatarEditor
+        v-if="authStore.myUser"
+        :avatar="authStore.myUser.avatar"
+        :display-name="authStore.myUser.display_name"
+        :user-id="authStore.myUser._id"
+        variant="settings"
+      />
+    </div>
+
     <!-- Display Name -->
     <div class="settings-block">
       <div class="settings-block__header">
@@ -173,6 +187,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n }              from 'vue-i18n'
 import AppInput                  from '@/components/common/AppInput.vue'
 import AppButton                 from '@/components/common/AppButton.vue'
+import AvatarEditor              from '@/features/profile/AvatarEditor.vue'
 import { useAuthStore }          from '@/store/useAuthStore'
 import { useSettingsStore }      from '@/store/useSettingsStore'
 import apiClient                 from '@/api/client'

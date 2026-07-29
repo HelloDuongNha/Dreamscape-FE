@@ -72,14 +72,55 @@
     <!-- ── Body ── -->
     <div class="dream-card__body">
       <p class="dream-card__content" @click="openModal">
-        <span translate="no">{{ displayContent }}</span>
+        <span v-if="dreamExcerpt.clippedBefore" aria-hidden="true">…</span>
+        <template v-for="(segment, index) in dreamExcerpt.segments" :key="index">
+          <mark v-if="segment.highlighted" class="dream-card__highlight" translate="no">
+            {{ segment.text }}
+          </mark>
+          <span v-else translate="no">{{ segment.text }}</span>
+        </template>
         <button
-          v-if="isTruncated"
+          v-if="dreamExcerpt.clippedAfter"
           class="dream-card__see-more"
           :aria-label="t('home.readFullDreamAria', { name: user.display_name })"
           @click.stop="openModal"
         >…{{ t('home.seeMore') }}</button>
       </p>
+    </div>
+
+    <div
+      v-if="presentedCommentMatches.length"
+      class="dream-card__search-comments"
+      :aria-label="t('home.matchedComments')"
+    >
+      <div class="dream-card__search-comments-label">
+        {{ t('home.matchedComments') }}
+      </div>
+      <article
+        v-for="comment in presentedCommentMatches"
+        :key="comment._id"
+        class="dream-card__search-comment"
+      >
+        <span class="dream-card__search-comment-author" translate="no">
+          {{ comment.user?.display_name || t('home.unknownUser') }}
+        </span>
+        <p>
+          <span v-if="comment.excerpt.clippedBefore" aria-hidden="true">…</span>
+          <template v-for="(segment, index) in comment.excerpt.segments" :key="index">
+            <mark v-if="segment.highlighted" class="dream-card__highlight" translate="no">
+              {{ segment.text }}
+            </mark>
+            <span v-else translate="no">{{ segment.text }}</span>
+          </template>
+          <span v-if="comment.excerpt.clippedAfter" aria-hidden="true">…</span>
+        </p>
+      </article>
+      <span
+        v-if="matchedCommentCount > presentedCommentMatches.length"
+        class="dream-card__search-comments-more"
+      >
+        {{ t('home.moreMatchedComments', { count: matchedCommentCount - presentedCommentMatches.length }) }}
+      </span>
     </div>
 
 
@@ -192,8 +233,13 @@ import AppConfirm            from '@/components/common/AppConfirm.vue'
 import OracleAnalysisResult  from '@/components/common/OracleAnalysisResult.vue'
 import DreamMoodTag          from '@/components/common/DreamMoodTag.vue'
 import type { DropdownOption } from '@/components/common/AppDropdown.vue'
-import type { ApiDream }     from '@/api/types'
+import type {
+  ApiDream,
+  DreamSearchCommentMatch,
+  SearchTextRange,
+} from '@/api/types'
 import type { User }         from '@/data/mockUsers'
+import { createHighlightedExcerpt } from '@/utils/highlightText'
 
 const oracleStore = useOracleStore()
 const localeStore = useLocaleStore()
@@ -225,7 +271,17 @@ function navigateToProfile() {
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 
-const props = defineProps<{ dream: ApiDream; user: User }>()
+const props = withDefaults(defineProps<{
+  dream: ApiDream
+  user: User
+  contentHighlights?: SearchTextRange[]
+  matchedComments?: DreamSearchCommentMatch[]
+  matchedCommentCount?: number
+}>(), {
+  contentHighlights: () => [],
+  matchedComments: () => [],
+  matchedCommentCount: 0,
+})
 const emit  = defineEmits<{
   delete: [dreamId: string]
 }>()
@@ -275,10 +331,14 @@ async function handleLike(): Promise<void> {
 
 // ── Content truncation ────────────────────────────────────────────────────────
 
-const TRUNCATE_AT    = 200
-const isTruncated    = computed(() => props.dream.content.length > TRUNCATE_AT)
-const displayContent = computed(() =>
-  isTruncated.value ? props.dream.content.slice(0, TRUNCATE_AT) : props.dream.content
+const dreamExcerpt = computed(() =>
+  createHighlightedExcerpt(props.dream.content, props.contentHighlights, 240)
+)
+const presentedCommentMatches = computed(() =>
+  props.matchedComments.map(comment => ({
+    ...comment,
+    excerpt: createHighlightedExcerpt(comment.content, comment.ranges, 240),
+  }))
 )
 
 function openModal() {
@@ -542,6 +602,45 @@ async function confirmDelete() {
   transition: color var(--transition-fast);
 }
 .dream-card__see-more:hover { color: var(--color-text-secondary); }
+.dream-card__highlight {
+  border-radius: 2px;
+  background: #5a5127;
+  color: var(--color-text-primary);
+  box-decoration-break: clone;
+  padding: 0 1px;
+}
+.dream-card__search-comments {
+  display: grid;
+  gap: 8px;
+  margin: 0 var(--space-5) var(--space-3);
+  padding: 10px 12px;
+  border-left: 2px solid #3a3a3a;
+  background: #151515;
+}
+.dream-card__search-comments-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+.dream-card__search-comment {
+  display: grid;
+  gap: 2px;
+}
+.dream-card__search-comment-author {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+.dream-card__search-comment p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+.dream-card__search-comments-more {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
 
 /* ── Oracle status ── */
 .dream-card__oracle-wrap {

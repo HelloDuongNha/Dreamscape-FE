@@ -157,7 +157,11 @@
           <p
             class="conv-list__item-snippet"
             :class="{ 'conv-list__item-snippet--unread': item.conversation.unread_count > 0 }"
-          >{{ item.conversation.last_message || 'No messages yet' }}</p>
+          >{{
+            item.conversation.preview_unavailable
+              ? t('messages.previewUnavailable')
+              : (item.conversation.last_message || t('messages.noMessages'))
+          }}</p>
         </div>
       </li>
     </ul>
@@ -172,6 +176,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo }                  from '@/utils/timeAgo'
 import { useChatStore }             from '@/store/useChatStore'
@@ -193,6 +198,7 @@ const emit = defineEmits<{
 }>()
 
 const chatStore   = useChatStore()
+const { t } = useI18n()
 const searchId    = `conv-search-${Math.random().toString(36).slice(2, 6)}`
 const searchQuery = ref('')
 const isSearching = ref(false)

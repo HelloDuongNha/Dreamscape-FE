@@ -257,6 +257,16 @@
               @confirm="disableAiAnalysis('delete')"
               @cancel="showDisableAiConfirm = false"
             />
+            <AppConfirm
+              v-model="showDeleteCommentConfirm"
+              :title="t('home.deleteCommentTitle')"
+              :message="t('home.deleteCommentMessage')"
+              :confirm-label="t('home.delete')"
+              :danger="true"
+              :loading="isDeletingComment"
+              @confirm="confirmDeleteComment"
+              @cancel="cancelDeleteComment"
+            />
 
             <!-- ── Like interaction row ── -->
             <div class="modal-interactions">
@@ -337,8 +347,88 @@
                           <span translate="no">{{ comment.userId.display_name }}</span>
                         </RouterLink>
                         <span class="modal-comment__time">{{ timeAgo(comment.created_at, localeStore.currentLocale) }}</span>
+                        <span
+                          v-if="comment.edit_history?.length"
+                          class="modal-comment__edited"
+                        >{{ t('home.edited') }}</span>
+                        <AppDropdown
+                          v-if="canManageComment(comment)"
+                          class="modal-comment__menu"
+                          :options="commentMenuOptions(comment)"
+                          align="right"
+                          :label="t('home.commentOptions')"
+                          @select="handleCommentMenuSelect(comment, $event)"
+                        >
+                          <template #trigger="{ toggle }">
+                            <button
+                              type="button"
+                              class="modal-comment__menu-btn"
+                              :aria-label="t('home.commentOptions')"
+                              @click.stop="toggle"
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/>
+                              </svg>
+                            </button>
+                          </template>
+                        </AppDropdown>
                       </div>
-                      <p class="modal-comment__text" translate="no">{{ comment.content }}</p>
+                      <template v-if="editingCommentId === comment._id">
+                        <textarea
+                          v-model="editCommentText"
+                          class="modal-comment__editor"
+                          maxlength="500"
+                          rows="3"
+                          :aria-label="t('home.editCommentAria')"
+                          :disabled="isSavingComment"
+                          translate="no"
+                        />
+                        <div class="modal-comment__edit-actions">
+                          <span>{{ editCommentText.length }} / 500</span>
+                          <AppButton
+                            variant="ghost"
+                            size="sm"
+                            :disabled="isSavingComment"
+                            @click="cancelCommentEdit"
+                          >{{ t('home.cancel') }}</AppButton>
+                          <AppButton
+                            variant="primary"
+                            size="sm"
+                            :loading="isSavingComment"
+                            :disabled="!canSaveCommentEdit"
+                            @click="saveCommentEdit(comment)"
+                          >{{ t('home.save') }}</AppButton>
+                        </div>
+                      </template>
+                      <template v-else>
+                        <p class="modal-comment__text" translate="no">
+                          {{ displayedCommentContent(comment) }}
+                        </p>
+                        <nav
+                          v-if="comment.edit_history?.length"
+                          class="modal-comment__history"
+                          :aria-label="t('home.commentHistory')"
+                        >
+                          <button
+                            type="button"
+                            :aria-label="t('home.previousCommentVersion')"
+                            :disabled="commentVersionIndex(comment) === 0"
+                            @click="moveCommentVersion(comment, -1)"
+                          >‹</button>
+                          <span>
+                            {{ t('home.commentVersion', {
+                              current: commentVersionIndex(comment) + 1,
+                              total: commentVersions(comment).length,
+                            }) }}
+                          </span>
+                          <button
+                            type="button"
+                            :aria-label="t('home.nextCommentVersion')"
+                            :disabled="commentVersionIndex(comment) === commentVersions(comment).length - 1"
+                            @click="moveCommentVersion(comment, 1)"
+                          >›</button>
+                        </nav>
+                      </template>
                     </div>
                   </li>
                 </ul>
@@ -348,7 +438,7 @@
           </div>
 
           <!-- ── Comment input (fixed at bottom) ── -->
-          <div class="modal-input-bar">
+          <div v-if="commentsEnabled" class="modal-input-bar">
             <div
               class="modal-input-avatar"
               :style="{ background: currentAvatarBg }"
@@ -381,6 +471,13 @@
               </svg>
             </button>
           </div>
+          <div v-else class="modal-comments-disabled" role="status">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+              <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>
+              <line x1="4" y1="4" x2="20" y2="20"/>
+            </svg>
+            <span>{{ t('home.commentsDisabled') }}</span>
+          </div>
 
         </div>
       </div>
@@ -397,6 +494,7 @@ import { useDreamStore } from '@/store/useDreamStore'
 import { useAuthStore }  from '@/store/useAuthStore'
 import { useOracleStore } from '@/store/useOracleStore'
 import { useLocaleStore } from '@/store/useLocaleStore'
+import { useSettingsStore } from '@/store/useSettingsStore'
 import apiClient         from '@/api/client'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo }       from '@/utils/timeAgo'
@@ -405,7 +503,7 @@ import DreamMoodTag from '@/components/common/DreamMoodTag.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 import AppDropdown from '@/components/common/AppDropdown.vue'
-import type { ApiDream } from '@/api/types'
+import type { ApiComment, ApiDream } from '@/api/types'
 import type { DropdownItem, DropdownOption } from '@/components/common/AppDropdown.vue'
 
 const postStore  = usePostStore()
@@ -413,6 +511,7 @@ const dreamStore = useDreamStore()
 const authStore  = useAuthStore()
 const oracleStore = useOracleStore()
 const localeStore = useLocaleStore()
+const settingsStore = useSettingsStore()
 const { t } = useI18n({ useScope: 'global' })
 
 const commentText  = ref('')
@@ -436,6 +535,14 @@ const showDeletePostConfirm = ref(false)
 const isDeletingPost = ref(false)
 const showDisableAiConfirm = ref(false)
 const isUpdatingAi = ref(false)
+const editingCommentId = ref<string | null>(null)
+const editCommentText = ref('')
+const isSavingComment = ref(false)
+const pendingDeleteComment = ref<ApiComment | null>(null)
+const showDeleteCommentConfirm = ref(false)
+const isDeletingComment = ref(false)
+const commentHistoryIndexes = ref<Record<string, number>>({})
+const isUpdatingCommentsPolicy = ref(false)
 
 type DreamVersion = NonNullable<ApiDream['versions']>[number]
 
@@ -573,6 +680,16 @@ const isOwner = computed(() => {
     : postStore.focusedDream.userId
   return userId === authStore.myId
 })
+const commentsEnabled = computed(() =>
+  postStore.focusedDream?.comments_enabled !== false
+)
+const canSaveCommentEdit = computed(() =>
+  editCommentText.value.trim().length > 0
+  && editCommentText.value.trim().length <= 500
+  && editCommentText.value.trim() !== postStore.focusedComments
+    .find(comment => comment._id === editingCommentId.value)?.content
+  && !isSavingComment.value
+)
 
 const modalMenuOptions = computed((): DropdownItem[] => {
   const dream = postStore.focusedDream
@@ -593,6 +710,14 @@ const modalMenuOptions = computed((): DropdownItem[] => {
       ? t('home.enableAiAnalysis')
       : t('home.disableAiAnalysis'),
     value: 'ai-toggle',
+  })
+
+  options.push({
+    label: commentsEnabled.value
+      ? t('home.disableComments')
+      : t('home.enableComments'),
+    value: 'comments-policy',
+    disabled: isUpdatingCommentsPolicy.value,
   })
 
   if (dream?.ai_analysis_enabled !== false) {
@@ -636,8 +761,30 @@ async function handleModalMenuSelect(item: DropdownOption) {
     await retryAnalysis(dream._id)
     return
   }
+  if (item.value === 'comments-policy') {
+    await toggleCommentsPolicy()
+    return
+  }
   if (item.value === 'delete') {
     showDeletePostConfirm.value = true
+  }
+}
+
+async function toggleCommentsPolicy(): Promise<void> {
+  if (!isOwner.value || isUpdatingCommentsPolicy.value) return
+  isUpdatingCommentsPolicy.value = true
+  const nextEnabled = !commentsEnabled.value
+  try {
+    await postStore.setCommentsEnabled(nextEnabled)
+    settingsStore.showToastKey(
+      nextEnabled ? 'home.commentsEnabledSuccess' : 'home.commentsDisabledSuccess',
+      undefined,
+      'success',
+    )
+  } catch {
+    settingsStore.showToastKey('home.commentPolicyError', undefined, 'error')
+  } finally {
+    isUpdatingCommentsPolicy.value = false
   }
 }
 
@@ -749,10 +896,114 @@ const currentAvatarBg = computed(() =>
   getAvatarBg(authStore.myId)
 )
 
+function canManageComment(comment: ApiComment): boolean {
+  return comment.userId._id === authStore.myId || isOwner.value
+}
+
+function commentMenuOptions(comment: ApiComment): DropdownItem[] {
+  const options: DropdownItem[] = []
+  if (comment.userId._id === authStore.myId) {
+    options.push({ label: t('home.editComment'), value: 'edit-comment' })
+  }
+  if (options.length) options.push({ divider: true })
+  options.push({
+    label: t('home.deleteComment'),
+    value: 'delete-comment',
+    danger: true,
+  })
+  return options
+}
+
+function handleCommentMenuSelect(comment: ApiComment, item: DropdownOption): void {
+  if (item.value === 'edit-comment') {
+    editingCommentId.value = comment._id
+    editCommentText.value = comment.content
+    commentHistoryIndexes.value[comment._id] = commentVersions(comment).length - 1
+    return
+  }
+  if (item.value === 'delete-comment') {
+    pendingDeleteComment.value = comment
+    showDeleteCommentConfirm.value = true
+  }
+}
+
+function cancelCommentEdit(): void {
+  editingCommentId.value = null
+  editCommentText.value = ''
+}
+
+async function saveCommentEdit(comment: ApiComment): Promise<void> {
+  if (!canSaveCommentEdit.value || editingCommentId.value !== comment._id) return
+  isSavingComment.value = true
+  try {
+    await postStore.editComment(comment._id, editCommentText.value)
+    const updated = postStore.focusedComments.find(item => item._id === comment._id)
+    if (updated) {
+      commentHistoryIndexes.value[comment._id] = commentVersions(updated).length - 1
+    }
+    cancelCommentEdit()
+    settingsStore.showToastKey('home.commentEditedSuccess', undefined, 'success')
+  } catch {
+    settingsStore.showToastKey('home.commentEditError', undefined, 'error')
+  } finally {
+    isSavingComment.value = false
+  }
+}
+
+function cancelDeleteComment(): void {
+  if (isDeletingComment.value) return
+  pendingDeleteComment.value = null
+  showDeleteCommentConfirm.value = false
+}
+
+async function confirmDeleteComment(): Promise<void> {
+  const comment = pendingDeleteComment.value
+  if (!comment || isDeletingComment.value) return
+  isDeletingComment.value = true
+  try {
+    await postStore.deleteComment(comment._id)
+    delete commentHistoryIndexes.value[comment._id]
+    if (editingCommentId.value === comment._id) cancelCommentEdit()
+    pendingDeleteComment.value = null
+    showDeleteCommentConfirm.value = false
+    settingsStore.showToastKey('home.commentDeletedSuccess', undefined, 'success')
+  } catch {
+    settingsStore.showToastKey('home.commentDeleteError', undefined, 'error')
+  } finally {
+    isDeletingComment.value = false
+  }
+}
+
+function commentVersions(comment: ApiComment): string[] {
+  return [
+    ...(comment.edit_history || []).map(version => version.content),
+    comment.content,
+  ]
+}
+
+function commentVersionIndex(comment: ApiComment): number {
+  const versions = commentVersions(comment)
+  const selected = commentHistoryIndexes.value[comment._id]
+  return typeof selected === 'number'
+    ? Math.min(Math.max(0, selected), versions.length - 1)
+    : versions.length - 1
+}
+
+function displayedCommentContent(comment: ApiComment): string {
+  return commentVersions(comment)[commentVersionIndex(comment)] || comment.content
+}
+
+function moveCommentVersion(comment: ApiComment, delta: -1 | 1): void {
+  commentHistoryIndexes.value[comment._id] = Math.min(
+    Math.max(0, commentVersionIndex(comment) + delta),
+    commentVersions(comment).length - 1,
+  )
+}
+
 // ── Submit comment ────────────────────────────────────────────────────────────
 
 async function submitComment(): Promise<void> {
-  if (!commentText.value.trim() || isSubmitting.value) return
+  if (!commentText.value.trim() || isSubmitting.value || !commentsEnabled.value) return
   isSubmitting.value = true
   try {
     await postStore.addComment(commentText.value)
@@ -761,6 +1012,13 @@ async function submitComment(): Promise<void> {
     nextTick(() => {
       if (bodyRef.value) bodyRef.value.scrollTop = bodyRef.value.scrollHeight
     })
+  } catch (error: any) {
+    if (error?.response?.data?.code === 'comments_disabled') {
+      if (postStore.focusedDream) postStore.focusedDream.comments_enabled = false
+      settingsStore.showToastKey('home.commentsDisabledStaleError', undefined, 'error')
+    } else {
+      settingsStore.showToastKey('home.commentCreateError', undefined, 'error')
+    }
   } finally {
     isSubmitting.value = false
   }
@@ -780,6 +1038,10 @@ watch(() => postStore.focusedId, (val) => {
   } else {
     document.body.style.overflow = ''
     commentText.value = ''
+    cancelCommentEdit()
+    pendingDeleteComment.value = null
+    showDeleteCommentConfirm.value = false
+    commentHistoryIndexes.value = {}
     cancelContextEdit()
   }
 })
@@ -1304,9 +1566,10 @@ onBeforeUnmount(() => {
 .modal-comment__body { flex: 1; min-width: 0; }
 .modal-comment__meta {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-2);
   margin-bottom: 3px;
+  min-height: 26px;
 }
 .modal-comment__name {
   font-size: var(--font-size-sm);
@@ -1316,11 +1579,92 @@ onBeforeUnmount(() => {
 }
 .modal-comment__name:hover { text-decoration: underline; }
 .modal-comment__time { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.modal-comment__edited {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-style: italic;
+}
+.modal-comment__menu {
+  margin-left: auto;
+}
+.modal-comment__menu-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.modal-comment__menu-btn:hover,
+.modal-comment__menu-btn:focus-visible {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+  outline: none;
+}
 .modal-comment__text {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: var(--line-height-relaxed);
   word-break: break-word;
+  white-space: pre-wrap;
+}
+.modal-comment__editor {
+  width: 100%;
+  min-height: 74px;
+  resize: vertical;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  font: inherit;
+  line-height: var(--line-height-relaxed);
+}
+.modal-comment__editor:focus {
+  border-color: #666;
+  outline: none;
+}
+.modal-comment__edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.modal-comment__edit-actions > span {
+  margin-right: auto;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+.modal-comment__history {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+.modal-comment__history button {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+.modal-comment__history button:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}
+.modal-comment__history button:disabled {
+  cursor: default;
+  opacity: .3;
 }
 
 /* ── Comment input bar (fixed bottom) ── */
@@ -1379,6 +1723,46 @@ onBeforeUnmount(() => {
 .modal-input-submit:not(:disabled)       { color: var(--color-text-primary); }
 .modal-input-submit:disabled             { opacity: 0.3; cursor: not-allowed; }
 .modal-input-submit:not(:disabled):hover { color: #fff; }
+.modal-comments-disabled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 60px;
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid #262626;
+  background: #181818;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .modal-overlay {
+    padding: 0;
+  }
+  .modal-container {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  .modal-header,
+  .modal-content-block,
+  .modal-comments-section,
+  .modal-input-bar {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+  .modal-comment__meta {
+    flex-wrap: wrap;
+  }
+  .modal-comment__menu {
+    margin-left: auto;
+  }
+}
 
 /* ── Transition ── */
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.18s ease; }

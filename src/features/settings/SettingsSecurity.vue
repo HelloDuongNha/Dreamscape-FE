@@ -67,6 +67,14 @@
           :error="emailErrorDisplay"
           autocomplete="email"
         />
+        <AppInput
+          id="sec-email-current-password"
+          v-model="emailCurrentPw"
+          type="password"
+          :label="t('settings.emailCurrentPasswordLabel')"
+          :placeholder="t('settings.currentPasswordPlaceholder')"
+          autocomplete="current-password"
+        />
         <!-- Verification badge — sits below the input -->
         <div class="email-status-row">
           <span
@@ -132,15 +140,26 @@
         </li>
       </ul>
     </div>
+    <AppConfirm
+      v-model="showRevokePrompt"
+      :title="t('settings.revokeOtherSessionsTitle')"
+      :message="t('settings.revokeOtherSessionsMessage')"
+      :confirm-label="t('settings.revokeOtherSessionsConfirm')"
+      :cancel-label="t('settings.keepOtherSessions')"
+      :loading="isRevokingOthers"
+      danger
+      @confirm="confirmRevokeOtherSessions"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter }          from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n }            from 'vue-i18n'
 import AppInput               from '@/components/common/AppInput.vue'
 import AppButton              from '@/components/common/AppButton.vue'
+import AppConfirm             from '@/components/common/AppConfirm.vue'
 import { useSettingsStore }   from '@/store/useSettingsStore'
 import { useAuthStore }       from '@/store/useAuthStore'
 import { useLocaleStore }     from '@/store/useLocaleStore'
@@ -152,6 +171,7 @@ const settingsStore = useSettingsStore()
 const authStore     = useAuthStore()
 const localeStore   = useLocaleStore()
 const router        = useRouter()
+const route         = useRoute()
 
 // ── Password form ──────────────────────────────────────────────────
 const currentPw = ref('')
@@ -176,7 +196,6 @@ watch(confirmPw, () => { apiConfirmPwError.value = null })
 const currentPwError  = computed<{ key: string } | null>(() => {
   if (apiCurrentPwError.value) return null
   if (!currentPw.value) return null
-  if (INJECTION_RE.test(currentPw.value)) return { key: 'errors.pwInjectionError' }
   return null
 })
 const currentPwErrorDisplay = computed(() => {
@@ -192,7 +211,6 @@ const newPwError = computed<{ key: string } | null>(() => {
   const v = newPw.value
   if (!v) return null
   if (v.length < 8)            return { key: 'errors.pwLengthError' }
-  if (INJECTION_RE.test(v))    return { key: 'errors.pwInjectionError' }
   return null
 })
 const newPwErrorDisplay = computed(() => {
@@ -226,25 +244,34 @@ async function changePassword() {
   }
   isSavingPassword.value = true
   try {
-    const { data } = await apiClient.put('/auth/profile', {
+    const { data } = await apiClient.post('/auth/password/change', {
       currentPassword: currentPw.value,
-      newPassword: newPw.value
+      newPassword: newPw.value,
+      confirmPassword: confirmPw.value,
     })
     if (data.success) {
       settingsStore.showToastKey('toasts.passwordUpdatedSuccess', undefined, 'success')
       currentPw.value = ''
       newPw.value = ''
       confirmPw.value = ''
+      showRevokePrompt.value = true
     }
   } catch (err: any) {
     const response = err.response
     if (response) {
       const status = response.status
-      const msg = response.data?.message
       if (status === 401) {
-        apiCurrentPwError.value = msg ? { raw: msg } : { key: 'errors.savePasswordFailed' }
+        apiCurrentPwError.value = { key: 'errors.currentPasswordInvalid' }
       } else {
-        apiNewPwError.value = msg ? { raw: msg } : { key: 'errors.savePasswordFailed' }
+        apiNewPwError.value = {
+          key: response.data?.code === 'password_reused'
+            ? 'errors.passwordReused'
+            : response.data?.code === 'password_complexity_invalid'
+              ? 'errors.passwordComplexity'
+              : response.data?.code === 'password_provider_conflict'
+                ? 'errors.passwordProviderConflict'
+                : 'errors.savePasswordFailed'
+        }
       }
     } else {
       apiNewPwError.value = { key: 'errors.networkError' }
@@ -257,6 +284,7 @@ async function changePassword() {
 
 // ── Email ──────────────────────────────────────────────────────────
 const localEmail    = ref(authStore.myUser?.email ?? '')
+const emailCurrentPw = ref('')
 const originalEmail = computed(() => authStore.myUser?.email ?? '')
 const EMAIL_RE      = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -288,15 +316,20 @@ async function saveEmail() {
   }
   isSavingEmail.value = true
   try {
-    const { data } = await apiClient.put('/auth/profile', {
-      email: localEmail.value.trim()
+    const { data } = await apiClient.post('/auth/email-change/start', {
+      email: localEmail.value.trim(),
+      currentPassword: emailCurrentPw.value,
     })
     if (data.success) {
       if (data.status === 'pending') {
         settingsStore.showToastKey('toasts.verificationSentToast', undefined, 'success')
         router.push({
           path: '/verify-otp',
-          query: { email: localEmail.value.trim(), purpose: 'update_email' }
+          query: {
+            email: localEmail.value.trim(),
+            purpose: 'update_email',
+            resendAvailableAt: data.resendAvailableAt,
+          }
         })
       } else {
         authStore.updateCurrentUser(data.user)
@@ -307,8 +340,13 @@ async function saveEmail() {
   } catch (err: any) {
     const response = err.response
     if (response) {
-      const msg = response.data?.message
-      apiEmailError.value = msg ? { raw: msg } : { key: 'errors.saveEmailFailed' }
+      apiEmailError.value = {
+        key: response.data?.code === 'email_already_used'
+          ? 'errors.emailAlreadyUsed'
+          : response.data?.code === 'current_password_invalid'
+            ? 'errors.currentPasswordInvalid'
+            : 'errors.saveEmailFailed'
+      }
     } else {
       apiEmailError.value = { key: 'errors.networkError' }
     }
@@ -326,8 +364,26 @@ const sortedSessions = computed(() => {
   })
 })
 
+const showRevokePrompt = ref(false)
+const isRevokingOthers = ref(false)
+
+async function confirmRevokeOtherSessions() {
+  if (isRevokingOthers.value) return
+  isRevokingOthers.value = true
+  try {
+    await settingsStore.logoutOtherSessions()
+    showRevokePrompt.value = false
+  } finally {
+    isRevokingOthers.value = false
+  }
+}
+
 onMounted(() => {
   settingsStore.loadSessions()
+  if (route.query.securityChange === 'email') {
+    showRevokePrompt.value = true
+    router.replace({ path: route.path, query: {} })
+  }
 })
 </script>
 

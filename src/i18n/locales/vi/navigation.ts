@@ -36,6 +36,8 @@ export default {
   titleLogin: 'Đăng nhập — DreamScape',
   titleRegister: 'Đăng ký — DreamScape',
   titleVerifyOtp: 'Xác thực OTP — DreamScape',
+  titleForgotPassword: 'Khôi phục mật khẩu — DreamScape',
+  titleResetPassword: 'Đặt lại mật khẩu — DreamScape',
   titleHome: 'Trang chủ — DreamScape',
   titleOracle: 'Oracle — DreamScape',
   titleMessages: 'Tin nhắn — DreamScape',

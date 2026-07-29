@@ -127,7 +127,9 @@
             >
               {{ partnerInitials }}
             </div>
-            <div class="chat-bubble chat-bubble--other">{{ msg.content }}</div>
+            <div class="chat-bubble chat-bubble--other">
+              {{ msg.content_unavailable ? t('messages.contentUnavailable') : msg.content }}
+            </div>
           </div>
           <span class="chat-bubble__time chat-bubble__time--other">{{ timeAgo(msg.timestamp) }}</span>
         </template>
@@ -139,7 +141,7 @@
               class="chat-bubble chat-bubble--me"
               :class="{ 'chat-bubble--optimistic': msg._id.startsWith('temp-') }"
             >
-              {{ msg.content }}
+              {{ msg.content_unavailable ? t('messages.contentUnavailable') : msg.content }}
             </div>
             <span class="chat-bubble__time">{{ timeAgo(msg.timestamp) }}</span>
             <!-- Status indicator — only on the last sent message -->
@@ -188,12 +190,14 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useChatStore }            from '@/store/useChatStore'
 import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import { timeAgo }                 from '@/utils/timeAgo'
 import type { ApiMessage }         from '@/api/types'
 
 const chatStore     = useChatStore()
+const { t } = useI18n()
 const newMessage    = ref('')
 const messageListRef = ref<HTMLElement | null>(null)
 const inputId       = `chat-input-${Math.random().toString(36).slice(2, 6)}`

@@ -48,13 +48,44 @@
       </nav>
       <div class="review-layout">
         <aside class="candidate-sidebar">
+          <div class="candidate-search">
+            <label for="rule-name-search" class="sr-only">{{ t('rules.searchLabel') }}</label>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input
+              id="rule-name-search"
+              v-model="nameQuery"
+              type="search"
+              maxlength="120"
+              autocomplete="off"
+              :placeholder="t('rules.searchPlaceholder')"
+            />
+            <button
+              v-if="nameQuery"
+              type="button"
+              :aria-label="t('rules.clearSearch')"
+              @click="nameQuery = ''"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
           <div v-if="isLoadingList" class="loading-state">
             <span class="spinner"></span>
-            <span>{{ t('rules.loadingRules') }}</span>
+            <span>{{ nameQuery.trim() ? t('rules.searchingRules') : t('rules.loadingRules') }}</span>
+          </div>
+          <div v-else-if="listError" class="empty-panel compact" role="alert">
+            <h3>{{ t('rules.searchErrorTitle') }}</h3>
+            <p>{{ t('rules.searchErrorDescription') }}</p>
+            <button type="button" class="retry-button" @click="fetchCandidates">{{ t('rules.retrySearch') }}</button>
           </div>
           <div v-else-if="candidates.length === 0" class="empty-panel compact">
             <h3>{{ t('rules.noData') }}</h3>
-            <p>{{ sourceIdFilter ? t('rules.noRulesForSource') : t('rules.noRules') }}</p>
+            <p>{{ nameQuery.trim() ? t('rules.noSearchResults') : sourceIdFilter ? t('rules.noRulesForSource') : t('rules.noRules') }}</p>
           </div>
           <div v-else class="candidate-list">
             <section v-for="(items, sourceTitle) in groupedCandidates" :key="sourceTitle" class="source-group" :style="sourceGroupStyle(String(sourceTitle))">
@@ -67,7 +98,12 @@
                   :class="['candidate-card', { selected: selectedId === candidate._id }]"
                   @click="selectCandidate(candidate._id)"
                 >
-                  <span class="candidate-title">{{ ruleText(candidate, 'label', candidate.label) }}</span>
+                  <span class="candidate-title">
+                    <template v-for="(segment, index) in candidateNameSegments(candidate)" :key="`${candidate._id}-${index}`">
+                      <mark v-if="segment.highlighted">{{ segment.text }}</mark>
+                      <template v-else>{{ segment.text }}</template>
+                    </template>
+                  </span>
                   <span class="candidate-card-meta">
                     <span v-if="candidate.isComposite" class="composite-list-chip">{{ t('rules.compositeRule', { count: candidate.compositeComponents?.length || 0 }) }}</span>
                     <span :class="['status-chip', `status-${candidate.status}`]">{{ statusLabel(candidate.status) }}</span>
@@ -398,6 +434,7 @@ import AppButton from '@/components/common/AppButton.vue'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { isModeratorUserId } from '@/utils/moderatorAccess'
+import { createHighlightedExcerpt, findLiteralTextRanges } from '@/utils/highlightText'
 import {
   createBrowserTranslator,
   translateBrowserText,
@@ -435,6 +472,8 @@ const activeStatus = ref('pending')
 const sourceIdFilter = computed(() => route.query.sourceId ? String(route.query.sourceId) : null)
 const focusedRuleId = computed(() => route.query.ruleId ? String(route.query.ruleId) : null)
 const candidates = ref<RuleCandidate[]>([])
+const nameQuery = ref('')
+const listError = ref(false)
 const selectedId = ref<string | null>(null)
 const selectedCandidate = ref<RuleCandidate | null>(null)
 const evidenceChunks = ref<EvidenceChunkPreview[]>([])
@@ -456,6 +495,11 @@ const showRejectModal = ref(false)
 const openCriterionKey = ref<string | null>(null)
 const bulkAction = ref<RuleV3BulkAction | null>(null)
 const isBulkRunning = ref(false)
+let listRequestId = 0
+let listController: AbortController | null = null
+let detailRequestId = 0
+let detailController: AbortController | null = null
+let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const activeTabLabel = computed(() => statusTabs.value.find(tab => tab.value === activeStatus.value)?.label || '')
 const visibleRelationships = computed(() => ruleRelationships.value.filter(item => !item.mergeEligibility?.canMerge))
@@ -474,6 +518,17 @@ const groupedCandidates = computed(() => {
   }
   return groups
 })
+
+function candidateNameSegments(candidate: RuleCandidate) {
+  const label = nameQuery.value.trim()
+    ? candidate.label
+    : ruleText(candidate, 'label', candidate.label)
+  return createHighlightedExcerpt(
+    label,
+    findLiteralTextRanges(label, nameQuery.value),
+    Math.max(label.length, 1),
+  ).segments
+}
 
 function relationshipSignalList(item: RuleRelationshipRow) {
   const labels: Record<string, string> = {
@@ -714,6 +769,8 @@ watch(
   { immediate: true },
 )
 
+watch(nameQuery, scheduleCandidateSearch)
+
 async function loadRequestedCandidates() {
   if (focusedRuleId.value) {
     try {
@@ -765,12 +822,22 @@ function changeTab(status: string) {
 }
 
 async function fetchCandidates() {
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+    searchTimer = null
+  }
+  listController?.abort()
+  listController = new AbortController()
+  const requestId = ++listRequestId
   isLoadingList.value = true
+  listError.value = false
   try {
     const response = await getRuleCandidates({
       status: activeStatus.value,
-      academicSourceId: sourceIdFilter.value || undefined
-    })
+      academicSourceId: sourceIdFilter.value || undefined,
+      q: nameQuery.value.trim() || undefined,
+    }, listController.signal)
+    if (requestId !== listRequestId) return
     candidates.value = response.data || []
     if (candidates.value.length > 0) {
       const requestedId = focusedRuleId.value
@@ -788,31 +855,51 @@ async function fetchCandidates() {
       ruleRelationships.value = []
       evidenceGapMatches.value = []
     }
-  } catch {
-    settingsStore.showToast(t('rules.toasts.listFailed'), 'error')
+  } catch (error: any) {
+    if (requestId !== listRequestId || error?.code === 'ERR_CANCELED') return
+    listError.value = true
   } finally {
-    isLoadingList.value = false
+    if (requestId === listRequestId) isLoadingList.value = false
   }
 }
 
+function scheduleCandidateSearch() {
+  listController?.abort()
+  detailController?.abort()
+  listRequestId += 1
+  detailRequestId += 1
+  listError.value = false
+  isLoadingList.value = true
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    searchTimer = null
+    void fetchCandidates()
+  }, 300)
+}
+
 async function selectCandidate(id: string) {
+  detailController?.abort()
+  detailController = new AbortController()
+  const requestId = ++detailRequestId
   selectedId.value = id
   isLoadingDetail.value = true
   try {
-    const response = await getRuleCandidateDetail(id)
+    const response = await getRuleCandidateDetail(id, detailController.signal)
+    if (requestId !== detailRequestId) return
     selectedCandidate.value = response.data.candidate
     evidenceChunks.value = response.data.evidenceChunks || []
     evidenceExcerpts.value = (response.data.evidenceExcerpts || []).filter(item => item.excerpt?.trim())
     ruleRelationships.value = response.data.ruleRelationships || []
     evidenceGapMatches.value = response.data.evidenceGapMatches || []
     visibleContexts.value = {}
-  } catch {
+  } catch (error: any) {
+    if (requestId !== detailRequestId || error?.code === 'ERR_CANCELED') return
     selectedCandidate.value = null
     ruleRelationships.value = []
     evidenceGapMatches.value = []
     settingsStore.showToast(t('rules.toasts.detailFailed'), 'error')
   } finally {
-    isLoadingDetail.value = false
+    if (requestId === detailRequestId) isLoadingDetail.value = false
   }
 }
 
@@ -820,9 +907,15 @@ async function confirmApproval() {
   if (!selectedCandidate.value) return
   isApproving.value = true
   try {
-    await approveRuleCandidate(selectedCandidate.value._id)
+    const response = await approveRuleCandidate(selectedCandidate.value._id)
     showApproveModal.value = false
-    settingsStore.showToast(t('rules.toasts.approved'), 'success')
+    const reconciliationFailed = response.data?.evidenceReconciliation === 'failed'
+    settingsStore.showToast(
+      t(reconciliationFailed
+        ? 'rules.toasts.approvedReconciliationPending'
+        : 'rules.toasts.approved'),
+      reconciliationFailed ? 'error' : 'success',
+    )
     await fetchCandidates()
   } catch (error: any) {
     settingsStore.showToast(error.response?.data?.message || t('rules.toasts.approveFailed'), 'error')
@@ -883,6 +976,9 @@ function closeCriterionHelp() {
 onMounted(() => document.addEventListener('click', closeCriterionHelp))
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeCriterionHelp)
+  if (searchTimer) clearTimeout(searchTimer)
+  listController?.abort()
+  detailController?.abort()
   for (const pending of translatorPromises.values()) void pending.then(translator => translator.destroy?.()).catch(() => undefined)
   translatorPromises.clear()
 })
@@ -978,6 +1074,12 @@ function scoreColor(score?: number) {
 .review-layout { display: grid; grid-template-columns: minmax(290px, 340px) minmax(0, 1fr); gap: var(--space-4); flex: 1; min-height: 0; }
 .candidate-sidebar, .candidate-detail { min-height: 0; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg-elevated); overflow: hidden; }
 .candidate-sidebar { display: flex; flex-direction: column; padding: var(--space-3); }.candidate-detail { min-width: 0; display: flex; flex-direction: column; }
+.candidate-search { position: relative; display: flex; align-items: center; flex: 0 0 auto; margin: 0 3px 8px; }
+.candidate-search > svg { position: absolute; left: 11px; color: var(--color-text-muted); pointer-events: none; }
+.candidate-search input { width: 100%; height: 38px; padding: 0 36px 0 34px; border: 1px solid var(--color-border-input); border-radius: var(--radius-lg); outline: none; background: var(--color-bg-base); color: var(--color-text-primary); font-size: .82rem; }
+.candidate-search input::placeholder { color: var(--color-text-muted); }.candidate-search input:focus { border-color: #4a4a4a; }.candidate-search input::-webkit-search-cancel-button { display: none; }
+.candidate-search button { position: absolute; right: 8px; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--radius-full); background: var(--color-bg-active); color: var(--color-text-muted); cursor: pointer; }
+.candidate-search button:hover { color: var(--color-text-primary); background: var(--color-bg-hover); }
 .candidate-list, .rule-document { flex: 1; height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .source-group { margin: 8px 3px 14px; padding: 8px; border: 1px solid hsl(var(--source-group-hue) 42% 62% / .14); border-radius: var(--radius-lg); background: hsl(var(--source-group-hue) 45% 52% / .028); }
 .source-group h2 { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin: 2px 3px 9px; color: var(--color-text-secondary); font-size: .72rem; line-height: 1.4; letter-spacing: .035em; }
@@ -986,6 +1088,7 @@ function scoreColor(score?: number) {
 .candidate-card { width: 100%; display: flex; flex-direction: column; gap: 9px; padding: 12px; margin: 0; text-align: left; border: 1px solid transparent; border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-bg-base) 98%, hsl(var(--source-group-hue) 45% 55%)); color: inherit; cursor: pointer; }
 .candidate-card:hover { border-color: var(--color-border); background: var(--color-bg-hover); }.candidate-card.selected { border-color: var(--accent); background: rgba(59,130,246,.07); }
 .candidate-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; font-size: .9rem; font-weight: 650; line-height: 1.4; color: var(--color-text-primary); }
+.candidate-title mark { border-radius: 2px; background: rgba(250, 204, 21, .22); color: inherit; }
 .candidate-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: var(--color-text-muted); font-size: .7rem; }
 .composite-badge { display: inline-flex; width: fit-content; margin-top: 8px; padding: 4px 8px; border-radius: 999px; background: rgba(99,102,241,.12); color: #a5b4fc; font-size: .68rem; font-weight: 700; }.composite-claims { display: grid; gap: 12px; margin-top: 16px; }.composite-claim { padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }.composite-claim__header { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: var(--color-text-secondary); font-size: .7rem; }.composite-claim__header span { color: var(--color-text-muted); }.composite-claim .relationship-flow { margin-top: 0; }.composite-claim .rule-explanation { margin-top: 10px; }
 .score-aggregation-note { margin: 10px 0 0; padding: 10px 12px; border: 1px solid rgba(245,158,11,.25); border-radius: var(--radius-sm); background: rgba(245,158,11,.06); color: var(--color-text-secondary); font-size: .74rem; line-height: 1.5; }.score-aggregation-note strong { color: #fbbf24; }
@@ -993,6 +1096,7 @@ function scoreColor(score?: number) {
 .composite-list-chip { color: #a5b4fc; font-weight: 700; }
 .status-pending { color: #fbbf24; background: rgba(245,158,11,.12); }.status-approved { color: #34d399; background: rgba(16,185,129,.12); }.status-rejected { color: #f87171; background: rgba(239,68,68,.12); }
 .loading-state, .empty-panel { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; min-height: 180px; padding: var(--space-5); text-align: center; color: var(--color-text-muted); }
+.retry-button { min-height: 36px; padding: 7px 13px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-active); color: var(--color-text-primary); cursor: pointer; }
 .empty-panel h3, .empty-panel p { margin: 0; }.empty-panel.compact { min-height: 320px; }.detail-empty, .detail-loading { height: 100%; min-height: 650px; }
 .spinner { width: 22px; height: 22px; border: 2px solid var(--color-border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
 .rule-document { padding: clamp(16px, 2.5vw, 30px); }

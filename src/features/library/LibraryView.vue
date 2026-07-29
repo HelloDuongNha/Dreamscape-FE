@@ -21,7 +21,8 @@
           id="catalog-search-input"
           v-model="searchQuery"
           :placeholder="t('library.searchPlaceholder')"
-          maxlength="100"
+          :error="searchValidationError"
+          maxlength="140"
         />
       </div>
     </div>
@@ -53,7 +54,7 @@
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="filteredSources.length === 0" class="catalog-empty">
+      <div v-else-if="filteredSources.length === 0 && !searchValidationError" class="catalog-empty">
         <div class="catalog-empty__icon" aria-hidden="true"></div>
         <h4 class="catalog-empty__title">{{ t('library.emptyTitle') }}</h4>
         <p class="catalog-empty__desc">
@@ -391,11 +392,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { resolveSourceType } from '@/utils/sourceTypeHelper'
-import { parseAcademicLookupInput, type AcademicLookupError } from './utils/academicContributionLookup'
+import {
+  parseAcademicLookupInput,
+  parseDoiSearchInput,
+  type AcademicLookupError,
+} from './utils/academicContributionLookup'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
@@ -442,6 +447,7 @@ function formatNumber(value: number) {
 const isLoadingSources = ref(false)
 const hasErrorSources = ref(false)
 const searchQuery = ref('')
+const searchValidationError = ref('')
 const sources = ref<any[]>([])
 const currentPage = ref(1)
 const pagination = ref({
@@ -487,22 +493,40 @@ const filteredSources = computed(() => {
 })
 
 async function fetchApprovedSources() {
+  const parsedSearch = parseDoiSearchInput(searchQuery.value)
+  if (parsedSearch.error) {
+    searchValidationError.value = t('library.validation.doiSearchFormat')
+    hasErrorSources.value = false
+    isLoadingSources.value = false
+    sources.value = []
+    pagination.value = { page: 1, limit: 12, total: 0, pages: 1 }
+    return
+  }
+
+  searchValidationError.value = ''
+  const requestId = ++sourceListRequestId
+  sourceListAbortController?.abort()
+  sourceListAbortController = new AbortController()
   isLoadingSources.value = true
   hasErrorSources.value = false
   try {
     const res = await getApprovedSources({
-      q: searchQuery.value,
+      ...(parsedSearch.doi ? { doi: parsedSearch.doi } : {}),
       page: currentPage.value,
       limit: 12,
-    })
+    }, sourceListAbortController.signal)
+    if (requestId !== sourceListRequestId) return
     sources.value = res.items
     pagination.value = res.pagination
   } catch (err: any) {
+    if (requestId !== sourceListRequestId || err?.code === 'ERR_CANCELED') return
     hasErrorSources.value = true
     const errMsg = err.response?.data?.message || err.message || t('library.local.listLoadError')
     settingsStore.showToast(errMsg, 'error')
   } finally {
-    isLoadingSources.value = false
+    if (requestId === sourceListRequestId) {
+      isLoadingSources.value = false
+    }
   }
 }
 
@@ -511,9 +535,16 @@ function changePage(page: number) {
   fetchApprovedSources()
 }
 
-let searchTimeout: any = null
+let searchTimeout: ReturnType<typeof setTimeout> | null = null
+let sourceListAbortController: AbortController | null = null
+let sourceListRequestId = 0
+
 watch(searchQuery, () => {
   if (searchTimeout) clearTimeout(searchTimeout)
+  sourceListAbortController?.abort()
+  sourceListRequestId += 1
+  searchValidationError.value = ''
+  isLoadingSources.value = true
   searchTimeout = setTimeout(() => {
     currentPage.value = 1
     fetchApprovedSources()
@@ -522,6 +553,12 @@ watch(searchQuery, () => {
 
 onMounted(() => {
   fetchApprovedSources()
+})
+
+onBeforeUnmount(() => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  sourceListAbortController?.abort()
+  sourceListRequestId += 1
 })
 
 const showDeleteConfirm = ref(false)

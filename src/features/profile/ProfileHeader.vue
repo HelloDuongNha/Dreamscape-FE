@@ -7,13 +7,26 @@
     <!-- Avatar row -->
     <div class="profile-header__avatar-row">
       <div class="profile-header__avatar-container">
+        <AvatarEditor
+          v-if="isMe"
+          :avatar="currentAvatar"
+          :display-name="user.display_name"
+          :user-id="user._id"
+        />
         <div
+          v-else
           class="profile-header__avatar"
           :style="{ background: avatarBg }"
           :aria-label="user.display_name"
           translate="no"
         >
-          {{ initials }}
+          <img
+            v-if="currentAvatar"
+            :src="currentAvatar"
+            :alt="user.display_name"
+            class="profile-header__avatar-image"
+          />
+          <span v-else>{{ initials }}</span>
         </div>
 
         <!-- Streak Flame Icon -->
@@ -182,6 +195,7 @@ import { getInitials, getAvatarBg } from '@/data/mockUsers'
 import type { User }     from '@/data/mockUsers'
 import { useAuthStore }  from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import AvatarEditor from './AvatarEditor.vue'
 import { useLocaleStore }   from '@/store/useLocaleStore'
 import apiClient from '@/api/client'
 
@@ -212,6 +226,9 @@ const formattedJoinedDate = computed(() => {
 // ── Computed ──────────────────────────────────────────────────────
 const initials  = computed(() => getInitials(props.user.display_name))
 const avatarBg  = computed(() => getAvatarBg(props.user._id))
+const currentAvatar = computed(() => (
+  props.isMe ? (authStore.myUser?.avatar || props.user.avatar) : props.user.avatar
+))
 
 const streak = computed(() => {
   if (props.isMe) {
@@ -504,6 +521,13 @@ function openMessage() {
   color: #fff;
   border: 3px solid var(--color-bg-base);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.profile-header__avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .profile-header__actions {

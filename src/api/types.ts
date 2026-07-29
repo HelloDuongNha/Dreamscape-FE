@@ -281,6 +281,7 @@ export interface ApiDream {
   likes:          string[]           // array of userId strings who liked this post
   likes_count:    number
   comments_count: number
+  comments_enabled?: boolean
   created_at:     string             // ISO-8601 — used as pagination cursor
   ai_status:      'pending' | 'sensing' | 'completed' | 'failed' | 'cancelled' | 'disabled'
   ai_result:      AiDreamAnalysisResult | null
@@ -357,6 +358,33 @@ export interface DreamFeedResponse {
   nextCursor: string | null
 }
 
+export interface SearchTextRange {
+  start: number
+  end: number
+}
+
+export interface DreamSearchCommentMatch {
+  _id: string
+  content: string
+  created_at: string
+  user: Pick<ApiUser, '_id' | 'username' | 'display_name' | 'avatar'> | null
+  ranges: SearchTextRange[]
+}
+
+export interface DreamSearchItem {
+  dream: ApiDream
+  dreamRanges: SearchTextRange[]
+  matchedComments: DreamSearchCommentMatch[]
+  matchedCommentCount: number
+}
+
+export interface DreamSearchResponse {
+  success: boolean
+  data: DreamSearchItem[]
+  limit: number
+  nextCursor: string | null
+}
+
 export interface CreateDreamResponse {
   success: boolean
   message: string
@@ -383,6 +411,11 @@ export interface ApiComment {
   dreamId:    string | ApiDream  // populated when fetched via GET /comments/user/:id
   userId:     ApiUser    // always populated by the server
   content:    string
+  edit_history?: Array<{
+    content: string
+    editedAt: string
+  }>
+  updated_at?: string
   created_at: string     // ISO-8601
 }
 
@@ -399,6 +432,7 @@ export interface ApiConversation {
   last_message:    string
   updated_at:      string      // ISO-8601
   unread_count:    number      // messages from partner with status !== 'seen'
+  preview_unavailable?: boolean
 }
 
 export interface ApiMessage {
@@ -408,6 +442,7 @@ export interface ApiMessage {
   content:        string
   timestamp:      string            // ISO-8601
   status?:        'sent' | 'delivered' | 'seen'  // delivery receipt
+  content_unavailable?: boolean
 }
 
 /** Payload emitted by the server's receive_message socket event */
@@ -452,10 +487,22 @@ export interface ApiNotification {
   recipientId: string
   senderId:    ApiUser
   type:        'like' | 'comment' | 'follow' | 'dream_analysis'
-  postId?:     string | Pick<ApiDream, '_id' | 'content'>
+  postId?:     string
+  commentId?:  string
   isRead:      boolean
   timestamp:   string
 }
+
+export type ApiNotificationTarget =
+  | {
+      kind: 'dream' | 'dream_analysis'
+      dream: ApiDream
+      commentId?: string
+    }
+  | {
+      kind: 'profile'
+      userId: string
+    }
 
 // ─── Smart Reader I18N Interfaces ──────────────────────────────────────────
 

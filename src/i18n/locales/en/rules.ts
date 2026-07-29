@@ -3,6 +3,8 @@ export default {
   eyebrow: 'Academic argument moderation', title: 'Review academic knowledge', subtitle: 'Compare each conclusion with its source evidence before it can be used in dream analysis.',
   approveAll: 'Approve all', rejectAll: 'Reject all', restoreAll: 'Restore all', deleteAll: 'Delete all', ofDocument: ' from this document',
   sourceFilter: 'Filtering by one document', clearFilter: 'Clear filter', statusNavigation: 'Argument status',
+  searchLabel: 'Search arguments by name', searchPlaceholder: 'Search argument name…', clearSearch: 'Clear argument search',
+  searchingRules: 'Searching arguments…', noSearchResults: 'No argument name matches this search.', searchErrorTitle: 'Search unavailable', searchErrorDescription: 'The argument list could not be searched. Your current filters are still selected.', retrySearch: 'Try again',
   statuses: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' },
   loadingRules: 'Loading arguments…', noData: 'No data', noRulesForSource: 'This document has no arguments with the selected status.', noRules: 'There are no arguments with the selected status.',
   ruleCount: '{count} arguments', knowledgeCluster: 'Related knowledge cluster', evidenceGroupCount: '{count} evidence groups', loadingDetail: 'Loading conclusion and evidence…', selectRule: 'Select a argument', selectRuleDescription: 'Assessment details and citations will appear here.',
@@ -51,7 +53,7 @@ export default {
   },
   criteria: { source_breadth: 'Independent supporting sources', research_fit: 'Research-design fit', evidence_breadth: 'Evidence coverage across chunks', scope_definition: 'Clearly stated scope and limitations', conflict_handling: 'Contradictory-evidence check' },
   relationKinds: { equivalent: 'Equivalent content', overlapping: 'Related with a different scope', complementary: 'Complementary claim', scope_tension: 'Scope-dependent tension', shared_context: 'Shared source context', contradictory: 'Contradictory conclusion', reverse_direction: 'Reverse direction' },
-  toasts: { bulkDone: 'Processed {processed} arguments.', bulkPartial: 'Processed {processed} arguments; {failed} require individual review.', bulkFailed: 'Could not perform the bulk action.', listFailed: 'Could not load the Argument V3 list.', detailFailed: 'Could not load Argument V3 details.', approved: 'Argument approved.', approveFailed: 'Could not approve the argument.', rejected: 'Argument rejected.', rejectFailed: 'Could not reject the argument.' },
+  toasts: { bulkDone: 'Processed {processed} arguments.', bulkPartial: 'Processed {processed} arguments; {failed} require individual review.', bulkFailed: 'Could not perform the bulk action.', listFailed: 'Could not load the Argument V3 list.', detailFailed: 'Could not load Argument V3 details.', approved: 'Argument approved.', approvedReconciliationPending: 'Argument approved, but related citations could not be synchronized yet.', approveFailed: 'Could not approve the argument.', rejected: 'Argument rejected.', rejectFailed: 'Could not reject the argument.' },
   extraction: {
     queued: 'Waiting for analysis',
     queuedDetail: 'This task will start automatically after the previous analysis finishes.',

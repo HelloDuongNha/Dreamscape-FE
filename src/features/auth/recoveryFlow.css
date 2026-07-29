@@ -1,0 +1,21 @@
+.recovery-page {
+  min-height: 100dvh;
+  padding: var(--space-6);
+  background: var(--color-bg-main, #101010);
+  display: grid;
+  place-items: center;
+}
+
+.recovery-card {
+  width: min(400px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.recovery-logo { text-align: center; font-size: 2rem; }
+.recovery-card h1 { margin: 0; text-align: center; font-size: var(--font-size-xl); }
+.recovery-card p { margin: 0; text-align: center; color: var(--color-text-muted); line-height: var(--line-height-relaxed); }
+.recovery-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.recovery-link { color: var(--color-text-primary); text-align: center; }
+.recovery-error { padding: var(--space-3); border: 1px solid #3d1515; border-radius: var(--radius-md); background: #2d1010; color: #ed4956; }

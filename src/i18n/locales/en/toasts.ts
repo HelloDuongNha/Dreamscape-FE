@@ -5,6 +5,8 @@ export default {
   emailVerifiedSuccess: 'Email verified and updated successfully!',
   passwordUpdatedSuccess: 'Password updated successfully.',
   sessionLoggedOutSuccess: 'Device logged out successfully.',
+  otherSessionsLoggedOutSuccess: 'Other devices were signed out.',
+  recoveryCodeSent: 'If the account exists, a recovery code was sent.',
   profileSavedSuccess: 'Profile saved successfully.',
   privacySavedSuccess: 'Privacy settings updated.',
   followSuccess: 'Followed {name}.',

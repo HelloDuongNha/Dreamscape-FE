@@ -5,6 +5,8 @@ export default {
   emailVerifiedSuccess: 'Email đã được xác thực và cập nhật thành công!',
   passwordUpdatedSuccess: 'Cập nhật mật khẩu thành công.',
   sessionLoggedOutSuccess: 'Đăng xuất thiết bị thành công.',
+  otherSessionsLoggedOutSuccess: 'Đã đăng xuất các thiết bị khác.',
+  recoveryCodeSent: 'Nếu tài khoản tồn tại, mã khôi phục đã được gửi.',
   profileSavedSuccess: 'Thông tin hồ sơ đã được cập nhật thành công.',
   privacySavedSuccess: 'Cài đặt quyền riêng tư đã được cập nhật.',
   followSuccess: 'Đã theo dõi {name}.',

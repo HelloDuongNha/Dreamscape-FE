@@ -51,7 +51,13 @@ export const useAuthStore = defineStore('auth', () => {
     email:        string
     password:     string
     bio?:         string
-  }): Promise<{ success: boolean; status?: string; email?: string }> {
+  }): Promise<{
+    success: boolean
+    status?: string
+    email?: string
+    expiresAt?: string
+    resendAvailableAt?: string
+  }> {
     const { data } = await apiClient.post<any>('/auth/register', payload)
     if (data.status !== 'pending') {
       _persist(data.token, data.user)

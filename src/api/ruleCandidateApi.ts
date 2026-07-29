@@ -214,14 +214,15 @@ export interface CandidateDetailResponse {
 export const getRuleCandidates = async (params: {
   status?: string
   academicSourceId?: string
-}): Promise<{
+  q?: string
+}, signal?: AbortSignal): Promise<{
   success: boolean
   data: RuleCandidate[]
 }> => {
   const { data } = await apiClient.get<{
     success: boolean
     data: RuleCandidate[]
-  }>('/moderation/rules-v3/candidates', { params })
+  }>('/moderation/rules-v3/candidates', { params, signal })
   return data
 }
 
@@ -229,7 +230,8 @@ export const getRuleCandidates = async (params: {
  * Lấy chi tiết lập luận ứng viên (kèm chunk previews).
  */
 export const getRuleCandidateDetail = async (
-  id: string
+  id: string,
+  signal?: AbortSignal,
 ): Promise<{
   success: boolean
   data: CandidateDetailResponse
@@ -237,7 +239,7 @@ export const getRuleCandidateDetail = async (
   const { data } = await apiClient.get<{
     success: boolean
     data: CandidateDetailResponse
-  }>(`/moderation/rules-v3/candidates/${id}`)
+  }>(`/moderation/rules-v3/candidates/${id}`, { signal })
   return data
 }
 

@@ -1,14 +1,17 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import apiClient         from '@/api/client'
 import { useAuthStore }  from '@/store/useAuthStore'
 import type {
   ApiDream,
   DreamFeedResponse,
+  DreamSearchItem,
+  DreamSearchResponse,
   CreateDreamResponse,
   UpdateDreamResponse,
   LikeResponse,
 } from '@/api/types'
+import type { DreamMoodLevel } from '@/utils/dreamMood'
 
 export type { ApiDream }
 
@@ -27,6 +30,16 @@ export const useDreamStore = defineStore('dream', () => {
    * Storing it in the store avoids prop-drilling across layout boundaries.
    */
   const searchQuery = ref('')
+  const searchMood = ref<DreamMoodLevel | null>(null)
+  const searchResults = ref<DreamSearchItem[]>([])
+  const searchNextCursor = ref<string | null>(null)
+  const isSearching = ref(false)
+  const isSearchLoadingMore = ref(false)
+  const searchError = ref(false)
+  let searchRequestId = 0
+  let searchController: AbortController | null = null
+
+  watch([searchQuery, searchMood], invalidateSearchRequest, { flush: 'sync' })
 
   // ── Internal Fetch ─────────────────────────────────────────────────────────
   async function _fetchPage(cursor: string | null): Promise<DreamFeedResponse> {
@@ -66,15 +79,77 @@ export const useDreamStore = defineStore('dream', () => {
     }
   }
 
+  async function searchDreams(): Promise<void> {
+    const criteria = currentSearchCriteria()
+    if (!criteria.query && !criteria.mood) {
+      resetSearchState()
+      return
+    }
+
+    const requestId = beginSearchRequest()
+    isSearching.value = true
+    searchError.value = false
+    try {
+      const { data } = await apiClient.get<DreamSearchResponse>('/dreams/search', {
+        params: buildSearchParams(criteria),
+        signal: searchController?.signal,
+      })
+      if (requestId !== searchRequestId) return
+      searchResults.value = data.data
+      searchNextCursor.value = data.nextCursor
+    } catch (error) {
+      if (requestId !== searchRequestId || isCancelledRequest(error)) return
+      searchError.value = true
+    } finally {
+      if (requestId === searchRequestId) isSearching.value = false
+    }
+  }
+
+  async function loadMoreSearchResults(): Promise<void> {
+    if (isSearchLoadingMore.value || !searchNextCursor.value) return
+    const criteria = currentSearchCriteria()
+    if (!criteria.query && !criteria.mood) return
+
+    const requestId = beginSearchRequest()
+    isSearchLoadingMore.value = true
+    searchError.value = false
+    try {
+      const { data } = await apiClient.get<DreamSearchResponse>('/dreams/search', {
+        params: buildSearchParams(criteria, searchNextCursor.value),
+        signal: searchController?.signal,
+      })
+      if (requestId !== searchRequestId) return
+      const existingIds = new Set(searchResults.value.map(item => item.dream._id))
+      searchResults.value.push(...data.data.filter(item => !existingIds.has(item.dream._id)))
+      searchNextCursor.value = data.nextCursor
+    } catch (error) {
+      if (requestId !== searchRequestId || isCancelledRequest(error)) return
+      searchError.value = true
+    } finally {
+      if (requestId === searchRequestId) isSearchLoadingMore.value = false
+    }
+  }
+
+  function clearSearch(): void {
+    searchQuery.value = ''
+    searchMood.value = null
+    resetSearchState()
+  }
+
   async function refreshDream(dreamId: string): Promise<ApiDream | null> {
     const index = dreams.value.findIndex(dream => dream._id === dreamId)
-    if (index === -1) return null
+    const searchItem = searchResults.value.find(item => item.dream._id === dreamId)
+    if (index === -1 && !searchItem) return null
     const { data } = await apiClient.get<{ success: boolean; data: ApiDream }>(
       `/dreams/${dreamId}`,
     )
-    const populatedUser = dreams.value[index].userId
-    dreams.value[index] = { ...data.data, userId: populatedUser }
-    return dreams.value[index]
+    if (index !== -1) {
+      dreams.value[index] = { ...data.data, userId: dreams.value[index].userId }
+    }
+    if (searchItem) {
+      searchItem.dream = { ...data.data, userId: searchItem.dream.userId }
+    }
+    return index !== -1 ? dreams.value[index] : searchItem!.dream
   }
 
   /** Create a dream and prepend it to the feed */
@@ -126,6 +201,11 @@ export const useDreamStore = defineStore('dream', () => {
       dreams.value[idx].likes        = data.likes
       dreams.value[idx].likes_count  = data.likes_count
     }
+    const searchDream = searchResults.value.find(item => item.dream._id === dreamId)?.dream
+    if (searchDream) {
+      searchDream.likes = data.likes
+      searchDream.likes_count = data.likes_count
+    }
   }
 
   /**
@@ -151,6 +231,10 @@ export const useDreamStore = defineStore('dream', () => {
       ? response
       : { ...response, userId: dreams.value[idx].userId }
     if (idx !== -1) dreams.value[idx] = updatedDream
+    const searchItem = searchResults.value.find(item => item.dream._id === dreamId)
+    if (searchItem) {
+      searchItem.dream = { ...response, userId: searchItem.dream.userId }
+    }
     if (updatedDream.ai_analysis_enabled && updatedDream.ai_status === 'pending') {
       const { useOracleStore } = await import('@/store/useOracleStore')
       useOracleStore().startTracking(updatedDream)
@@ -180,6 +264,7 @@ export const useDreamStore = defineStore('dream', () => {
     const { useOracleStore } = await import('@/store/useOracleStore')
     useOracleStore().stopTracking(dreamId)
     dreams.value = dreams.value.filter(d => d._id !== dreamId)
+    searchResults.value = searchResults.value.filter(item => item.dream._id !== dreamId)
     const { useSettingsStore } = await import('@/store/useSettingsStore')
     useSettingsStore().showToastKey('home.deletedSuccess', undefined, 'success')
   }
@@ -198,6 +283,10 @@ export const useDreamStore = defineStore('dream', () => {
       ? data.data
       : { ...data.data, userId: dreams.value[idx].userId }
     if (idx !== -1) dreams.value[idx] = updatedDream
+    const searchItem = searchResults.value.find(item => item.dream._id === dreamId)
+    if (searchItem) {
+      searchItem.dream = { ...data.data, userId: searchItem.dream.userId }
+    }
     const { useSettingsStore } = await import('@/store/useSettingsStore')
     useSettingsStore().showToastKey(
       privacy === 'public' ? 'home.madePublicSuccess' : 'home.madePrivateSuccess',
@@ -216,6 +305,11 @@ export const useDreamStore = defineStore('dream', () => {
     if (d) d.comments_count += 1
   }
 
+  function decrementCommentCount(dreamId: string): void {
+    const d = dreams.value.find(d => d._id === dreamId)
+    if (d) d.comments_count = Math.max(0, d.comments_count - 1)
+  }
+
   /**
    * Getter: dreams liked by myUserId.
    * Used by the LIKES tab in ProfileView.
@@ -228,6 +322,57 @@ export const useDreamStore = defineStore('dream', () => {
     )
   }
 
+  function currentSearchCriteria(): { query: string; mood: DreamMoodLevel | null } {
+    return {
+      query: searchQuery.value.trim(),
+      mood: searchMood.value,
+    }
+  }
+
+  function beginSearchRequest(): number {
+    searchController?.abort()
+    searchController = new AbortController()
+    searchRequestId += 1
+    return searchRequestId
+  }
+
+  function invalidateSearchRequest(): void {
+    searchController?.abort()
+    searchController = null
+    searchRequestId += 1
+    searchResults.value = []
+    searchNextCursor.value = null
+    isSearching.value = Boolean(searchQuery.value.trim() || searchMood.value)
+    isSearchLoadingMore.value = false
+    searchError.value = false
+  }
+
+  function resetSearchState(): void {
+    invalidateSearchRequest()
+    searchResults.value = []
+    searchNextCursor.value = null
+  }
+
+  function buildSearchParams(
+    criteria: { query: string; mood: DreamMoodLevel | null },
+    cursor?: string,
+  ): Record<string, string | number> {
+    const params: Record<string, string | number> = { limit: 20 }
+    if (criteria.query) params.q = criteria.query
+    if (criteria.mood) params.mood = criteria.mood
+    if (cursor) params.nextCursor = cursor
+    return params
+  }
+
+  function isCancelledRequest(error: unknown): boolean {
+    return Boolean(
+      error
+      && typeof error === 'object'
+      && 'code' in error
+      && (error as { code?: string }).code === 'ERR_CANCELED',
+    )
+  }
+
   return {
     dreams,
     nextCursor,
@@ -235,8 +380,17 @@ export const useDreamStore = defineStore('dream', () => {
     isLoadingMore,
     hasMore,
     searchQuery,
+    searchMood,
+    searchResults,
+    searchNextCursor,
+    isSearching,
+    isSearchLoadingMore,
+    searchError,
     loadFeed,
     loadMore,
+    searchDreams,
+    loadMoreSearchResults,
+    clearSearch,
     refreshDream,
     addDream,
     toggleLike,
@@ -245,6 +399,7 @@ export const useDreamStore = defineStore('dream', () => {
     removeDream,
     changePrivacy,
     incrementCommentCount,
+    decrementCommentCount,
     getLikedDreams,
   }
 })

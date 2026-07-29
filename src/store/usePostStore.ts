@@ -113,6 +113,46 @@ export const usePostStore = defineStore('post', () => {
     useDreamStore().incrementCommentCount(focusedId.value)
   }
 
+  async function editComment(commentId: string, content: string): Promise<void> {
+    const normalized = content.trim()
+    if (!normalized) return
+    const { data } = await apiClient.patch<{ success: boolean; data: ApiComment }>(
+      `/comments/${commentId}`,
+      { content: normalized },
+    )
+    const index = focusedComments.value.findIndex(comment => comment._id === commentId)
+    if (index !== -1) focusedComments.value[index] = data.data
+  }
+
+  async function deleteComment(commentId: string): Promise<void> {
+    const focusedDreamId = focusedId.value
+    await apiClient.delete(`/comments/${commentId}`)
+    focusedComments.value = focusedComments.value.filter(comment => comment._id !== commentId)
+    if (focusedDreamId) {
+      const dreamStore = useDreamStore()
+      const storedDream = dreamStore.dreams.find(dream => dream._id === focusedDreamId)
+      dreamStore.decrementCommentCount(focusedDreamId)
+      if (
+        fetchedDream.value
+        && fetchedDream.value._id === focusedDreamId
+        && fetchedDream.value !== storedDream
+      ) {
+        fetchedDream.value.comments_count = Math.max(0, fetchedDream.value.comments_count - 1)
+      }
+    }
+  }
+
+  async function setCommentsEnabled(enabled: boolean): Promise<void> {
+    const dreamId = focusedId.value
+    if (!dreamId) return
+    const { data } = await apiClient.patch<{ success: boolean; data: ApiDream }>(
+      `/dreams/${dreamId}/comments-policy`,
+      { enabled },
+    )
+    const existingDream = useDreamStore().dreams.find(dream => dream._id === dreamId)
+    mergeDreamSnapshot(data.data, existingDream)
+  }
+
   return {
     focusedId,
     focusedDream,
@@ -125,5 +165,8 @@ export const usePostStore = defineStore('post', () => {
     closePost,
     consumeEditRequest,
     addComment,
+    editComment,
+    deleteComment,
+    setCommentsEnabled,
   }
 })
