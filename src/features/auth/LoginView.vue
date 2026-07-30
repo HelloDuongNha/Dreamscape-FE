@@ -9,8 +9,9 @@
       <p class="auth-sub">{{ t('auth.signInSub') }}</p>
 
       <!-- Error banner -->
-      <div v-if="localError || backendError" class="auth-error" role="alert">
-        <span v-if="localError">{{ t(localError.key, localError.params || {}) }}</span>
+      <div v-if="retrySeconds > 0 || localError || backendError" class="auth-error" role="alert">
+        <span v-if="retrySeconds > 0">{{ t('errors.loginRetryAfter', { seconds: retrySeconds }) }}</span>
+        <span v-else-if="localError">{{ t(localError.key, localError.params || {}) }}</span>
         <span v-else>{{ backendError }}</span>
       </div>
 
@@ -48,10 +49,17 @@
           type="submit"
           variant="primary"
           size="lg"
-          :disabled="loading || !email || !password"
+          :loading="loading"
+          :disabled="loading || retrySeconds > 0 || !email || !password"
           style="width: 100%; margin-top: var(--space-2);"
         >
-          {{ loading ? t('auth.signingIn') : t('auth.signInBtn') }}
+          {{
+            loading
+              ? t('auth.signingIn')
+              : retrySeconds > 0
+                ? t('auth.retryIn', { seconds: retrySeconds })
+                : t('auth.signInBtn')
+          }}
         </AppButton>
       </form>
 
@@ -66,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppInput  from '@/components/common/AppInput.vue'
@@ -84,11 +92,28 @@ const authStore = useAuthStore()
 const email    = ref('')
 const password = ref('')
 const loading  = ref(false)
+const retryAvailableAt = ref(0)
+const now = ref(Date.now())
+let retryTimer: number | undefined
 
 const localError = ref<{ key: string; params?: Record<string, string | number> } | null>(null)
 const backendError = ref<string | null>(null)
+const retrySeconds = computed(() =>
+  Math.max(0, Math.ceil((retryAvailableAt.value - now.value) / 1000))
+)
+
+onMounted(() => {
+  retryTimer = window.setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
+})
+
+onUnmounted(() => {
+  if (retryTimer !== undefined) window.clearInterval(retryTimer)
+})
 
 async function handleLogin() {
+  if (loading.value || retrySeconds.value > 0) return
   localError.value = null
   backendError.value = null
 
@@ -102,10 +127,17 @@ async function handleLogin() {
     await authStore.login(email.value.trim(), password.value)
     await router.replace(resolveAuthRedirect(route.query.redirect))
   } catch (err: unknown) {
-    const msg = (err as { response?: { data?: { message?: string } } })
-      .response?.data?.message
-    if (msg) {
-      backendError.value = msg
+    const response = (err as {
+      response?: {
+        data?: { code?: string; message?: string; retryAfterSeconds?: number }
+      }
+    }).response
+    const retryAfterSeconds = Number(response?.data?.retryAfterSeconds || 0)
+    if (response?.data?.code === 'rate_limit_exceeded' && retryAfterSeconds > 0) {
+      retryAvailableAt.value = Date.now() + retryAfterSeconds * 1000
+      now.value = Date.now()
+    } else if (response?.data?.message) {
+      backendError.value = response.data.message
     } else {
       localError.value = { key: 'errors.loginFailed' }
     }

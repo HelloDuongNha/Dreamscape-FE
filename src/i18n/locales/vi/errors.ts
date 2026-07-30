@@ -15,6 +15,7 @@ export default {
 
   // Common errors
   loginFailed: 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.',
+  loginRetryAfter: 'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau {seconds} giây.',
   registrationFailed: 'Đăng ký thất bại. Vui lòng thử lại.',
   registrationRetryAfter: 'Bạn đã thử đăng ký quá nhiều lần. Vui lòng thử lại sau {seconds} giây.',
   verificationFailed: 'Xác thực thất bại. Vui lòng kiểm tra lại mã.',

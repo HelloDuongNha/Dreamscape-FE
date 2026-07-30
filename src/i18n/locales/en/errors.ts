@@ -15,6 +15,7 @@ export default {
 
   // Common errors
   loginFailed: 'Login failed. Please check your credentials.',
+  loginRetryAfter: 'Too many sign-in attempts. Try again in {seconds} seconds.',
   registrationFailed: 'Registration failed. Please try again.',
   registrationRetryAfter: 'Too many registration attempts. Try again in {seconds} seconds.',
   verificationFailed: 'Verification failed. Please check the code.',
