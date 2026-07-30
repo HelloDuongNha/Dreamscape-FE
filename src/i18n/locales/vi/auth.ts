@@ -27,6 +27,8 @@ export default {
   continueWithGoogle: 'Tiếp tục với Google',
   connectingGoogle: 'Đang kết nối Google…',
   googleSignInFailed: 'Không thể hoàn tất đăng nhập Google. Vui lòng thử lại.',
+  dataConsentLabel: 'Tôi đồng ý cho DreamScape xử lý và chia sẻ dữ liệu theo lựa chọn quyền riêng tư của tôi để cung cấp dịch vụ.',
+  dataConsentInlineError: 'Bạn cần đồng ý trước khi tiếp tục.',
   googleOnboardingTitle: 'Hoàn tất tạo tài khoản',
   googleOnboardingSub: 'Google đã xác minh email. Hãy kiểm tra tên, username và tạo mật khẩu DreamScape.',
   completeGoogleAccount: 'Tạo tài khoản',

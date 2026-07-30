@@ -44,6 +44,14 @@
           </RouterLink>
         </div>
 
+        <AuthDataConsent
+          id="login-data-consent"
+          v-model="dataConsent"
+          :invalid="consentInvalid"
+          :disabled="loading"
+          @update:model-value="consentInvalid = false"
+        />
+
         <AppButton
           id="login-submit-btn"
           type="submit"
@@ -63,7 +71,10 @@
         </AppButton>
       </form>
 
-      <GoogleAuthButton />
+      <GoogleAuthButton
+        :consent-granted="dataConsent"
+        @consent-required="requireDataConsent"
+      />
 
       <p class="auth-switch">
         {{ t('auth.noAccountText') }}
@@ -81,16 +92,21 @@ import AppInput  from '@/components/common/AppInput.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AuthLocaleSwitch from '@/components/common/AuthLocaleSwitch.vue'
 import GoogleAuthButton from './GoogleAuthButton.vue'
+import AuthDataConsent from './AuthDataConsent.vue'
 import { resolveAuthRedirect } from './authRedirect'
 import { useAuthStore } from '@/store/useAuthStore'
+import { useSettingsStore } from '@/store/useSettingsStore'
 
 const { t } = useI18n()
 const route     = useRoute()
 const router    = useRouter()
 const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
 
 const email    = ref('')
 const password = ref('')
+const dataConsent = ref(false)
+const consentInvalid = ref(false)
 const loading  = ref(false)
 const retryAvailableAt = ref(0)
 const now = ref(Date.now())
@@ -116,6 +132,11 @@ async function handleLogin() {
   if (loading.value || retrySeconds.value > 0) return
   localError.value = null
   backendError.value = null
+
+  if (!dataConsent.value) {
+    requireDataConsent()
+    return
+  }
 
   if (!email.value || !password.value) {
     localError.value = { key: 'errors.fieldsRequired' }
@@ -144,6 +165,11 @@ async function handleLogin() {
   } finally {
     loading.value = false
   }
+}
+
+function requireDataConsent() {
+  consentInvalid.value = true
+  settingsStore.showToastKey('toasts.dataConsentRequired', undefined, 'error')
 }
 </script>
 

@@ -27,4 +27,5 @@ export default {
   passwordFieldsEmptyToast: 'Vui lòng điền đầy đủ các trường mật khẩu.',
   verificationSentToast: 'Đã gửi mã xác minh đến email mới của bạn.',
   emailUpdatedToast: 'Đã cập nhật email. Vui lòng xác minh địa chỉ mới của bạn.',
+  dataConsentRequired: 'Vui lòng đồng ý với việc xử lý và chia sẻ dữ liệu trước khi tiếp tục.',
 } as const

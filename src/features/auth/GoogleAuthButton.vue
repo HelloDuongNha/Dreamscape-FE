@@ -40,6 +40,14 @@ import GoogleOnboardingModal from './GoogleOnboardingModal.vue'
 import { resolveAuthRedirect } from './authRedirect'
 
 const { t } = useI18n()
+const props = withDefaults(defineProps<{
+  consentGranted?: boolean
+}>(), {
+  consentGranted: true,
+})
+const emit = defineEmits<{
+  'consent-required': []
+}>()
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
@@ -59,6 +67,10 @@ async function complete() {
 }
 
 async function start() {
+  if (!props.consentGranted) {
+    emit('consent-required')
+    return
+  }
   loading.value = true
   error.value = ''
   try {

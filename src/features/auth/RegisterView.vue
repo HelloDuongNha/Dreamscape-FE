@@ -62,6 +62,14 @@
           />
         </div>
 
+        <AuthDataConsent
+          id="register-data-consent"
+          v-model="dataConsent"
+          :invalid="consentInvalid"
+          :disabled="loading"
+          @update:model-value="consentInvalid = false"
+        />
+
         <AppButton
           id="register-submit-btn"
           type="submit"
@@ -81,7 +89,10 @@
         </AppButton>
       </form>
 
-      <GoogleAuthButton />
+      <GoogleAuthButton
+        :consent-granted="dataConsent"
+        @consent-required="requireDataConsent"
+      />
 
       <p class="auth-switch">
         {{ t('auth.hasAccountText') }}
@@ -99,17 +110,22 @@ import AppInput          from '@/components/common/AppInput.vue'
 import AppButton         from '@/components/common/AppButton.vue'
 import AuthLocaleSwitch  from '@/components/common/AuthLocaleSwitch.vue'
 import GoogleAuthButton  from './GoogleAuthButton.vue'
+import AuthDataConsent   from './AuthDataConsent.vue'
 import { useAuthStore }  from '@/store/useAuthStore'
+import { useSettingsStore } from '@/store/useSettingsStore'
 import { otpErrorKey } from './otpPresentation'
 
 const { t } = useI18n()
 const router    = useRouter()
 const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
 
 const username    = ref('')
 const displayName = ref('')
 const email       = ref('')
 const password    = ref('')
+const dataConsent = ref(false)
+const consentInvalid = ref(false)
 const loading     = ref(false)
 const retryAvailableAt = ref(0)
 const now = ref(Date.now())
@@ -135,6 +151,11 @@ async function handleRegister() {
   if (loading.value || retrySeconds.value > 0) return
   localError.value = null
   backendError.value = null
+
+  if (!dataConsent.value) {
+    requireDataConsent()
+    return
+  }
 
   if (!username.value.trim()) {
     localError.value = { key: 'errors.usernameRequired' }
@@ -205,6 +226,11 @@ async function handleRegister() {
   } finally {
     loading.value = false
   }
+}
+
+function requireDataConsent() {
+  consentInvalid.value = true
+  settingsStore.showToastKey('toasts.dataConsentRequired', undefined, 'error')
 }
 </script>
 

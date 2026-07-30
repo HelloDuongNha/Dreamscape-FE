@@ -27,6 +27,8 @@ export default {
   continueWithGoogle: 'Continue with Google',
   connectingGoogle: 'Connecting to Google…',
   googleSignInFailed: 'Google sign-in could not be completed. Please try again.',
+  dataConsentLabel: 'I agree that DreamScape may process and share data according to my privacy choices to provide the service.',
+  dataConsentInlineError: 'You must agree before continuing.',
   googleOnboardingTitle: 'Finish creating your account',
   googleOnboardingSub: 'Google verified your email. Review your name and username, then create a DreamScape password.',
   completeGoogleAccount: 'Create account',

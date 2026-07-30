@@ -27,4 +27,5 @@ export default {
   passwordFieldsEmptyToast: 'Please fill in all password fields.',
   verificationSentToast: 'Verification code sent to your new email.',
   emailUpdatedToast: 'Email updated. Please verify your new address.',
+  dataConsentRequired: 'Please agree to data processing and sharing before continuing.',
 } as const
