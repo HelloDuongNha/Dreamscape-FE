@@ -5,7 +5,7 @@ import apiClient from '@/api/client'
 import router from '@/router'
 import { useDreamStore } from '@/store/useDreamStore'
 import { usePostStore } from '@/store/usePostStore'
-import { BACKEND_URL } from '@/config/runtime'
+import { SOCKET_URL } from '@/config/runtime'
 import type {
   ApiConversation,
   ApiMessage,

@@ -23,6 +23,10 @@ export default {
   keepRecoveredSessions: 'Keep current sessions',
   signingIn: 'Signing in…',
   signInBtn: 'Sign in',
+  orContinueWith: 'or',
+  continueWithGoogle: 'Continue with Google',
+  connectingGoogle: 'Connecting to Google…',
+  googleSignInFailed: 'Google sign-in could not be completed. Please try again.',
   noAccountText: "Don't have an account?",
   createAccountLink: 'Create one',
  

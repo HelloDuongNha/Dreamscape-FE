@@ -1,9 +1,20 @@
-const DEFAULT_BACKEND_URL = 'http://localhost:5001'
+const requiredUrl = (
+  name: 'VITE_API_BASE_URL' | 'VITE_SOCKET_URL',
+  configuredValue: string | undefined,
+): string => {
+  const value = configuredValue?.trim()
 
-function normalizeBackendUrl(value: unknown): string {
-  const configuredUrl = String(value || '').trim()
-  return (configuredUrl || DEFAULT_BACKEND_URL).replace(/\/+$/, '')
+  if (value) return value.replace(/\/+$/, '')
+
+  throw new Error(`${name} is required`)
 }
 
-export const BACKEND_URL = normalizeBackendUrl(import.meta.env.VITE_BACKEND_URL)
-export const API_BASE_URL = `${BACKEND_URL}/api`
+export const API_BASE_URL = requiredUrl(
+  'VITE_API_BASE_URL',
+  import.meta.env.VITE_API_BASE_URL,
+)
+
+export const SOCKET_URL = requiredUrl(
+  'VITE_SOCKET_URL',
+  import.meta.env.VITE_SOCKET_URL,
+)

@@ -23,6 +23,10 @@ export default {
   keepRecoveredSessions: 'Giữ các phiên hiện tại',
   signingIn: 'Đang đăng nhập…',
   signInBtn: 'Đăng nhập',
+  orContinueWith: 'hoặc',
+  continueWithGoogle: 'Tiếp tục với Google',
+  connectingGoogle: 'Đang kết nối Google…',
+  googleSignInFailed: 'Không thể hoàn tất đăng nhập Google. Vui lòng thử lại.',
   noAccountText: 'Chưa có tài khoản?',
   createAccountLink: 'Tạo tài khoản mới',
  
