@@ -33,12 +33,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore, type GoogleOnboardingState } from '@/store/useAuthStore'
 import { beginGoogleSignIn, prepareGoogleSignIn } from './googleSignIn.service'
 import GoogleOnboardingModal from './GoogleOnboardingModal.vue'
+import { resolveAuthRedirect } from './authRedirect'
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const loading = ref(false)
@@ -48,12 +50,12 @@ const onboarding = ref<GoogleOnboardingState | null>(null)
 async function finish(idToken: string) {
   onboarding.value = await authStore.loginWithGoogle(idToken)
   if (onboarding.value) return
-  await router.replace('/')
+  await router.replace(resolveAuthRedirect(route.query.redirect))
 }
 
 async function complete() {
   onboarding.value = null
-  await router.replace('/')
+  await router.replace(resolveAuthRedirect(route.query.redirect))
 }
 
 async function start() {

@@ -8,8 +8,8 @@ export default {
   goHome: 'Go to Home',
   goToProfile: 'Go to my profile',
   // Header search (Home route only)
-  searchLabel: 'Search dreams',
-  searchPlaceholder: 'Search dreams...',
+  searchLabel: 'Search posts, comments, and people',
+  searchPlaceholder: 'Search posts, comments, people…',
   clearSearch: 'Clear search',
   pullToRefresh: {
     pull: 'Pull down to refresh',

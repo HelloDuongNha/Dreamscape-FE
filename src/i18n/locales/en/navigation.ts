@@ -24,6 +24,7 @@ export default {
   // Moderation (administrator-only nav items)
   moderationSources: 'Source review',
   ruleReview: 'Argument review',
+  evidenceNeeded: 'Evidence needed',
   // Header page titles — keyed by Vue Router route name
   pageHome: 'Home',
   pageOracle: 'Oracle',
@@ -36,12 +37,14 @@ export default {
   pageModerationSources: 'Source review',
   pageModerationSourcePreview: 'Source preview',
   pageModerationRuleCandidates: 'Argument review',
+  pageModerationEvidenceNeeded: 'Evidence needed',
   pageFallback: 'DreamScape',
   titleLogin: 'Sign in — DreamScape',
   titleRegister: 'Create Account — DreamScape',
   titleVerifyOtp: 'Verify OTP — DreamScape',
   titleForgotPassword: 'Recover Password — DreamScape',
   titleResetPassword: 'Reset Password — DreamScape',
+  titleSharedPost: 'Shared Post — DreamScape',
   titleHome: 'Home — DreamScape',
   titleOracle: 'Oracle — DreamScape',
   titleMessages: 'Messages — DreamScape',
@@ -53,5 +56,6 @@ export default {
   titleModerationSources: 'Source Review — DreamScape',
   titleModerationSourcePreview: 'Source Preview — DreamScape',
   titleModerationRuleCandidates: 'Argument Review — DreamScape',
+  titleModerationEvidenceNeeded: 'Evidence Needed — DreamScape',
   titleFallback: 'DreamScape',
 } as const

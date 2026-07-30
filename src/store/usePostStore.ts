@@ -46,7 +46,7 @@ export const usePostStore = defineStore('post', () => {
   async function openPost(
     id: string,
     options?: { edit?: boolean; commentId?: string },
-  ): Promise<void> {
+  ): Promise<boolean> {
     focusedId.value       = id
     editRequested.value   = options?.edit === true
     focusedCommentId.value = options?.commentId || null
@@ -62,9 +62,11 @@ export const usePostStore = defineStore('post', () => {
       ])
       focusedComments.value = commentsRes.data.data
       mergeDreamSnapshot(dreamRes.data.data, existingDream)
+      return true
     } catch (err) {
       console.error('Failed to open post:', err)
       useSettingsStore().showToastKey('home.postLoadError', undefined, 'error')
+      return false
     } finally {
       isLoadingComments.value = false
     }

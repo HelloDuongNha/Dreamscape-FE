@@ -40,159 +40,7 @@
       <!-- Loading State -->
       <div v-if="isLoading" class="moderation-loading">
         <span class="spinner"></span>
-        <p>{{ activeStatus === 'evidence_gaps' ? t('oracle.evidenceLoading') : t('library.moderation.loading') }}</p>
-      </div>
-
-      <div v-else-if="activeStatus === 'evidence_gaps'" class="evidence-gap-panel">
-        <div class="evidence-gap-toolbar">
-          <div class="evidence-gap-filters" :aria-label="t('oracle.evidenceStatus')">
-            <button
-              v-for="filter in evidenceGapFilters"
-              :key="filter.value"
-              :class="{ active: evidenceGapStatus === filter.value }"
-              @click="changeEvidenceGapStatus(filter.value)"
-            >
-              {{ t(filter.labelKey) }}
-            </button>
-          </div>
-          <AppCopyButton
-            v-if="evidenceGaps.some(gap => gap.status !== 'resolved')"
-            class="evidence-gap-copy-all"
-            :text="allEvidenceResearchPrompts"
-            :resolve-text="loadAllEvidenceResearchPrompts"
-            :label="t('oracle.evidenceCopyAll')"
-            :copied-label="t('oracle.evidenceCopiedShort')"
-            :success-message="t('oracle.evidenceCopiedAll', { count: pagination.total })"
-            :error-message="t('oracle.evidenceCopyFailed')"
-            show-label
-          />
-        </div>
-
-        <div v-if="evidenceGaps.length === 0" class="moderation-empty">
-          <AppIcon class="moderation-empty__icon" name="check" :size="28" />
-          <h3 class="moderation-empty__title">{{ t('oracle.evidenceEmptyTitle') }}</h3>
-          <p class="moderation-empty__desc">{{ t('oracle.evidenceEmptyDescription') }}</p>
-        </div>
-
-        <div v-else class="evidence-gap-list">
-          <article v-for="gap in evidenceGaps" :key="gap._id" class="evidence-gap-card">
-            <header class="evidence-gap-card__header">
-              <div>
-                <span :class="['evidence-gap-status', `evidence-gap-status--${gap.status}`]">
-                  {{ evidenceGapStatusLabel(gap.status) }}
-                </span>
-                <h3>{{ evidenceGapClaim(gap) }}</h3>
-              </div>
-              <div v-if="gap.status !== 'resolved'" class="evidence-gap-card__tools">
-                <AppCopyButton
-                  :text="evidenceResearchPrompt(gap)"
-                  :label="t('oracle.evidenceCopyOne')"
-                  :copied-label="t('oracle.evidenceCopiedShort')"
-                  :success-message="t('oracle.evidenceCopied')"
-                  :error-message="t('oracle.evidenceCopyFailed')"
-                />
-                <button
-                  type="button"
-                  class="evidence-gap-help"
-                  :aria-expanded="helpGapId === gap._id"
-                  :aria-label="t('oracle.evidencePromptHelpTitle')"
-                  @click="helpGapId = helpGapId === gap._id ? null : gap._id"
-                >
-                  ?
-                </button>
-                <div
-                  v-if="helpGapId === gap._id"
-                  class="evidence-gap-help__popover"
-                  role="tooltip"
-                >
-                  <strong>{{ t('oracle.evidencePromptHelpTitle') }}</strong>
-                  <p>{{ t('oracle.evidencePromptHelp') }}</p>
-                </div>
-              </div>
-            </header>
-
-            <section v-if="gap.status !== 'resolved'">
-              <h4>{{ t('oracle.evidenceMeaning') }}</h4>
-              <p>{{ t('oracle.evidenceMeaningText', { claim: evidenceGapClaim(gap) }) }}</p>
-            </section>
-
-            <section v-if="gap.resolvedRules.length">
-              <h4>{{ t('oracle.evidenceResolvedBy') }}</h4>
-              <div
-                v-for="rule in gap.resolvedRules"
-                :key="rule._id"
-                class="evidence-gap-rule"
-              >
-                <strong>{{ rule.ruleCode }}</strong>
-                <span>{{ rule.statement }}</span>
-                <small>{{ t('oracle.evidenceMatchedExcerpt') }}</small>
-              </div>
-              <button
-                v-for="source in gap.resolvedSources"
-                :key="source.sourceId"
-                type="button"
-                class="evidence-gap-source-link"
-                @click="openResolvedEvidenceSource(source.sourceId)"
-              >
-                <span class="evidence-gap-source-link__content">
-                  <strong>
-                    {{ source.title }}
-                    <small v-if="source.year">({{ source.year }})</small>
-                  </strong>
-                  <q>{{ source.excerpt }}</q>
-                </span>
-              <small>{{ t('oracle.evidenceInspectLinkedSource') }}</small>
-              </button>
-            </section>
-
-            <details v-if="gap.usageExcerpts.length" class="evidence-gap-usage">
-              <summary>
-                {{
-                  t(
-                    gap.status === 'resolved'
-                      ? 'oracle.evidenceUsageTitle'
-                      : 'oracle.evidencePendingUsageTitle',
-                    { count: gap.usageExcerpts.length },
-                  )
-                }}
-              </summary>
-              <p>{{ t('oracle.evidenceUsagePrivacy') }}</p>
-              <div class="evidence-gap-usage__list">
-                <article
-                  v-for="(usage, index) in gap.usageExcerpts"
-                  :key="`${usage.surfaceType}-${usage.citationIndex ?? 'pending'}-${index}`"
-                >
-                  <header>
-                    <span>{{ usage.surfaceType === 'oracle' ? t('oracle.evidenceUsageOracle') : t('oracle.evidenceUsageDream') }}</span>
-                    <strong>[{{ usage.citationIndex ?? '?' }}]</strong>
-                  </header>
-                  <blockquote>{{ usage.excerpt }}</blockquote>
-                </article>
-              </div>
-            </details>
-
-            <details v-if="gap.status !== 'resolved'" class="deep-research-preview">
-              <summary>{{ t('oracle.evidenceViewPrompt') }}</summary>
-              <div class="deep-research-preview__languages" :aria-label="t('oracle.evidencePromptLanguage')">
-                <button
-                  type="button"
-                  :class="{ active: researchPromptLanguage === 'vi' }"
-                  @click.prevent="researchPromptLanguage = 'vi'"
-                >
-                  {{ t('oracle.evidencePromptVietnamese') }}
-                </button>
-                <button
-                  type="button"
-                  :class="{ active: researchPromptLanguage === 'en' }"
-                  @click.prevent="researchPromptLanguage = 'en'"
-                >
-                  {{ t('oracle.evidencePromptEnglish') }}
-                </button>
-              </div>
-              <pre>{{ evidenceResearchPrompt(gap) }}</pre>
-            </details>
-          </article>
-        </div>
+        <p>{{ t('library.moderation.loading') }}</p>
       </div>
 
       <!-- Empty State -->
@@ -430,7 +278,7 @@
           {{ t('library.moderation.pagination.previous') }}
         </button>
         <span class="pagination-info">
-          {{ t('library.moderation.pagination.summary', { page: pagination.page, pages: pagination.pages, total: pagination.total, unit: activeStatus === 'evidence_gaps' ? t('library.moderation.pagination.unitGaps') : t('library.moderation.pagination.unitSources') }) }}
+          {{ t('library.moderation.pagination.summary', { page: pagination.page, pages: pagination.pages, total: pagination.total, unit: t('library.moderation.pagination.unitSources') }) }}
         </span>
         <button
           :disabled="pagination.page === pagination.pages"
@@ -548,9 +396,7 @@ import { useSettingsStore } from '@/store/useSettingsStore'
 import {
   getModerationSources,
   getModerationSourcePdfInline,
-  getOracleEvidenceGaps,
   reviewSource,
-  type OracleEvidenceGapItem,
   type SourceContribution,
 } from '@/api/moderationApi'
 import { useSourceProgressStore } from '@/store/useSourceProgressStore'
@@ -559,13 +405,8 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
 import AppStatusBadge from '@/components/common/AppStatusBadge.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
-import AppCopyButton from '@/components/common/AppCopyButton.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import AcademicContributionModal from '@/components/academic/AcademicContributionModal.vue'
-import {
-  buildEvidenceResearchPrompt,
-  type EvidenceResearchLanguage,
-} from './services/evidenceResearchPrompt.service'
 import { isSourceReaderBuildInProgress } from './services/sourceReviewAvailability.service'
 import { getApiErrorMessage, getApiErrorStatus } from '@/utils/apiError'
 
@@ -600,17 +441,12 @@ function formatBytes(bytes?: number, decimals = 2) {
 const isUnauthorized = ref(false)
 const isLoading = ref(false)
 const isSubmitting = ref(false)
-type ModerationTab = 'pending' | 'approved' | 'rejected' | 'evidence_gaps'
-type EvidenceGapStatus = 'active' | 'resolved'
+type ModerationTab = 'pending' | 'approved' | 'rejected'
 
 const activeStatus = ref<ModerationTab>('pending')
 const currentPage = ref(1)
 
 const sources = ref<SourceContribution[]>([])
-const evidenceGaps = ref<OracleEvidenceGapItem[]>([])
-const evidenceGapStatus = ref<EvidenceGapStatus>('active')
-const researchPromptLanguage = ref<EvidenceResearchLanguage>(String(locale.value).startsWith('en') ? 'en' : 'vi')
-const helpGapId = ref<string | null>(null)
 const pagination = ref({
   total: 0,
   page: 1,
@@ -637,19 +473,13 @@ const tabs = computed(() => [
   { status: 'pending' as const, label: t('library.moderation.tabs.pending') },
   { status: 'approved' as const, label: t('library.moderation.tabs.approved') },
   { status: 'rejected' as const, label: t('library.moderation.tabs.rejected') },
-  { status: 'evidence_gaps' as const, label: t('oracle.evidenceTab') },
 ])
-const evidenceGapFilters: Array<{ value: EvidenceGapStatus; labelKey: string }> = [
-  { value: 'active', labelKey: 'oracle.evidenceNeedsSource' },
-  { value: 'resolved', labelKey: 'oracle.evidenceResolved' },
-]
 
 const activeTabLabel = computed(() => {
   return tabs.value.find(tab => tab.status === activeStatus.value)?.label ?? ''
 })
 
 async function fetchSources() {
-  if (activeStatus.value === 'evidence_gaps') return
   isLoading.value = true
   try {
     const res = await getModerationSources({
@@ -673,50 +503,17 @@ async function fetchSources() {
   }
 }
 
-async function fetchEvidenceGaps() {
-  isLoading.value = true
-  try {
-    const result = await getOracleEvidenceGaps({
-      status: evidenceGapStatus.value,
-      page: currentPage.value,
-      limit: 20,
-    })
-    evidenceGaps.value = result.gaps
-    pagination.value = result.pagination
-  } catch (error: unknown) {
-    if (getApiErrorStatus(error) === 403) {
-      isUnauthorized.value = true
-    } else {
-      settingsStore.showToast(
-        getApiErrorMessage(error, t('library.moderation.toast.evidenceLoadError')),
-        'error',
-      )
-    }
-  } finally {
-    isLoading.value = false
-  }
-}
-
 function changeTab(status: ModerationTab) {
   activeStatus.value = status
   currentPage.value = 1
   persistModerationView()
-  if (status === 'evidence_gaps') fetchEvidenceGaps()
-  else fetchSources()
+  fetchSources()
 }
 
 function changePage(page: number) {
   currentPage.value = page
   persistModerationView()
-  if (activeStatus.value === 'evidence_gaps') fetchEvidenceGaps()
-  else fetchSources()
-}
-
-function changeEvidenceGapStatus(status: EvidenceGapStatus) {
-  evidenceGapStatus.value = status
-  currentPage.value = 1
-  persistModerationView()
-  fetchEvidenceGaps()
+  fetchSources()
 }
 
 function persistModerationView(): void {
@@ -724,56 +521,10 @@ function persistModerationView(): void {
     query: {
       ...route.query,
       tab: activeStatus.value,
-      evidenceStatus: evidenceGapStatus.value,
       page: String(currentPage.value),
     },
   })
 }
-
-function evidenceGapStatusLabel(status: OracleEvidenceGapItem['status']) {
-  if (status === 'resolved') return t('oracle.evidenceResolved')
-  if (status === 'candidate_found') return t('oracle.evidenceCandidateFound')
-  return t('oracle.evidenceNeedsSource')
-}
-
-function evidenceGapClaim(gap: OracleEvidenceGapItem): string {
-  const language = String(locale.value).startsWith('en') ? 'en' : 'vi'
-  return gap.localizedClaims?.[language] || gap.claim
-}
-
-function evidenceResearchPrompt(gap: OracleEvidenceGapItem): string {
-  return buildEvidenceResearchPrompt(gap, researchPromptLanguage.value)
-}
-
-function openResolvedEvidenceSource(sourceId: string): void {
-  router.push(`/library/sources/${sourceId}`)
-}
-
-const allEvidenceResearchPrompts = computed(() => evidenceGaps.value
-  .filter(gap => gap.status !== 'resolved')
-  .map((gap, index) => `${t('oracle.evidencePromptNumber', { number: index + 1 })}\n${evidenceResearchPrompt(gap)}`)
-  .join('\n\n---\n\n'))
-
-async function loadAllEvidenceResearchPrompts(): Promise<string> {
-  const allGaps: OracleEvidenceGapItem[] = []
-  const limit = 50
-  let page = 1
-  let pages = 1
-  do {
-    const result = await getOracleEvidenceGaps({ status: 'active', page, limit })
-    allGaps.push(...result.gaps)
-    pages = Math.max(1, result.pagination.pages)
-    page += 1
-  } while (page <= pages)
-  return allGaps
-    .filter(gap => gap.status !== 'resolved')
-    .map((gap, index) => `${t('oracle.evidencePromptNumber', { number: index + 1 })}\n${evidenceResearchPrompt(gap)}`)
-    .join('\n\n---\n\n')
-}
-
-watch(locale, (value) => {
-  researchPromptLanguage.value = String(value).startsWith('en') ? 'en' : 'vi'
-})
 
 function openReviewModal(source: SourceContribution, action: 'approved' | 'rejected') {
   if (isReaderBuildInProgress(source)) {
@@ -969,14 +720,12 @@ async function confirmPdfDownload() {
 
 onMounted(() => {
   const requestedTab = String(route.query.tab || '')
-  if (['pending', 'approved', 'rejected', 'evidence_gaps'].includes(requestedTab)) {
+  if (['pending', 'approved', 'rejected'].includes(requestedTab)) {
     activeStatus.value = requestedTab as ModerationTab
   }
-  if (route.query.evidenceStatus === 'resolved') evidenceGapStatus.value = 'resolved'
   const requestedPage = Number(route.query.page)
   if (Number.isInteger(requestedPage) && requestedPage > 0) currentPage.value = requestedPage
-  if (activeStatus.value === 'evidence_gaps') fetchEvidenceGaps()
-  else fetchSources()
+  fetchSources()
 })
 </script>
 
@@ -1061,347 +810,6 @@ onMounted(() => {
   color: var(--color-text-primary);
   border-bottom-color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);
-}
-
-.evidence-gap-panel,
-.evidence-gap-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.evidence-gap-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.evidence-gap-filters {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  overflow-x: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-elevated);
-}
-
-.evidence-gap-filters button {
-  border: 0;
-  border-radius: var(--radius-md);
-  padding: 7px 11px;
-  color: var(--color-text-muted);
-  background: transparent;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.evidence-gap-filters button.active {
-  color: var(--color-text-primary);
-  background: var(--color-bg-active);
-  box-shadow: inset 0 0 0 1px var(--color-border);
-}
-
-.evidence-gap-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-5);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid #f59e0b;
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-surface, #1e1e1e);
-}
-
-.evidence-gap-card__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.evidence-gap-card h3 {
-  margin: var(--space-2) 0 0;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-md);
-  line-height: var(--line-height-relaxed);
-}
-
-.evidence-gap-card__header small {
-  display: block;
-  margin-top: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: 10px;
-}
-
-.evidence-gap-related {
-  margin-top: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: 11px;
-}
-
-.evidence-gap-related summary {
-  width: fit-content;
-  cursor: pointer;
-}
-
-.evidence-gap-related ul {
-  display: grid;
-  gap: 6px;
-  margin: var(--space-2) 0 0;
-  padding-left: 18px;
-}
-
-.evidence-gap-card h4 {
-  margin: 0 0 var(--space-2);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.035em;
-  text-transform: uppercase;
-}
-
-.evidence-gap-card p,
-.evidence-gap-card li {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-relaxed);
-}
-
-.evidence-gap-card ul {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.evidence-gap-status {
-  display: inline-flex;
-  padding: 3px 8px;
-  border-radius: var(--radius-full);
-  color: #fbbf24;
-  background: rgb(245 158 11 / 12%);
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.evidence-gap-status--candidate_found {
-  color: #60a5fa;
-  background: rgb(59 130 246 / 12%);
-}
-
-.evidence-gap-status--resolved {
-  color: #34d399;
-  background: rgb(52 211 153 / 12%);
-}
-
-.evidence-gap-rule {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
-  background: var(--color-bg-elevated);
-  font-size: var(--font-size-xs);
-}
-
-.evidence-gap-rule small {
-  color: var(--color-text-muted);
-}
-
-.evidence-gap-source-link {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
-  border-radius: var(--radius-md);
-  color: var(--color-text-primary);
-  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-bg-elevated));
-  cursor: pointer;
-  text-align: left;
-}
-
-.evidence-gap-source-link:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border));
-  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-elevated));
-}
-
-.evidence-gap-source-link small {
-  color: var(--color-text-muted);
-}
-
-.evidence-gap-source-link__content {
-  display: grid;
-  min-width: 0;
-  gap: 5px;
-}
-
-.evidence-gap-source-link__content q {
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  font-style: normal;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.evidence-gap-usage {
-  margin-top: var(--space-3);
-  border-top: 1px solid var(--color-border);
-  padding-top: var(--space-3);
-}
-
-.evidence-gap-usage > summary {
-  color: var(--color-text-primary);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: 650;
-}
-
-.evidence-gap-usage > p {
-  margin: var(--space-2) 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-.evidence-gap-usage__list {
-  display: grid;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-
-.evidence-gap-usage__list article {
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
-}
-
-.evidence-gap-usage__list header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-}
-
-.evidence-gap-usage__list header strong {
-  color: var(--color-primary);
-}
-
-.evidence-gap-usage__list blockquote {
-  margin: var(--space-2) 0 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-relaxed);
-}
-
-.deep-research-preview {
-  border-top: 1px solid var(--color-border);
-  padding-top: var(--space-3);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-}
-
-.deep-research-preview summary {
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.deep-research-preview pre {
-  overflow-x: auto;
-  margin: var(--space-3) 0;
-  padding: var(--space-4);
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
-  background: var(--color-bg-base);
-  font: inherit;
-  line-height: var(--line-height-relaxed);
-  white-space: pre-wrap;
-}
-
-.deep-research-preview__languages {
-  display: inline-flex;
-  gap: 4px;
-  margin-top: var(--space-3);
-  padding: 3px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
-}
-
-.deep-research-preview__languages button {
-  border: 0;
-  border-radius: calc(var(--radius-md) - 2px);
-  padding: 5px 9px;
-  color: var(--color-text-muted);
-  background: transparent;
-  cursor: pointer;
-  font-size: 11px;
-}
-
-.deep-research-preview__languages button.active {
-  color: var(--color-text-primary);
-  background: var(--color-bg-active);
-}
-
-.evidence-gap-help {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin-left: 6px;
-  border: 1px solid var(--color-border);
-  border-radius: 50%;
-  color: var(--color-text-muted);
-  background: transparent;
-  cursor: help;
-  font-size: 11px;
-}
-
-.evidence-gap-card__tools {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-
-.evidence-gap-card__tools .evidence-gap-help {
-  margin-left: 0;
-}
-
-.evidence-gap-help__popover {
-  position: absolute;
-  z-index: 5;
-  top: calc(100% + 8px);
-  right: 0;
-  width: min(320px, 80vw);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  color: var(--color-text-secondary);
-  background: var(--color-bg-elevated);
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-relaxed);
-}
-
-.evidence-gap-help__popover strong {
-  color: var(--color-text-primary);
-}
-
-.evidence-gap-help__popover p {
-  margin: var(--space-1) 0 0;
-  font-size: inherit;
 }
 
 /* Loading & Empty state */
@@ -2008,47 +1416,13 @@ onMounted(() => {
     padding-inline: var(--space-3);
   }
 
-  .evidence-gap-toolbar,
-  .evidence-gap-filters {
-    width: 100%;
-  }
-
-  .evidence-gap-filters {
-    scrollbar-width: none;
-  }
-
-  .evidence-gap-filters button {
-    min-height: 40px;
-  }
-
-  .evidence-gap-copy-all {
-    width: 100%;
-    min-height: 44px;
-  }
-
-  .evidence-gap-card,
   .source-card {
     gap: var(--space-3);
     padding: var(--space-4);
   }
 
-  .evidence-gap-card__header,
   .source-card__header {
     flex-direction: column;
-  }
-
-  .evidence-gap-rule {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .evidence-gap-rule > :first-child {
-    grid-column: 1 / -1;
-  }
-
-  .evidence-gap-help__popover {
-    position: fixed;
-    inset: auto 12px calc(var(--mobile-nav-height) + var(--safe-area-bottom) + 12px);
-    width: auto;
   }
 
   .source-card__grid,

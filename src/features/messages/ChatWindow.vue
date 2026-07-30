@@ -70,92 +70,71 @@
         <p>{{ t('messages.sayHello') }}</p>
       </div>
 
-      <div
+      <ChatMessageItem
         v-for="msg in chatStore.activeMessages"
         :key="msg._id"
-        class="chat-bubble-wrap"
-        :class="isMe(msg) ? 'chat-bubble-wrap--me' : 'chat-bubble-wrap--other'"
-      >
-        <!-- ── OTHER: inner row (avatar + bubble bottom-aligned) + time below ── -->
-        <template v-if="!isMe(msg)">
-          <div class="chat-bubble-row">
-            <span
-              v-if="chatStore.activePartner"
-              class="chat-bubble-wrap__avatar"
-              :aria-label="chatStore.activePartner?.display_name"
-            >
-              <UserAvatar :user="chatStore.activePartner" size="sm" show-streak />
-            </span>
-            <div class="chat-bubble chat-bubble--other">
-              {{ msg.content_unavailable ? t('messages.contentUnavailable') : msg.content }}
-            </div>
-          </div>
-          <span class="chat-bubble__time chat-bubble__time--other">{{ timeAgo(msg.timestamp) }}</span>
-        </template>
-
-        <!-- ── ME: bubble + time + status ── -->
-        <template v-else>
-          <div class="chat-bubble-col">
-            <div
-              class="chat-bubble chat-bubble--me"
-              :class="{
-                'chat-bubble--optimistic': msg.deliveryState === 'sending',
-                'chat-bubble--failed': msg.deliveryState === 'failed',
-              }"
-            >
-              {{ msg.content_unavailable ? t('messages.contentUnavailable') : msg.content }}
-            </div>
-            <span class="chat-bubble__time">{{ timeAgo(msg.timestamp) }}</span>
-            <!-- Status indicator — only on the last sent message -->
-            <span
-              v-if="isLastSentMsg(msg)"
-              class="chat-bubble__status"
-              :aria-label="`Message ${msg.status ?? 'sent'}`"
-            >
-              <template v-if="msg.deliveryState === 'sending'">{{ t('messages.sending') }}</template>
-              <button
-                v-else-if="msg.deliveryState === 'failed'"
-                type="button"
-                class="chat-bubble__retry"
-                @click="chatStore.retryMessage(msg)"
-              >
-                {{ t('messages.retrySend') }}
-              </button>
-              <template v-else>{{ statusLabel(msg.status) }}</template>
-            </span>
-          </div>
-        </template>
-      </div>
+        :message="msg"
+        :mine="isMe(msg)"
+        :last-sent="isLastSentMsg(msg)"
+        :current-user-id="chatStore.currentUserId"
+        :partner="chatStore.activePartner"
+        @reply="startReply(msg)"
+        @forward="forwardingMessage = msg"
+        @delete="requestMessageMutation('delete', msg)"
+        @unsend="requestMessageMutation('unsend', msg)"
+        @retry="chatStore.retryMessage(msg)"
+        @jump-to="scrollToMessage"
+      />
     </div>
 
     <!-- ── Input area ── -->
-    <div class="chat-input-area">
-      <label :for="inputId" class="sr-only">{{ t('messages.typeMessage') }}</label>
-      <input
-        :id="inputId"
-        v-model="newMessage"
-        type="text"
-        class="chat-input"
-        :placeholder="t('messages.messagePlaceholder')"
-        autocomplete="off"
-        maxlength="2000"
-        @compositionstart="isComposing = true"
-        @compositionend="isComposing = false"
-        @keydown.enter="handleComposerEnter"
-      />
-      <button
-        :id="`send-btn-${chatStore.activeConversationId}`"
-        class="chat-send-btn"
-        :disabled="!newMessage.trim() || isSending || chatStore.socketState !== 'connected'"
-        :aria-label="t('messages.sendMessage')"
-        @click="handleSend"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-        </svg>
-      </button>
+    <div class="chat-composer">
+      <div v-if="replyingTo" class="chat-composer__reply">
+        <span>
+          <strong>{{ t('messages.replyingTo', { name: replyAuthorLabel(replyingTo.senderId) }) }}</strong>
+          <small>{{ replyPreviewText(replyingTo) }}</small>
+        </span>
+        <button type="button" :aria-label="t('messages.cancelReply')" @click="replyingTo = null">×</button>
+      </div>
+      <div class="chat-input-area">
+        <label :for="inputId" class="sr-only">{{ t('messages.typeMessage') }}</label>
+        <input
+          :id="inputId"
+          ref="messageInputRef"
+          v-model="newMessage"
+          type="text"
+          class="chat-input"
+          :placeholder="t('messages.messagePlaceholder')"
+          autocomplete="off"
+          maxlength="2000"
+          @compositionstart="isComposing = true"
+          @compositionend="isComposing = false"
+          @keydown.enter="handleComposerEnter"
+        />
+        <button
+          :id="`send-btn-${chatStore.activeConversationId}`"
+          class="chat-send-btn"
+          :disabled="!newMessage.trim() || isSending || chatStore.socketState !== 'connected'"
+          :aria-label="t('messages.sendMessage')"
+          @click="handleSend"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
     </div>
 
+    <ForwardMessageModal :message="forwardingMessage" @close="forwardingMessage = null" />
+    <AppConfirm
+      v-model="showMessageConfirm"
+      :title="messageConfirmTitle"
+      :message="messageConfirmBody"
+      :confirm-label="messageConfirmLabel"
+      :loading="isMutatingMessage"
+      danger
+      @confirm="confirmMessageMutation"
+    />
   </div>
 </template>
 
@@ -168,6 +147,10 @@ import { useLocaleStore }          from '@/store/useLocaleStore'
 import type { ApiMessage }         from '@/api/types'
 import UserAvatar                  from '@/components/common/UserAvatar.vue'
 import ConversationActionsMenu     from './ConversationActionsMenu.vue'
+import ChatMessageItem             from './ChatMessageItem.vue'
+import ForwardMessageModal         from './ForwardMessageModal.vue'
+import AppConfirm                  from '@/components/common/AppConfirm.vue'
+import { useSettingsStore }        from '@/store/useSettingsStore'
 
 defineEmits<{ back: [] }>()
 
@@ -175,11 +158,18 @@ const chatStore     = useChatStore()
 const localeStore   = useLocaleStore()
 const { t } = useI18n()
 const newMessage    = ref('')
+const messageInputRef = ref<HTMLInputElement | null>(null)
 const messageListRef = ref<HTMLElement | null>(null)
 const inputId       = `chat-input-${Math.random().toString(36).slice(2, 6)}`
 const isDeleting    = ref(false)
 const isComposing   = ref(false)
 const isSending     = ref(false)
+const replyingTo = ref<ApiMessage | null>(null)
+const forwardingMessage = ref<ApiMessage | null>(null)
+const pendingMessageMutation = ref<{ action: 'delete' | 'unsend'; message: ApiMessage } | null>(null)
+const showMessageConfirm = ref(false)
+const isMutatingMessage = ref(false)
+const settingsStore = useSettingsStore()
 const presenceClock = ref(Date.now())
 let presenceTimer: ReturnType<typeof setInterval> | null = null
 
@@ -225,24 +215,90 @@ function isLastSentMsg(msg: ApiMessage): boolean {
   return myMsgs[myMsgs.length - 1]._id === msg._id
 }
 
-// ── Status label text ─────────────────────────────────────────────────────────
-function statusLabel(status?: 'sent' | 'delivered' | 'seen'): string {
-  switch (status) {
-    case 'delivered': return t('messages.delivered')
-    case 'seen':      return t('messages.seen')
-    default:          return t('messages.sent')
-  }
-}
-
 // ── Send ────────────────────────────────────────────────────────────────────
 async function handleSend() {
   const content = newMessage.value.trim()
   if (!content || isSending.value) return
   isSending.value = true
-  const sent = await chatStore.sendMessage(content)
-  if (sent && newMessage.value.trim() === content) newMessage.value = ''
+  const sent = await chatStore.sendMessageToConversation(chatStore.activeConversationId!, {
+    content,
+    replyToMessageId: replyingTo.value?._id,
+  })
+  if (sent && newMessage.value.trim() === content) {
+    newMessage.value = ''
+    replyingTo.value = null
+  }
   isSending.value = false
   scrollToBottom()
+}
+
+function startReply(message: ApiMessage): void {
+  if (message.unsentAt) return
+  replyingTo.value = message
+  void nextTick(() => messageInputRef.value?.focus())
+}
+
+function replyAuthorLabel(senderId: ApiMessage['senderId']): string {
+  const id = typeof senderId === 'object' ? senderId._id : senderId
+  if (id === chatStore.currentUserId) return t('messages.you')
+  return chatStore.activePartner?.display_name || t('messages.otherPerson')
+}
+
+function replyPreviewText(message: NonNullable<ApiMessage['replyTo']> | ApiMessage): string {
+  if (message.unsentAt) return t('messages.messageUnsent')
+  if (message.messageType === 'shared_post') return t('messages.sharedPostPreview')
+  if (message.content_unavailable) return t('messages.contentUnavailable')
+  return message.content
+}
+
+function scrollToMessage(messageId: string): void {
+  const target = document.getElementById(`chat-message-${messageId}`)
+  if (!target) return
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  target.classList.add('chat-message--highlighted')
+  window.setTimeout(() => target.classList.remove('chat-message--highlighted'), 1_500)
+}
+
+function requestMessageMutation(action: 'delete' | 'unsend', message: ApiMessage): void {
+  pendingMessageMutation.value = { action, message }
+  showMessageConfirm.value = true
+}
+
+const messageConfirmTitle = computed(() =>
+  pendingMessageMutation.value?.action === 'unsend'
+    ? t('messages.unsendTitle')
+    : t('messages.deleteMessageTitle'),
+)
+const messageConfirmBody = computed(() =>
+  pendingMessageMutation.value?.action === 'unsend'
+    ? t('messages.unsendConfirm')
+    : t('messages.deleteMessageConfirm'),
+)
+const messageConfirmLabel = computed(() =>
+  pendingMessageMutation.value?.action === 'unsend'
+    ? t('messages.unsendForEveryone')
+    : t('messages.deleteForMe'),
+)
+
+async function confirmMessageMutation(): Promise<void> {
+  const pending = pendingMessageMutation.value
+  if (!pending || isMutatingMessage.value) return
+  isMutatingMessage.value = true
+  try {
+    if (pending.action === 'unsend') {
+      await chatStore.unsendMessage(pending.message._id)
+      settingsStore.showToastKey('messages.unsendSuccess')
+    } else {
+      await chatStore.deleteMessageForMe(pending.message._id)
+      settingsStore.showToastKey('messages.deleteMessageSuccess')
+    }
+    showMessageConfirm.value = false
+    pendingMessageMutation.value = null
+  } catch {
+    settingsStore.showToastKey('messages.messageActionFailed', undefined, 'error')
+  } finally {
+    isMutatingMessage.value = false
+  }
 }
 
 function handleComposerEnter(event: KeyboardEvent) {
@@ -266,6 +322,13 @@ watch(
   () => scrollToBottom(),
   { flush: 'post' }
 )
+
+watch(() => chatStore.activeConversationId, () => {
+  replyingTo.value = null
+  forwardingMessage.value = null
+  showMessageConfirm.value = false
+  pendingMessageMutation.value = null
+})
 
 async function handleDelete() {
   if (!chatStore.activeConversationId || isDeleting.value) return
@@ -381,107 +444,45 @@ function handleToggleMute() {
   color: var(--color-text-muted);
 }
 
-/* ── Bubble outer wrap (one per message) ── */
-.chat-bubble-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-width: 72%;
-}
-.chat-bubble-wrap--me    { align-self: flex-end; align-items: flex-end; }
-.chat-bubble-wrap--other { align-self: flex-start; align-items: flex-start; }
-
-/* Inner row: avatar + bubble, bottom-edges aligned */
-.chat-bubble-row {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-end;
-  gap: var(--space-2);
-}
-
-.chat-bubble-wrap__avatar {
-  display: inline-flex;
-  flex-shrink: 0;
-}
-
-/* Me column (bubble + time right-aligned) */
-.chat-bubble-col {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-}
-
-/* ── Bubble ── */
-.chat-bubble {
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-relaxed);
-  word-break: break-word;
-  max-width: 100%;
-}
-
-/* Me — solid white, dark text */
-.chat-bubble--me {
-  background: #ffffff;
-  color: #101010;
-  border-radius: 18px 18px 4px 18px;
-}
-
-/* Optimistic (temp- prefix, not yet confirmed by server) */
-.chat-bubble--optimistic {
-  opacity: 0.75;
-}
-.chat-bubble--failed {
-  opacity: 0.72;
-  outline: 1px solid rgba(239, 68, 68, 0.65);
-}
-
-/* Other — solid dark gray */
-.chat-bubble--other {
-  background: #262626;
-  color: var(--color-text-primary);
-  border-radius: 18px 18px 18px 4px;
-}
-
-.chat-bubble__time {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  padding: 0 var(--space-1);
-}
-/* Indent "other" timestamp past the avatar width */
-.chat-bubble__time--other {
-  padding-left: calc(28px + var(--space-2) + var(--space-1));
-}
-
-/* ── Delivery status label ── */
-.chat-bubble__status {
-  font-size: 10px;
-  color: var(--color-text-muted);
-  padding: 0 var(--space-1);
-  letter-spacing: 0.01em;
-  opacity: 0.8;
-}
-.chat-bubble__retry {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: #f87171;
-  font: inherit;
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-}
-.chat-bubble__retry:hover { text-decoration: underline; }
-
 /* ── Input area ── */
+.chat-composer {
+  flex-shrink: 0;
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border);
+}
+.chat-composer__reply {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px 0;
+}
+.chat-composer__reply > span {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  padding-left: 10px;
+  border-left: 3px solid #777;
+}
+.chat-composer__reply strong { font-size: 12px; }
+.chat-composer__reply small {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-composer__reply button {
+  width: 28px; height: 28px; border: 0; border-radius: 50%;
+  background: transparent; color: var(--color-text-muted); font-size: 20px; cursor: pointer;
+}
+.chat-composer__reply button:hover { background: var(--color-bg-elevated); color: var(--color-text-primary); }
 .chat-input-area {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   background: var(--color-bg-surface);
-  border-top: 1px solid var(--color-border);
-  flex-shrink: 0;
 }
 
 .chat-input {
@@ -546,15 +547,6 @@ function handleToggleMute() {
   .chat-messages {
     gap: 10px;
     padding: 14px 12px;
-  }
-
-  .chat-bubble-wrap {
-    max-width: 86%;
-  }
-
-  .chat-bubble {
-    padding: 8px 12px;
-    font-size: 15px;
   }
 
   .chat-input-area {

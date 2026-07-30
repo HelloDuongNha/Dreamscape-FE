@@ -191,7 +191,9 @@
             class="conv-list__item-snippet"
             :class="{ 'conv-list__item-snippet--unread': item.conversation.unread_count > 0 }"
           >{{
-            item.conversation.preview_unavailable
+            item.conversation.last_message_unsent
+              ? t('messages.messageUnsent')
+              : item.conversation.preview_unavailable
               ? t('messages.previewUnavailable')
               : (item.conversation.last_message || t('messages.noMessages'))
           }}</p>

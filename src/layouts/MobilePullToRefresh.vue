@@ -15,7 +15,7 @@
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path class="mobile-pull-refresh__track" d="M20 12a8 8 0 1 1-2.34-5.66" />
-        <path class="mobile-pull-refresh__arrow" d="M17.7 3.8v4.7H13" />
+        <path class="mobile-pull-refresh__arrow" d="M13.9 6.1l3.76.24-.21-3.76" />
       </svg>
       <span class="sr-only">{{ statusLabel }}</span>
     </div>
@@ -61,7 +61,6 @@ const indicatorStyle = computed(() => ({
   '--pull-offset': `${Math.min(12, -24 + pullDistance.value * 0.55)}px`,
   '--pull-rotation': `${pullProgress.value * 300}deg`,
   '--pull-scale': String(0.78 + pullProgress.value * 0.22),
-  '--pull-dash-offset': `${30 - pullProgress.value * 18}px`,
 }))
 
 const statusLabel = computed(() => {
@@ -380,11 +379,6 @@ function clearWheelReleaseTimer(): void {
   stroke-width: 2;
   transform: rotate(var(--pull-rotation));
   will-change: transform;
-}
-
-.mobile-pull-refresh__track {
-  stroke-dasharray: 41;
-  stroke-dashoffset: var(--pull-dash-offset);
 }
 
 .mobile-pull-refresh.is-armed {

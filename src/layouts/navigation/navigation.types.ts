@@ -6,6 +6,7 @@ export type NavigationIconName =
   | 'library'
   | 'moderation-sources'
   | 'rule-review'
+  | 'evidence-needed'
   | 'profile'
   | 'settings'
   | 'logout'

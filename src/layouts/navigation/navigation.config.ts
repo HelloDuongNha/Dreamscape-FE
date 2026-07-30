@@ -72,12 +72,22 @@ const RULE_REVIEW: NavigationItem = {
   activePrefixes: ['/moderation/rule-candidates'],
 }
 
+const EVIDENCE_NEEDED: NavigationItem = {
+  id: 'moderation-evidence-needed',
+  to: '/moderation/evidence-needed',
+  labelKey: 'navigation.evidenceNeeded',
+  icon: 'evidence-needed',
+  activePrefixes: ['/moderation/evidence-needed'],
+}
+
 export function buildNavigationModel(context: NavigationContext): NavigationModel {
   const messages = withBadge(MESSAGES, context.unreadMessages)
   const desktopPrimary = [HOME, ORACLE, messages, ACHIEVEMENTS, LIBRARY]
   const mobilePrimary = [HOME, ORACLE, messages, LIBRARY]
   const mobileMoreGeneral = [PROFILE, ACHIEVEMENTS, SETTINGS]
-  const mobileMoreAdmin = context.isAdmin ? [MODERATION_SOURCES, RULE_REVIEW] : []
+  const mobileMoreAdmin = context.isAdmin
+    ? [MODERATION_SOURCES, RULE_REVIEW, EVIDENCE_NEEDED]
+    : []
 
   if (context.isAdmin) {
     desktopPrimary.push(...mobileMoreAdmin)

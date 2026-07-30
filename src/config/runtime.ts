@@ -44,3 +44,19 @@ export const API_BASE_URL = requiredApiBaseUrl(
 export const SOCKET_URL = requiredSocketOrigin(
   import.meta.env.VITE_SOCKET_URL,
 )
+
+const optionalHttpOrigin = (configuredValue: string | undefined): string => {
+  const value = configuredValue?.trim()
+  if (!value) return ''
+  try {
+    const parsed = new URL(value)
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('invalid protocol')
+    return parsed.origin
+  } catch {
+    throw new Error('VITE_PUBLIC_APP_URL must be an absolute HTTP(S) origin')
+  }
+}
+
+export const PUBLIC_APP_URL = optionalHttpOrigin(
+  import.meta.env.VITE_PUBLIC_APP_URL,
+)

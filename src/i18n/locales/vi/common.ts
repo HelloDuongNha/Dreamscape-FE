@@ -8,8 +8,8 @@ export default {
   goHome: 'Về trang chủ',
   goToProfile: 'Đến trang cá nhân của tôi',
   // Header search (Home route only)
-  searchLabel: 'Tìm kiếm giấc mơ',
-  searchPlaceholder: 'Tìm kiếm giấc mơ...',
+  searchLabel: 'Tìm kiếm bài viết, bình luận và người dùng',
+  searchPlaceholder: 'Tìm bài viết, bình luận, người dùng…',
   clearSearch: 'Xóa tìm kiếm',
   pullToRefresh: {
     pull: 'Kéo xuống để làm mới',

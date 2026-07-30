@@ -46,6 +46,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const props = withDefaults(defineProps<{
   text?: string
@@ -74,21 +75,7 @@ async function copy() {
     const text = props.resolveText ? await props.resolveText() : props.text
     if (!text?.trim()) throw new Error('clipboard_empty')
 
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard_unavailable')
-      await navigator.clipboard.writeText(text)
-    } catch {
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      textarea.setAttribute('readonly', '')
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      const copiedWithFallback = document.execCommand('copy')
-      textarea.remove()
-      if (!copiedWithFallback) throw new Error('clipboard_fallback_failed')
-    }
+    await copyTextToClipboard(text)
 
     copied.value = true
     if (resetTimer) clearTimeout(resetTimer)

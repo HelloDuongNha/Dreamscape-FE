@@ -37,6 +37,16 @@ const router = createRouter({
       component: () => import('@/features/auth/ResetPasswordView.vue'),
       meta: { titleKey: 'navigation.titleResetPassword', public: true },
     },
+    {
+      path: '/post/:id',
+      name: 'shared-post',
+      component: () => import('@/features/home/PublicSharedPostView.vue'),
+      meta: {
+        titleKey: 'navigation.titleSharedPost',
+        public: true,
+        allowAuthenticated: true,
+      },
+    },
 
     // ── App routes (with sidebar via MainLayout) ──────────────────────────────
     {
@@ -120,6 +130,12 @@ const router = createRouter({
           meta: { titleKey: 'navigation.titleModerationRuleCandidates', adminOnly: true },
         },
         {
+          path: 'moderation/evidence-needed',
+          name: 'moderation-evidence-needed',
+          component: () => import('@/features/moderation/EvidenceNeededView.vue'),
+          meta: { titleKey: 'navigation.titleModerationEvidenceNeeded', adminOnly: true },
+        },
+        {
           path: 'moderation/knowledge-evidence',
           redirect: '/moderation/rule-candidates',
         },
@@ -140,6 +156,7 @@ router.beforeEach((to) => {
   // Already logged in → don't allow re-visiting login/register (but allow verify-otp for email update)
   if (
     to.meta.public &&
+    !to.meta.allowAuthenticated &&
     auth.isLoggedIn &&
     to.name !== 'verify-otp' &&
     to.name !== 'reset-password'

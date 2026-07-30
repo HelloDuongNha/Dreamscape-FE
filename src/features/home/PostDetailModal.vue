@@ -302,12 +302,38 @@
                 <span>{{ postStore.focusedDream.likes_count }}</span>
               </button>
 
+              <button
+                type="button"
+                class="modal-like-btn"
+                :aria-label="t('home.commentCountAria', { count: postStore.focusedDream.comments_count })"
+                @click="focusCommentComposer"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>{{ postStore.focusedDream.comments_count }}</span>
+              </button>
+
               <!-- Edited badge -->
               <span
                 v-if="isEdited"
                 class="modal-edited-badge"
                 :title="t('home.editedTitle')"
               >{{ t('home.edited') }}</span>
+
+              <button
+                v-if="postStore.focusedDream.is_public && postStore.focusedDream.privacy !== 'private'"
+                type="button"
+                class="modal-like-btn modal-share-btn"
+                :aria-label="t('home.share.buttonAria')"
+                @click="shareStore.open(postStore.focusedDream)"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                  <path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/>
+                </svg>
+                <span>{{ t('home.share.button') }}</span>
+              </button>
             </div>
 
             <!-- ── Comments section ── -->
@@ -479,7 +505,7 @@
           </div>
 
           <!-- ── Comment input (fixed at bottom) ── -->
-          <div v-if="commentsEnabled" class="modal-input-bar">
+          <div v-if="commentsEnabled && authStore.isLoggedIn" class="modal-input-bar">
             <div v-if="replyingToComment" class="modal-reply-context" role="status">
               <span>
                 {{ t('home.replyingTo') }}
@@ -491,14 +517,12 @@
                 @click="cancelReply"
               >×</button>
             </div>
-            <div
+            <UserAvatar
+              v-if="authStore.myUser"
+              :user="authStore.myUser"
+              size="sm"
               class="modal-input-avatar"
-              :style="{ background: currentAvatarBg }"
-              aria-hidden="true"
-              translate="no"
-            >
-              {{ currentInitials }}
-            </div>
+            />
             <input
               id="modal-comment-input"
               ref="commentInputRef"
@@ -524,6 +548,11 @@
               </svg>
             </button>
           </div>
+          <div v-else-if="commentsEnabled" class="modal-comments-disabled" role="status">
+            <button type="button" class="modal-guest-login" @click="requestLogin">
+              {{ t('home.guestLoginToInteract') }}
+            </button>
+          </div>
           <div v-else class="modal-comments-disabled" role="status">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
               <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>
@@ -541,15 +570,15 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink }    from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { usePostStore }  from '@/store/usePostStore'
 import { useDreamStore } from '@/store/useDreamStore'
 import { useAuthStore }  from '@/store/useAuthStore'
 import { useOracleStore } from '@/store/useOracleStore'
 import { useLocaleStore } from '@/store/useLocaleStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { usePostShareStore } from '@/store/usePostShareStore'
 import apiClient         from '@/api/client'
-import { getInitials, getAvatarBg } from '@/utils/avatar'
 import { timeAgo }       from '@/utils/timeAgo'
 import { formatUsername } from '@/utils/username'
 import { getApiErrorDataCode } from '@/utils/apiError'
@@ -569,6 +598,8 @@ const authStore  = useAuthStore()
 const oracleStore = useOracleStore()
 const localeStore = useLocaleStore()
 const settingsStore = useSettingsStore()
+const shareStore = usePostShareStore()
+const router = useRouter()
 const { t } = useI18n({ useScope: 'global' })
 
 const commentText  = ref('')
@@ -963,6 +994,10 @@ const isLiked = computed(() => {
 
 async function handleLike(): Promise<void> {
   if (!postStore.focusedDream || isLiking.value) return
+  if (!authStore.isLoggedIn) {
+    requestLogin()
+    return
+  }
   isLiking.value = true
   try {
     await dreamStore.toggleLike(postStore.focusedDream._id)
@@ -970,15 +1005,6 @@ async function handleLike(): Promise<void> {
     isLiking.value = false
   }
 }
-
-// ── Current user for the comment bar ─────────────────────────────────────────
-
-const currentInitials = computed(() =>
-  getInitials(authStore.myUser?.display_name ?? '?')
-)
-const currentAvatarBg = computed(() =>
-  getAvatarBg(authStore.myId)
-)
 
 function canManageComment(comment: ApiComment): boolean {
   return comment.userId._id === authStore.myId || isOwner.value
@@ -1111,6 +1137,10 @@ function moveCommentVersion(comment: ApiComment, delta: -1 | 1): void {
 }
 
 function startReply(comment: ApiComment): void {
+  if (!authStore.isLoggedIn) {
+    requestLogin()
+    return
+  }
   replyingToComment.value = comment
   nextTick(() => commentInputRef.value?.focus())
 }
@@ -1151,6 +1181,20 @@ async function submitComment(): Promise<void> {
   } finally {
     isSubmitting.value = false
   }
+}
+
+function focusCommentComposer(): void {
+  if (!authStore.isLoggedIn) {
+    requestLogin()
+    return
+  }
+  commentInputRef.value?.focus()
+  commentInputRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+function requestLogin(): void {
+  const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  void router.push({ name: 'login', query: { redirect } })
 }
 
 // ── Focus trap + scroll reset ─────────────────────────────────────────────────
@@ -1628,6 +1672,17 @@ onBeforeUnmount(() => {
   color: #EF4444;
 }
 .modal-like-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.modal-share-btn { margin-left: auto; }
+.modal-guest-login {
+  min-height: 38px;
+  padding: 0 18px;
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+}
 
 .modal-edited-badge {
   font-size: var(--font-size-xs);

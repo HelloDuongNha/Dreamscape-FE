@@ -31,6 +31,14 @@ interface SendMessageAcknowledgement {
   data?: SocketMessage
 }
 
+interface MessageComposeInput {
+  content: string
+  messageType?: 'text' | 'shared_post'
+  sharedPostId?: string
+  replyToMessageId?: string
+  forwarded?: boolean
+}
+
 // ─── Exported Types ───────────────────────────────────────────────────────────
 
 export interface ConversationWithPartner {
@@ -219,6 +227,19 @@ export const useChatStore = defineStore('chat', () => {
         }
       }
     })
+    socket.on('message_deleted_for_me', (payload: {
+      messageId: string
+      conversationId: string
+    }) => {
+      removeMessageLocally(payload.messageId)
+    })
+    socket.on('message_unsent', (payload: {
+      messageId: string
+      conversationId: string
+      unsentAt: string
+    }) => {
+      markMessageUnsent(payload.messageId, payload.unsentAt)
+    })
 
     socket.on('error_message', (err: { code?: string; tempId?: string }) => {
       const changed = err.tempId ? failOptimisticMessage(err.tempId) : true
@@ -324,6 +345,12 @@ export const useChatStore = defineStore('chat', () => {
       conversationId: payload.conversationId,
       senderId: payload.senderId,
       content: payload.content,
+      messageType: payload.messageType || 'text',
+      sharedPostId: payload.sharedPostId,
+      replyToMessageId: payload.replyToMessageId,
+      replyTo: payload.replyTo,
+      forwarded: payload.forwarded,
+      unsentAt: payload.unsentAt,
       timestamp: String(payload.timestamp),
       status: payload.status,
       clientMessageId: payload.clientMessageId,
@@ -335,6 +362,7 @@ export const useChatStore = defineStore('chat', () => {
     const conversation = _findConv(payload.conversationId)
     if (!conversation) return
     conversation.last_message = payload.content
+    conversation.last_message_unsent = false
     conversation.updated_at = String(payload.timestamp)
   }
 
@@ -579,15 +607,30 @@ export const useChatStore = defineStore('chat', () => {
    * Uses temp- prefixed ID so the server echo can locate and replace it in-place.
    */
   async function sendMessage(content: string): Promise<boolean> {
-    if (!activeConversationId.value || !content.trim()) return false
+    if (!activeConversationId.value) return false
+    return sendMessageToConversation(activeConversationId.value, { content })
+  }
+
+  async function sendMessageToConversation(
+    conversationId: string,
+    input: MessageComposeInput,
+  ): Promise<boolean> {
+    if (!conversationId || !input.content.trim()) return false
 
     const tempId = createClientMessageId()
 
     const optimistic: ApiMessage = {
       _id:            tempId,
-      conversationId: activeConversationId.value,
+      conversationId,
       senderId:       currentUserId.value,
-      content:        content.trim(),
+      content:        input.content.trim(),
+      messageType:    input.messageType || 'text',
+      sharedPostId:   input.sharedPostId,
+      replyToMessageId: input.replyToMessageId,
+      replyTo: input.replyToMessageId
+        ? createReplyPreview(input.replyToMessageId)
+        : undefined,
+      forwarded:      input.forwarded === true,
       timestamp:      new Date().toISOString(),
       status:         'sent',
       clientMessageId: tempId,
@@ -596,9 +639,9 @@ export const useChatStore = defineStore('chat', () => {
     messages.value.push(optimistic)
 
     // Update conversation snippet immediately
-    const conv = _findConv(activeConversationId.value)
+    const conv = _findConv(conversationId)
     if (conv) {
-      conv.last_message = content.trim()
+      conv.last_message = input.content.trim()
       conv.updated_at   = optimistic.timestamp
     }
 
@@ -626,6 +669,10 @@ export const useChatStore = defineStore('chat', () => {
         {
           conversationId: message.conversationId,
           content: message.content,
+          messageType: message.messageType,
+          sharedPostId: message.sharedPostId,
+          replyToMessageId: message.replyToMessageId,
+          forwarded: message.forwarded,
           tempId: message._id,
           clientMessageId: message.clientMessageId || message._id,
         },
@@ -651,6 +698,10 @@ export const useChatStore = defineStore('chat', () => {
         data: SocketMessage
       }>(`/conversations/messages/${message.conversationId}`, {
         content: message.content,
+        messageType: message.messageType,
+        sharedPostId: message.sharedPostId,
+        replyToMessageId: message.replyToMessageId,
+        forwarded: message.forwarded,
         tempId: message._id,
         clientMessageId: message.clientMessageId || message._id,
       })
@@ -684,6 +735,61 @@ export const useChatStore = defineStore('chat', () => {
         : 'messages.sendFailed'
       useSettingsStore().showToastKey(key, undefined, 'error')
     })
+  }
+
+  function createReplyPreview(messageId: string): ApiMessage['replyTo'] | undefined {
+    const message = messages.value.find(item => item._id === messageId)
+    if (!message) return undefined
+    return {
+      _id: message._id,
+      senderId: message.senderId,
+      content: message.content,
+      messageType: message.messageType,
+      sharedPostId: message.sharedPostId,
+      unsentAt: message.unsentAt,
+      content_unavailable: message.content_unavailable,
+    }
+  }
+
+  function removeMessageLocally(messageId: string): void {
+    const message = messages.value.find(item => item._id === messageId)
+    messages.value = messages.value.filter(item => item._id !== messageId)
+    if (message) refreshConversationPreviewFromMessages(message.conversationId)
+  }
+
+  function markMessageUnsent(messageId: string, unsentAt: string): void {
+    const message = messages.value.find(item => item._id === messageId)
+    if (!message) return
+    message.content = ''
+    message.messageType = 'text'
+    message.sharedPostId = undefined
+    message.unsentAt = unsentAt
+    message.deliveryState = 'persisted'
+    refreshConversationPreviewFromMessages(message.conversationId)
+  }
+
+  function refreshConversationPreviewFromMessages(conversationId: string): void {
+    const conversation = _findConv(conversationId)
+    if (!conversation) return
+    const latest = messages.value
+      .filter(message => message.conversationId === conversationId)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
+    conversation.last_message = latest?.unsentAt ? '' : (latest?.content || '')
+    conversation.last_message_unsent = Boolean(latest?.unsentAt)
+    if (latest) conversation.updated_at = latest.timestamp
+  }
+
+  async function deleteMessageForMe(messageId: string): Promise<void> {
+    await apiClient.patch(`/conversations/messages/${messageId}/delete-for-me`)
+    removeMessageLocally(messageId)
+  }
+
+  async function unsendMessage(messageId: string): Promise<void> {
+    const { data } = await apiClient.patch<{
+      success: boolean
+      data: { unsentAt: string }
+    }>(`/conversations/messages/${messageId}/unsend`)
+    markMessageUnsent(messageId, data.data.unsentAt)
   }
 
   /** Delete a conversation from the backend and clear local state */
@@ -752,7 +858,10 @@ export const useChatStore = defineStore('chat', () => {
     searchUsers,
     searchMessaging,
     sendMessage,
+    sendMessageToConversation,
     retryMessage,
+    deleteMessageForMe,
+    unsendMessage,
     deleteConversation,
     toggleMute,
     clearActiveConversation,

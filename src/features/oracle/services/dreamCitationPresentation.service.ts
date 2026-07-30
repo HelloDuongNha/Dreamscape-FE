@@ -30,8 +30,7 @@ export function selectDreamVerificationQuestions(
   const bindings = resolvedBindings(analysis)
   const citations = analysis?.citations || []
   if (!hasCitationLedger(analysis) && citations.length === 0) return entries
-  const selected: DreamVerificationQuestionEntry[] = []
-  const usedKeys = new Set<string>()
+  const selected = new Map<string, DreamVerificationQuestionEntry>()
   for (const entry of entries) {
     const verificationKey = String(entry.item?.verificationKey || '')
     const matchesVerificationKey = Boolean(verificationKey)
@@ -41,13 +40,17 @@ export function selectDreamVerificationQuestions(
       || citations.some(citation => sameSource(source, citation)))
     const active = matchesVerificationKey || matchesActiveSource
     if (!active) continue
-    const key = verificationKey
-      || `${entry.item?.ruleId || ''}:${entry.item?.followUpQuestion || ''}`
-    if (!key || usedKeys.has(key)) continue
-    usedKeys.add(key)
-    selected.push(entry)
+    const key = dreamQuestionIdentity(entry.item)
+    if (!key) continue
+    const existing = selected.get(key)
+    if (!existing || (
+      existing.item.userFeedback == null
+      && entry.item.userFeedback != null
+    )) {
+      selected.set(key, entry)
+    }
   }
-  return selected
+  return [...selected.values()]
 }
 
 // Builds citation cards and modal rule links from the same active Dream ledger.
@@ -163,6 +166,25 @@ function questionSources(question: AiRealLifeHypothesis): SourceIdentity[] {
   const validationSourceId = String(question?.validationSourceId || '')
   if (validationSourceId) sources.push({ sourceId: validationSourceId })
   return sources.filter((source: SourceIdentity) => sourceKey(source))
+}
+
+// Identifies the user-facing question by its rule, not by a replaceable excerpt.
+function dreamQuestionIdentity(question: AiRealLifeHypothesis): string {
+  const ruleIds = [...new Set([
+    question?.ruleId,
+    ...(question?.ruleIds || []),
+  ].map(value => String(value || '').trim()).filter(Boolean))].sort()
+  if (ruleIds.length) return `rule:${ruleIds.join('|')}`
+  const dimension = String(question?.questionDimension || '').trim()
+  if (dimension) return `dimension:${dimension}`
+  const verificationKey = String(question?.verificationKey || '').trim()
+  if (verificationKey) return `verification:${verificationKey}`
+  const text = String(question?.followUpQuestion || '')
+    .normalize('NFKC')
+    .trim()
+    .replace(/\s+/gu, ' ')
+    .toLocaleLowerCase('vi')
+  return text ? `question:${text}` : ''
 }
 
 function isActiveSource(

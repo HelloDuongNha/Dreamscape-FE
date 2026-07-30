@@ -190,6 +190,20 @@
         </svg>
         <span>{{ dream.comments_count }}</span>
       </button>
+
+      <button
+        v-if="dream.is_public && dream.privacy !== 'private'"
+        :id="`share-btn-${dream._id}`"
+        class="dream-card__action dream-card__action--share"
+        :aria-label="t('home.share.buttonAria')"
+        @click.stop="shareStore.open(dream)"
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+          <path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/>
+        </svg>
+        <span>{{ t('home.share.button') }}</span>
+      </button>
     </footer>
 
     <!-- ── Delete confirmation modal ── -->
@@ -230,6 +244,7 @@ import { useAuthStore }      from '@/store/useAuthStore'
 import { useOracleStore }    from '@/store/useOracleStore'
 import { useLocaleStore }    from '@/store/useLocaleStore'
 import { useSettingsStore }  from '@/store/useSettingsStore'
+import { usePostShareStore } from '@/store/usePostShareStore'
 import apiClient             from '@/api/client'
 import AppDropdown           from '@/components/common/AppDropdown.vue'
 import AppConfirm            from '@/components/common/AppConfirm.vue'
@@ -249,6 +264,7 @@ import { createHighlightedExcerpt } from '@/utils/highlightText'
 const oracleStore = useOracleStore()
 const localeStore = useLocaleStore()
 const settingsStore = useSettingsStore()
+const shareStore = usePostShareStore()
 const { t } = useI18n({ useScope: 'global' })
 
 async function retryAnalysis(dreamId: string) {
@@ -749,6 +765,7 @@ async function confirmDelete() {
 }
 .dream-card__action:disabled { opacity: 0.5; cursor: not-allowed; }
 .dream-card__action span { font-size: var(--font-size-sm); line-height: 1; }
+.dream-card__action--share { margin-left: auto; }
 
 /* Liked state — solid red, no blur/gradient */
 .dream-card__action--liked       { color: #EF4444; }

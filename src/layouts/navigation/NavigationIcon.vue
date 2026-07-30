@@ -35,6 +35,11 @@
       <line x1="16" y1="13" x2="8" y2="13"/>
       <line x1="16" y1="17" x2="8" y2="17"/>
     </template>
+    <template v-else-if="name === 'evidence-needed'">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M9.7 9a2.4 2.4 0 1 1 4.1 1.7c-1.1.8-1.8 1.3-1.8 2.8"/>
+      <path d="M12 17h.01"/>
+    </template>
     <template v-else-if="name === 'profile'">
       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
       <circle cx="12" cy="7" r="4"/>

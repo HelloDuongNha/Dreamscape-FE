@@ -258,6 +258,7 @@
     <MobilePullToRefresh />
     <MobileNavigation />
     <PostDetailModal />
+    <SharePostModal />
     <OraclePendingModal />
     <ExtractionPendingModal />
     <SourceProgressModal />
@@ -282,6 +283,7 @@ import AppSidebar from './AppSidebar.vue'
 import MobilePullToRefresh from './MobilePullToRefresh.vue'
 import MobileNavigation from './MobileNavigation.vue'
 import PostDetailModal from '@/features/home/PostDetailModal.vue'
+import SharePostModal from '@/features/home/SharePostModal.vue'
 import OraclePendingModal from '@/components/common/OraclePendingModal.vue'
 import ExtractionPendingModal from '@/components/common/ExtractionPendingModal.vue'
 import SourceProgressModal from '@/components/common/SourceProgressModal.vue'

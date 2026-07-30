@@ -446,6 +446,7 @@ export interface ApiConversation {
   updated_at:      string      // ISO-8601
   unread_count:    number      // messages from partner with status !== 'seen'
   preview_unavailable?: boolean
+  last_message_unsent?: boolean
 }
 
 export interface ApiMessage {
@@ -453,6 +454,20 @@ export interface ApiMessage {
   conversationId: string
   senderId:       string | ApiUser  // populated in HTTP response, raw string from socket
   content:        string
+  messageType?:   'text' | 'shared_post'
+  sharedPostId?:  string
+  replyToMessageId?: string
+  replyTo?: {
+    _id: string
+    senderId: string | ApiUser
+    content: string
+    messageType?: 'text' | 'shared_post'
+    sharedPostId?: string
+    unsentAt?: string
+    content_unavailable?: boolean
+  }
+  forwarded?:     boolean
+  unsentAt?:      string
   timestamp:      string            // ISO-8601
   status?:        'sent' | 'delivered' | 'seen'  // delivery receipt
   content_unavailable?: boolean
@@ -466,6 +481,12 @@ export interface SocketMessage {
   conversationId: string
   senderId:       string           // always a raw userId string from socket
   content:        string
+  messageType?:   'text' | 'shared_post'
+  sharedPostId?:  string
+  replyToMessageId?: string
+  replyTo?: ApiMessage['replyTo']
+  forwarded?:     boolean
+  unsentAt?:      string
   timestamp:      string
   status:         'sent' | 'delivered' | 'seen'
   tempId?:        string           // echoed back to sender so it can swap the optimistic entry

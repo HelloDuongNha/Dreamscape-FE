@@ -67,15 +67,17 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppInput  from '@/components/common/AppInput.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AuthLocaleSwitch from '@/components/common/AuthLocaleSwitch.vue'
 import GoogleAuthButton from './GoogleAuthButton.vue'
+import { resolveAuthRedirect } from './authRedirect'
 import { useAuthStore } from '@/store/useAuthStore'
 
 const { t } = useI18n()
+const route     = useRoute()
 const router    = useRouter()
 const authStore = useAuthStore()
 
@@ -98,7 +100,7 @@ async function handleLogin() {
   loading.value  = true
   try {
     await authStore.login(email.value.trim(), password.value)
-    router.push('/')
+    await router.replace(resolveAuthRedirect(route.query.redirect))
   } catch (err: unknown) {
     const msg = (err as { response?: { data?: { message?: string } } })
       .response?.data?.message

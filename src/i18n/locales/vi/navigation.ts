@@ -23,6 +23,7 @@ export default {
   // Moderation (administrator-only nav items)
   moderationSources: 'Duyệt nguồn',
   ruleReview: 'Duyệt lập luận',
+  evidenceNeeded: 'Cần nguồn',
   // Header page titles — keyed by Vue Router route name
   pageHome: 'Trang chủ',
   pageOracle: 'Oracle',
@@ -35,12 +36,14 @@ export default {
   pageModerationSources: 'Duyệt nguồn',
   pageModerationSourcePreview: 'Xem trước tài liệu',
   pageModerationRuleCandidates: 'Duyệt lập luận',
+  pageModerationEvidenceNeeded: 'Bằng chứng cần bổ sung',
   pageFallback: 'DreamScape',
   titleLogin: 'Đăng nhập — DreamScape',
   titleRegister: 'Đăng ký — DreamScape',
   titleVerifyOtp: 'Xác thực OTP — DreamScape',
   titleForgotPassword: 'Khôi phục mật khẩu — DreamScape',
   titleResetPassword: 'Đặt lại mật khẩu — DreamScape',
+  titleSharedPost: 'Bài viết được chia sẻ — DreamScape',
   titleHome: 'Trang chủ — DreamScape',
   titleOracle: 'Oracle — DreamScape',
   titleMessages: 'Tin nhắn — DreamScape',
@@ -52,5 +55,6 @@ export default {
   titleModerationSources: 'Duyệt nguồn — DreamScape',
   titleModerationSourcePreview: 'Xem trước tài liệu — DreamScape',
   titleModerationRuleCandidates: 'Duyệt lập luận — DreamScape',
+  titleModerationEvidenceNeeded: 'Bằng chứng cần bổ sung — DreamScape',
   titleFallback: 'DreamScape',
 } as const
