@@ -22,8 +22,10 @@ export interface AcademicJobView {
 interface RuntimeJob extends AcademicJobView {
   promotedFromQueue: boolean
   run: (context: { promotedFromQueue: boolean }) => Promise<unknown>
-  resolve: (value: unknown) => void
-  reject: (reason?: unknown) => void
+  waiters: Array<{
+    resolve: (value: unknown) => void
+    reject: (reason?: unknown) => void
+  }>
 }
 
 type AcademicJobLane = 'source-processing' | 'rule-analysis'
@@ -75,13 +77,18 @@ export const useAcademicJobQueueStore = defineStore('academicJobQueue', () => {
       active.state = 'completed'
       active.completedAt = Date.now()
       sync(active)
-      active.resolve(value)
+      active.waiters.forEach(waiter => waiter.resolve(value))
+      if (jobLane(active.kind) === 'source-processing') {
+        window.dispatchEvent(new CustomEvent('dreamscape:source-reader-updated', {
+          detail: { sourceId: active.sourceId },
+        }))
+      }
     } catch (error: unknown) {
       active.state = 'failed'
       active.completedAt = Date.now()
       active.error = getApiErrorMessage(error, 'Tác vụ thất bại.')
       sync(active)
-      active.reject(error)
+      active.waiters.forEach(waiter => waiter.reject(error))
     } finally {
       const completedJob = active
       const completedId = completedJob.id
@@ -100,9 +107,16 @@ export const useAcademicJobQueueStore = defineStore('academicJobQueue', () => {
     run: (context: { promotedFromQueue: boolean }) => Promise<T>
   }): Promise<T> {
     const dedupKey = `${input.kind}:${input.sourceId}`
-    const existing = jobs.value.find(job => job.dedupKey === dedupKey && (job.state === 'queued' || job.state === 'running'))
+    const existing = [active, ...pending].find(job =>
+      job?.dedupKey === dedupKey && (job.state === 'queued' || job.state === 'running'),
+    )
     if (existing) {
-      return Promise.resolve(undefined as T)
+      return new Promise<T>((resolve, reject) => {
+        existing.waiters.push({
+          resolve: value => resolve(value as T),
+          reject,
+        })
+      })
     }
 
     return new Promise<T>((resolve, reject) => {
@@ -117,8 +131,10 @@ export const useAcademicJobQueueStore = defineStore('academicJobQueue', () => {
         queuedAt: Date.now(),
         promotedFromQueue,
         run: input.run,
-        resolve: (value: unknown) => resolve(value as T),
-        reject,
+        waiters: [{
+          resolve: (value: unknown) => resolve(value as T),
+          reject,
+        }],
       }
       pending.push(job)
       sync(job)

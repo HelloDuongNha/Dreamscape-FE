@@ -9,7 +9,7 @@
     <!-- Error State -->
     <div v-else-if="hasError || !source" class="detail-error">
       <p>{{ t('library.reader.loadSourceError') }}</p>
-      <AppButton variant="secondary" size="sm" @click="fetchSource">{{ t('library.retry') }}</AppButton>
+      <AppButton variant="secondary" size="sm" @click="fetchSource()">{{ t('library.retry') }}</AppButton>
     </div>
 
     <!-- Main Content Grid -->
@@ -3850,15 +3850,19 @@ async function fetchSourceByIdOrPreview(id: string) {
   }
 }
 
-async function fetchSource() {
-  isLoading.value = true
+async function fetchSource(options: { background?: boolean } = {}) {
+  const background = options.background === true && Boolean(source.value)
+  const previouslyReadable = Boolean(source.value?.readableInApp)
+  if (!background) isLoading.value = true
   hasError.value = false
-  activeTab.value = 'smart'
-  cleanActiveBlobUrl()
-  originalDocState.value = {
-    status: 'idle',
-    hasPdf: false,
-    canInlinePdf: false
+  if (!background) {
+    activeTab.value = 'smart'
+    cleanActiveBlobUrl()
+    originalDocState.value = {
+      status: 'idle',
+      hasPdf: false,
+      canInlinePdf: false
+    }
   }
   readerWarnings.value = []
   ocrNeeded.value = false
@@ -3871,6 +3875,7 @@ async function fetchSource() {
         moderationTitleDraft.value = source.value?.title || ''
         initOriginalDocState()
         if (source.value && source.value.readableInApp) {
+          if (!previouslyReadable) activeTab.value = 'smart'
           const fullText = res.data.fullText || {}
           const quality = fullText.extractionQuality || 'low'
           extractionQuality.value = quality
@@ -3910,6 +3915,7 @@ async function fetchSource() {
       if (source.value) {
         initOriginalDocState()
         if (source.value.readableInApp) {
+          if (!previouslyReadable) activeTab.value = 'smart'
           await fetchAllReaderData()
         } else if (hasOriginalDocument(source.value)) {
           activeTab.value = 'original'
@@ -3923,8 +3929,14 @@ async function fetchSource() {
     const errMsg = err.response?.data?.message || err.message || t('library.readerLocal.sourceLoadFailed')
     settingsStore.showToast(errMsg, 'error')
   } finally {
-    isLoading.value = false
+    if (!background) isLoading.value = false
   }
+}
+
+function handleReaderUpdated(event: Event) {
+  const sourceId = (event as CustomEvent<{ sourceId?: string }>).detail?.sourceId
+  if (!sourceId || sourceId !== resolvedSourceId.value) return
+  void fetchSource({ background: true })
 }
 
 const originalLink = computed(() => {
@@ -4006,10 +4018,12 @@ function handleResize() {
 onMounted(() => {
   fetchSource()
   window.addEventListener('resize', handleResize)
+  window.addEventListener('dreamscape:source-reader-updated', handleReaderUpdated)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('dreamscape:source-reader-updated', handleReaderUpdated)
 })
 </script>
 

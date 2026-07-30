@@ -195,7 +195,18 @@ function handleWheel(event: WheelEvent): void {
 function beginPull(clientX: number, clientY: number, target: EventTarget | null): boolean {
   if (status.value === 'refreshing') return false
   if (!(target instanceof Element)) return false
-  if (target.closest('[role="dialog"], input, textarea, select, [contenteditable="true"], .mobile-more')) {
+  if (target.closest([
+    '[role="dialog"]',
+    'button',
+    'a',
+    'input',
+    'textarea',
+    'select',
+    'label',
+    '[contenteditable="true"]',
+    '[data-no-pull-refresh]',
+    '.mobile-more',
+  ].join(', '))) {
     return false
   }
 
