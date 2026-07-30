@@ -3897,9 +3897,9 @@ async function fetchSource() {
           } else {
           readerError.value = t('library.readerLocal.noReaderText')
           }
-        } else if (source.value && getOriginalPdfUrl(source.value)) {
+        } else if (source.value && hasOriginalDocument(source.value)) {
           activeTab.value = 'original'
-          loadInlinePdf()
+          void loadInlinePdf()
         }
       } else {
         hasError.value = true
@@ -3911,9 +3911,9 @@ async function fetchSource() {
         initOriginalDocState()
         if (source.value.readableInApp) {
           await fetchAllReaderData()
-        } else if (getOriginalPdfUrl(source.value)) {
+        } else if (hasOriginalDocument(source.value)) {
           activeTab.value = 'original'
-          loadInlinePdf()
+          void loadInlinePdf()
         }
       }
     }

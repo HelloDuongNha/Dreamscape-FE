@@ -26,6 +26,17 @@ interface RuntimeJob extends AcademicJobView {
   reject: (reason?: unknown) => void
 }
 
+type AcademicJobLane = 'source-processing' | 'rule-analysis'
+
+function jobLane(kind: AcademicJobKind): AcademicJobLane {
+  return kind === 'rules' ? 'rule-analysis' : 'source-processing'
+}
+
+function nextDrainDelay(completed: RuntimeJob, next?: RuntimeJob): number {
+  if (!next || jobLane(completed.kind) !== jobLane(next.kind)) return 0
+  return TERMINAL_PIN_VISIBLE_MS
+}
+
 export const useAcademicJobQueueStore = defineStore('academicJobQueue', () => {
   const jobs = ref<AcademicJobView[]>([])
   const pending: RuntimeJob[] = []
@@ -72,12 +83,13 @@ export const useAcademicJobQueueStore = defineStore('academicJobQueue', () => {
       sync(active)
       active.reject(error)
     } finally {
-      const completedId = active.id
+      const completedJob = active
+      const completedId = completedJob.id
       active = null
       window.setTimeout(() => {
         jobs.value = jobs.value.filter(job => job.id !== completedId)
       }, 12_000)
-      window.setTimeout(() => void drain(), TERMINAL_PIN_VISIBLE_MS)
+      window.setTimeout(() => void drain(), nextDrainDelay(completedJob, pending[0]))
     }
   }
 

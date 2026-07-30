@@ -580,10 +580,6 @@ export const useChatStore = defineStore('chat', () => {
    */
   async function sendMessage(content: string): Promise<boolean> {
     if (!activeConversationId.value || !content.trim()) return false
-    if (!socket?.connected) {
-      showSocketUnavailable()
-      return false
-    }
 
     const tempId = createClientMessageId()
 
@@ -606,24 +602,23 @@ export const useChatStore = defineStore('chat', () => {
       conv.updated_at   = optimistic.timestamp
     }
 
-    return transmitMessage(optimistic)
+    return socket?.connected
+      ? transmitMessage(optimistic)
+      : transmitMessageOverHttp(optimistic)
   }
 
   async function retryMessage(message: ApiMessage): Promise<boolean> {
-    if (message.deliveryState !== 'failed' || !socket?.connected) {
-      if (!socket?.connected) showSocketUnavailable()
-      return false
-    }
+    if (message.deliveryState !== 'failed') return false
     message.deliveryState = 'sending'
-    return transmitMessage(message)
+    return socket?.connected
+      ? transmitMessage(message)
+      : transmitMessageOverHttp(message)
   }
 
   function transmitMessage(message: ApiMessage): Promise<boolean> {
     return new Promise(resolve => {
       if (!socket?.connected) {
-        failOptimisticMessage(message._id)
-        showSocketUnavailable()
-        resolve(false)
+        void transmitMessageOverHttp(message).then(resolve)
         return
       }
       socket.timeout(MESSAGE_ACK_TIMEOUT_MS).emit(
@@ -636,9 +631,7 @@ export const useChatStore = defineStore('chat', () => {
         },
         (timeoutError: Error | null, acknowledgement?: SendMessageAcknowledgement) => {
           if (timeoutError || !acknowledgement?.success || !acknowledgement.data) {
-            const changed = failOptimisticMessage(message._id)
-            if (changed) showSendError(acknowledgement?.code)
-            resolve(false)
+            void transmitMessageOverHttp(message, acknowledgement?.code).then(resolve)
             return
           }
           handleReceivedMessage(acknowledgement.data)
@@ -646,6 +639,29 @@ export const useChatStore = defineStore('chat', () => {
         },
       )
     })
+  }
+
+  async function transmitMessageOverHttp(
+    message: ApiMessage,
+    socketErrorCode?: string,
+  ): Promise<boolean> {
+    try {
+      const { data } = await apiClient.post<{
+        success: boolean
+        data: SocketMessage
+      }>(`/conversations/messages/${message.conversationId}`, {
+        content: message.content,
+        tempId: message._id,
+        clientMessageId: message.clientMessageId || message._id,
+      })
+      if (!data.success || !data.data) throw new Error('message_not_persisted')
+      handleReceivedMessage(data.data)
+      return true
+    } catch {
+      const changed = failOptimisticMessage(message._id)
+      if (changed) showSendError(socketErrorCode)
+      return false
+    }
   }
 
   function failOptimisticMessage(tempId: string): boolean {
@@ -659,12 +675,6 @@ export const useChatStore = defineStore('chat', () => {
     const randomId = globalThis.crypto?.randomUUID?.()
       || `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
     return `msg-${randomId}`
-  }
-
-  function showSocketUnavailable(): void {
-    void import('@/store/useSettingsStore').then(({ useSettingsStore }) => {
-      useSettingsStore().showToastKey('messages.connectionUnavailable', undefined, 'error')
-    })
   }
 
   function showSendError(code?: string): void {
