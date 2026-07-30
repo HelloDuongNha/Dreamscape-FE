@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { normalizeLocale, LOCALE_STORAGE_KEY } from '@/i18n/types'
+import { API_BASE_URL } from '@/config/runtime'
 
 // ─── Bootstrap Accept-Language at module load ─────────────────────────────────
 // Read the persisted locale before any store is initialised.
@@ -10,7 +11,7 @@ const _bootstrapLocale = normalizeLocale(
 
 // ─── Axios Instance ────────────────────────────────────────────────────────────
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
     'Accept-Language': _bootstrapLocale,
