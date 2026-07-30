@@ -177,7 +177,7 @@ export const useChatStore = defineStore('chat', () => {
       socket = null
     }
 
-    socket = io(SOCKET_URL, {
+    socket = io(BACKEND_URL, {
       auth:        { token },
       transports:  ['websocket', 'polling'],
       autoConnect: true,
