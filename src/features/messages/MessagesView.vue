@@ -20,7 +20,8 @@
       />
       <ChatWindow
         :class="{ 'messages-view__pane--hidden-mobile': !chatStore.activeConversationId }"
-        @back="chatStore.clearActiveConversation"
+        @back="handleConversationClose"
+        @deleted="handleConversationClose"
       />
     </template>
   </div>
@@ -41,36 +42,83 @@
  *  3. Watches for query param changes while already on this route.
  */
 import { watch } from 'vue'
-import { useRoute }       from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ConversationList   from './ConversationList.vue'
 import ChatWindow         from './ChatWindow.vue'
 import AppSkeleton        from '@/components/common/AppSkeleton.vue'
 import { useChatStore }   from '@/store/useChatStore'
 
 const route     = useRoute()
+const router    = useRouter()
 const chatStore = useChatStore()
 
-async function handleConversationSelect(conversationId: string) {
+// Opens the selected conversation, then makes it reload-safe through the URL.
+async function handleConversationSelect(conversationId: string): Promise<void> {
   await chatStore.openConversation(conversationId)
+  await replaceConversationQuery(conversationId)
 }
 
-async function handleUserSelect(userId: string) {
+// Resolves a profile deep link to a concrete conversation before canonicalizing the URL.
+async function handleUserSelect(userId: string): Promise<void> {
   await chatStore.openConversationWithUser(userId)
+  if (chatStore.activeConversationId) {
+    await replaceConversationQuery(chatStore.activeConversationId)
+  }
 }
 
-// Support: ?userId=<id> query param (from Profile → Message button)
-// Opens or creates a conversation with that user automatically.
-// We do this inside a watch on the route query so it also fires when the
-// param changes while the user is already on this route (different profile click).
+// Restores a conversation after pull-to-refresh, a hard reload, or browser history navigation.
+watch(
+  () => route.query.conversationId,
+  async (conversationId) => {
+    if (typeof conversationId === 'string' && conversationId) {
+      if (chatStore.activeConversationId === conversationId) return
+      try {
+        await chatStore.openConversation(conversationId)
+      } catch {
+        chatStore.clearActiveConversation()
+        await replaceConversationQuery(null)
+      }
+      return
+    }
+
+    if (!route.query.userId && chatStore.activeConversationId) {
+      chatStore.clearActiveConversation()
+    }
+  },
+  { immediate: true },
+)
+
+// Resolves ?userId=<id> links from Profile into the canonical conversation URL.
 watch(
   () => route.query.userId,
   async (userId) => {
     if (userId && typeof userId === 'string') {
-      await chatStore.openConversationWithUser(userId)
+      await handleUserSelect(userId)
     }
   },
-  { immediate: true }   // runs once on mount (handles initial load with ?userId)
+  { immediate: true },
 )
+
+// Returns to the conversation list and removes stale reload state from the URL.
+async function handleConversationClose(): Promise<void> {
+  chatStore.clearActiveConversation()
+  await replaceConversationQuery(null)
+}
+
+// Keeps one canonical query shape so conversationId and userId cannot conflict.
+async function replaceConversationQuery(conversationId: string | null): Promise<void> {
+  const currentConversationId = typeof route.query.conversationId === 'string'
+    ? route.query.conversationId
+    : null
+  if (currentConversationId === conversationId && !route.query.userId) return
+
+  const query = { ...route.query }
+  delete query.userId
+  if (conversationId) query.conversationId = conversationId
+  else delete query.conversationId
+
+  await router.replace({ name: 'messages', query })
+}
 </script>
 
 <style scoped>

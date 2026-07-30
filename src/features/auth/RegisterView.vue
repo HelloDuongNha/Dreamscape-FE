@@ -66,10 +66,11 @@
           type="submit"
           variant="primary"
           size="lg"
+          :loading="loading"
           :disabled="loading || !username || !displayName || !email || password.length < 8"
           style="width: 100%; margin-top: var(--space-2);"
         >
-          {{ loading ? t('auth.creatingAccount') : t('auth.createAccountBtn') }}
+          {{ loading ? t('auth.sendingVerificationCode') : t('auth.createAccountBtn') }}
         </AppButton>
       </form>
 
@@ -92,6 +93,7 @@ import AppButton         from '@/components/common/AppButton.vue'
 import AuthLocaleSwitch  from '@/components/common/AuthLocaleSwitch.vue'
 import GoogleAuthButton  from './GoogleAuthButton.vue'
 import { useAuthStore }  from '@/store/useAuthStore'
+import { otpErrorKey } from './otpPresentation'
 
 const { t } = useI18n()
 const router    = useRouter()
@@ -156,10 +158,13 @@ async function handleRegister() {
       router.push('/')
     }
   } catch (err: unknown) {
-    const msg = (err as { response?: { data?: { message?: string } } })
-      .response?.data?.message
-    if (msg) {
-      backendError.value = msg
+    const response = (err as {
+      response?: { data?: { code?: string; message?: string } }
+    }).response
+    if (response?.data?.code === 'email_delivery_failed') {
+      localError.value = { key: otpErrorKey(response.data.code) }
+    } else if (response?.data?.message) {
+      backendError.value = response.data.message
     } else {
       localError.value = { key: 'errors.registrationFailed' }
     }

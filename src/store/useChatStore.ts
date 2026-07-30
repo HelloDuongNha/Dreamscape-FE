@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { io, Socket } from 'socket.io-client'
 import apiClient from '@/api/client'
-import router from '@/router'
 import { useDreamStore } from '@/store/useDreamStore'
 import { usePostStore } from '@/store/usePostStore'
 import { SOCKET_URL } from '@/config/runtime'
@@ -213,20 +212,7 @@ export const useChatStore = defineStore('chat', () => {
     socket.on('receive_message', handleReceivedMessage)
 
     // ── Status update from server ────────────────────────────────────────────
-    socket.on('message_status_updated', (payload: SocketStatusUpdate) => {
-      if (payload.messageId) {
-        const msg = messages.value.find(m => m._id === payload.messageId)
-        if (msg) msg.status = payload.status
-      } else if (payload.conversationId) {
-        // Bulk-conversation update (seen) — update the last sent message
-        const convMsgs = messages.value.filter(
-          m => m.conversationId === payload.conversationId && m.senderId === _myId()
-        )
-        if (convMsgs.length) {
-          convMsgs[convMsgs.length - 1].status = payload.status
-        }
-      }
-    })
+    socket.on('message_status_updated', applyMessageStatusUpdate)
     socket.on('message_deleted_for_me', (payload: {
       messageId: string
       conversationId: string
@@ -292,6 +278,8 @@ export const useChatStore = defineStore('chat', () => {
         useNotificationStore().fetchNotifications(),
       ])
       if (activeConversationId.value) {
+        socket?.emit('join_room', { conversationId: activeConversationId.value })
+        socket?.emit('mark_as_seen', { conversationId: activeConversationId.value })
         await refreshConversationMessages(activeConversationId.value)
       }
     } catch (error) {
@@ -307,6 +295,50 @@ export const useChatStore = defineStore('chat', () => {
       const participant = conversation.participant_ids.find(user => user._id === payload.userId)
       if (participant) participant.lastHeartbeatAt = payload.lastActiveAt
     }
+  }
+
+  // Applies delivery receipts monotonically so delayed socket events cannot regress seen → delivered.
+  function applyMessageStatusUpdate(payload: SocketStatusUpdate): void {
+    if (!payload?.status) return
+
+    if (payload.messageIds?.length) {
+      const messageIds = new Set(payload.messageIds)
+      messages.value
+        .filter(message => messageIds.has(message._id))
+        .forEach(message => advanceMessageStatus(message, payload.status))
+      return
+    }
+
+    if (payload.messageId) {
+      const message = messages.value.find(item => item._id === payload.messageId)
+      if (message) advanceMessageStatus(message, payload.status)
+      return
+    }
+
+    if (!payload.conversationId) return
+    messages.value
+      .filter(message => (
+        message.conversationId === payload.conversationId
+        && senderIdOf(message) === _myId()
+      ))
+      .forEach(message => advanceMessageStatus(message, payload.status))
+  }
+
+  // Preserves the sent < delivered < seen lifecycle across reconnect races.
+  function advanceMessageStatus(
+    message: ApiMessage,
+    nextStatus: SocketStatusUpdate['status'],
+  ): void {
+    const rank = { sent: 0, delivered: 1, seen: 2 } as const
+    const currentStatus = message.status || 'sent'
+    if (rank[nextStatus] > rank[currentStatus]) message.status = nextStatus
+  }
+
+  // Normalizes populated HTTP senders and raw Socket.IO sender IDs.
+  function senderIdOf(message: ApiMessage): string {
+    return typeof message.senderId === 'object'
+      ? message.senderId._id
+      : message.senderId
   }
 
   function handleReceivedMessage(payload: SocketMessage): void {
@@ -373,9 +405,8 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function showIncomingMessageToast(payload: SocketMessage): void {
-    const isOnMessagesPage = router.currentRoute.value.path === '/messages'
     const isMuted = mutedConversations.value[payload.conversationId] ?? false
-    if (isOnMessagesPage || isMuted) return
+    if (isMuted) return
     void loadAndShowIncomingMessageToast(payload)
   }
 

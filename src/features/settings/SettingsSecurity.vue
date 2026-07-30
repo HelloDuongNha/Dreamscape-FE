@@ -19,6 +19,14 @@
           :error="currentPwErrorDisplay"
           autocomplete="current-password"
         />
+        <button
+          type="button"
+          class="settings-recovery-link"
+          :disabled="isStartingRecovery || isSavingPassword"
+          @click="startPasswordRecovery"
+        >
+          {{ isStartingRecovery ? t('auth.sendingRecoveryCode') : t('auth.forgotCurrentPassword') }}
+        </button>
         <AppInput
           id="sec-new-password"
           v-model="newPw"
@@ -177,6 +185,7 @@ import { useAuthStore }       from '@/store/useAuthStore'
 import { useLocaleStore }     from '@/store/useLocaleStore'
 import { timeAgo }            from '@/utils/timeAgo'
 import apiClient              from '@/api/client'
+import { otpErrorKey }        from '@/features/auth/otpPresentation'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
@@ -248,6 +257,33 @@ const confirmPwErrorDisplay = computed(() => {
 })
 
 const isSavingPassword = ref(false)
+const isStartingRecovery = ref(false)
+
+async function startPasswordRecovery() {
+  const email = originalEmail.value.trim()
+  if (!email || isStartingRecovery.value) return
+  isStartingRecovery.value = true
+  try {
+    const { data } = await apiClient.post('/auth/forgot-password', { email })
+    settingsStore.showToastKey('toasts.recoveryCodeSent', undefined, 'success')
+    router.push({
+      path: '/verify-otp',
+      query: {
+        email,
+        purpose: 'forgot_password',
+        resendAvailableAt: data.resendAvailableAt,
+      },
+    })
+  } catch (error: any) {
+    const errorKey = error.response?.data?.code
+      ? otpErrorKey(error.response.data.code)
+      : 'errors.networkError'
+    settingsStore.showToastKey(errorKey, undefined, 'error')
+  } finally {
+    isStartingRecovery.value = false
+  }
+}
+
 async function changePassword() {
   if (currentPwError.value || newPwError.value || confirmPwError.value) return
   if (!currentPw.value || !newPw.value || !confirmPw.value) {
@@ -353,11 +389,13 @@ async function saveEmail() {
     const response = err.response
     if (response) {
       apiEmailError.value = {
-        key: response.data?.code === 'email_already_used'
-          ? 'errors.emailAlreadyUsed'
-          : response.data?.code === 'current_password_invalid'
-            ? 'errors.currentPasswordInvalid'
-            : 'errors.saveEmailFailed'
+        key: response.data?.code === 'email_delivery_failed'
+          ? otpErrorKey(response.data.code)
+          : response.data?.code === 'email_already_used'
+            ? 'errors.emailAlreadyUsed'
+            : response.data?.code === 'current_password_invalid'
+              ? 'errors.currentPasswordInvalid'
+              : 'errors.saveEmailFailed'
       }
     } else {
       apiEmailError.value = { key: 'errors.networkError' }
@@ -428,6 +466,27 @@ onMounted(() => {
 .settings-section__desc  { font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: var(--space-6); line-height: var(--line-height-relaxed); }
 .settings-block { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5) 0; border-bottom: 1px solid var(--color-border); }
 .settings-block:last-child { border-bottom: none; }
+.settings-recovery-link {
+  align-self: flex-start;
+  margin-top: calc(var(--space-1) * -1);
+  padding: 0;
+  color: var(--color-text-secondary);
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.settings-recovery-link:hover:not(:disabled),
+.settings-recovery-link:focus-visible {
+  color: var(--color-text-primary);
+}
+.settings-recovery-link:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
 .settings-block__header { display: flex; flex-direction: column; gap: var(--space-1); }
 .settings-block__label  { font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); }
 .settings-block__hint   { font-size: var(--font-size-sm); color: var(--color-text-muted); line-height: var(--line-height-relaxed); }

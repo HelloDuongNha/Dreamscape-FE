@@ -496,6 +496,7 @@ export interface SocketMessage {
 /** Payload emitted by the server's message_status_updated socket event */
 export interface SocketStatusUpdate {
   messageId?:       string   // present for per-message updates (delivered)
+  messageIds?:      string[] // present for reconnect delivery catch-up
   conversationId?:  string   // present for bulk updates (seen)
   status:           'sent' | 'delivered' | 'seen'
 }

@@ -152,7 +152,7 @@ import ForwardMessageModal         from './ForwardMessageModal.vue'
 import AppConfirm                  from '@/components/common/AppConfirm.vue'
 import { useSettingsStore }        from '@/store/useSettingsStore'
 
-defineEmits<{ back: [] }>()
+const emit = defineEmits<{ back: []; deleted: [] }>()
 
 const chatStore     = useChatStore()
 const localeStore   = useLocaleStore()
@@ -335,6 +335,7 @@ async function handleDelete() {
   isDeleting.value = true
   try {
     await chatStore.deleteConversation(chatStore.activeConversationId)
+    emit('deleted')
   } finally {
     isDeleting.value = false
   }

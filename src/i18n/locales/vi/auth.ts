@@ -42,12 +42,16 @@ export default {
   displayNamePlaceholder: 'Tên của bạn',
   passwordMinLength: 'Từ 8 ký tự, có chữ hoa, chữ thường và số',
   creatingAccount: 'Đang tạo tài khoản…',
+  sendingVerificationCode: 'Đang gửi mã xác thực…',
   createAccountBtn: 'Tạo tài khoản',
   hasAccountText: 'Đã có tài khoản?',
   signInLink: 'Đăng nhập',
 
   verifyOtpTitle: 'Xác thực mã OTP',
   verifyOtpSub: 'Nhập mã xác thực gồm 6 chữ số được gửi tới {email}.',
+  checkSpamHint: 'Email có thể đến chậm một chút. Bạn nhớ kiểm tra cả thư rác hoặc spam.',
+  otpCodeLabel: 'Mã xác thực',
+  otpCodePlaceholder: '000000',
   verifyingBtn: 'Đang xác thực...',
   verifyBtn: 'Xác thực',
   noCodeText: 'Không nhận được mã?',
@@ -55,4 +59,5 @@ export default {
   resendBtn: 'Gửi lại mã',
   resendIn: 'Gửi lại sau {seconds} giây',
   otpResentSuccess: 'Mã xác thực mới đã được gửi tới email của bạn.',
+  forgotCurrentPassword: 'Quên mật khẩu hiện tại?',
 } as const

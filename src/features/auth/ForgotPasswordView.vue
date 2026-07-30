@@ -7,7 +7,7 @@
       <p>{{ t('auth.forgotPasswordSub') }}</p>
       <form class="recovery-form" @submit.prevent="submit">
         <AppInput id="recovery-email" v-model="email" type="email" :label="t('auth.emailLabel')" :placeholder="t('auth.emailPlaceholder')" autocomplete="email" :disabled="loading" />
-        <AppButton type="submit" variant="primary" size="lg" :disabled="loading || !email.trim()">
+        <AppButton type="submit" variant="primary" size="lg" :loading="loading" :disabled="loading || !email.trim()">
           {{ loading ? t('auth.sendingRecoveryCode') : t('auth.sendRecoveryCode') }}
         </AppButton>
       </form>
@@ -25,6 +25,7 @@ import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
 import AuthLocaleSwitch from '@/components/common/AuthLocaleSwitch.vue'
 import { useSettingsStore } from '@/store/useSettingsStore'
+import { otpErrorKey } from './otpPresentation'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -39,8 +40,11 @@ async function submit() {
     const { data } = await apiClient.post('/auth/forgot-password', { email: email.value.trim() })
     settings.showToastKey('toasts.recoveryCodeSent', undefined, 'success')
     router.push({ path: '/verify-otp', query: { email: email.value.trim(), purpose: 'forgot_password', resendAvailableAt: data.resendAvailableAt } })
-  } catch {
-    settings.showToastKey('errors.networkError', undefined, 'error')
+  } catch (error: any) {
+    const errorKey = error.response?.data?.code
+      ? otpErrorKey(error.response.data.code)
+      : 'errors.networkError'
+    settings.showToastKey(errorKey, undefined, 'error')
   } finally {
     loading.value = false
   }

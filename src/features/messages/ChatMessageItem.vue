@@ -104,7 +104,11 @@
           >
             {{ t('messages.retrySend') }}
           </button>
-          <template v-else>{{ statusLabel }}</template>
+          <MessageDeliveryReceipt
+            v-else
+            :status="message.status || 'sent'"
+            :partner="partner"
+          />
       </span>
     </div>
   </article>
@@ -117,6 +121,7 @@ import type { ApiMessage, ApiUser } from '@/api/types'
 import UserAvatar from '@/components/common/UserAvatar.vue'
 import { timeAgo } from '@/utils/timeAgo'
 import MessageActionsMenu from './MessageActionsMenu.vue'
+import MessageDeliveryReceipt from './MessageDeliveryReceipt.vue'
 import SharedPostMessageCard from './SharedPostMessageCard.vue'
 
 const props = defineProps<{
@@ -153,12 +158,6 @@ const swipeStyle = computed(() => ({
 const swipeProgress = computed(() => (
   Math.min(1, Math.abs(swipeOffset.value) / SWIPE_TRIGGER_PX)
 ))
-
-const statusLabel = computed(() => {
-  if (props.message.status === 'delivered') return t('messages.delivered')
-  if (props.message.status === 'seen') return t('messages.seen')
-  return t('messages.sent')
-})
 
 function replyAuthorLabel(senderId: ApiMessage['senderId']): string {
   const id = typeof senderId === 'object' ? senderId._id : senderId
@@ -394,7 +393,13 @@ function guardClickAfterSwipe(event: MouseEvent): void {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }
-.chat-message__status { font-size: 10px; letter-spacing: .01em; opacity: .8; }
+.chat-message__status {
+  display: inline-flex;
+  min-height: 14px;
+  align-items: center;
+  font-size: 10px;
+  letter-spacing: .01em;
+}
 .chat-message__status button {
   border: 0;
   padding: 0;

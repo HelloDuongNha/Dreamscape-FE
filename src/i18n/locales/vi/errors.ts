@@ -24,6 +24,7 @@ export default {
   otpResendCooldown: 'Vui lòng chờ trước khi yêu cầu mã khác.',
   otpResendLimit: 'Bạn đã yêu cầu quá nhiều mã. Vui lòng bắt đầu lại sau.',
   otpIssueLimit: 'Bạn đã yêu cầu quá nhiều mã xác thực. Vui lòng thử lại sau.',
+  emailDeliveryFailed: 'Chưa thể gửi email xác thực. Vui lòng thử lại sau giây lát.',
   sessionExpired: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.',
   loadSessionsFailed: 'Không thể tải danh sách phiên đăng nhập.',
   logoutDeviceFailed: 'Không thể đăng xuất thiết bị.',

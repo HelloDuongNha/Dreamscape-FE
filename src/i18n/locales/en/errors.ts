@@ -24,6 +24,7 @@ export default {
   otpResendCooldown: 'Please wait before requesting another code.',
   otpResendLimit: 'Too many codes were requested. Please restart this flow later.',
   otpIssueLimit: 'Too many verification codes were requested. Please try again later.',
+  emailDeliveryFailed: 'The verification email could not be sent. Please try again in a moment.',
   sessionExpired: 'Session expired, please log in again.',
   loadSessionsFailed: 'Failed to load active sessions.',
   logoutDeviceFailed: 'Failed to log out device.',

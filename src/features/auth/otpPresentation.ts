@@ -20,6 +20,7 @@ export function otpErrorKey(code: unknown, resend = false): string {
   if (code === 'otp_resend_cooldown') return 'errors.otpResendCooldown'
   if (code === 'otp_resend_limit') return 'errors.otpResendLimit'
   if (code === 'otp_issue_limit') return 'errors.otpIssueLimit'
+  if (code === 'email_delivery_failed') return 'errors.emailDeliveryFailed'
   if (code === 'otp_invalid' || code === 'otp_invalid_or_expired') {
     return 'errors.otpInvalidOrExpired'
   }

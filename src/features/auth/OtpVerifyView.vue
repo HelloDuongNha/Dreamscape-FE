@@ -7,8 +7,9 @@
       <i18n-t keypath="auth.verifyOtpSub" tag="p" class="auth-sub">
         <template #email><strong>{{ email }}</strong></template>
       </i18n-t>
+      <p class="auth-mail-hint">{{ t('auth.checkSpamHint') }}</p>
 
-      <div v-if="localError || backendError" class="auth-error" role="alert">
+      <div v-if="localError || backendError" id="otp-error" class="auth-error" role="alert">
         <span v-if="localError">{{ t(localError.key, localError.params || {}) }}</span>
         <span v-else>{{ backendError }}</span>
       </div>
@@ -17,30 +18,31 @@
       </div>
 
       <form class="auth-form" @submit.prevent="handleVerify">
-        <div class="otp-inputs-row">
-          <input
-            v-for="(_, idx) in 6"
-            :key="idx"
-            :id="`otp-digit-${idx}`"
-            ref="inputRefs"
-            v-model="digits[idx]"
-            type="text"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            maxlength="1"
-            class="otp-digit-field"
-            :disabled="loading"
-            @input="handleInput($event, idx)"
-            @keydown.delete="handleDelete($event, idx)"
-            @paste="handlePaste($event)"
-          />
-        </div>
+        <label for="otp-code" class="otp-label">{{ t('auth.otpCodeLabel') }}</label>
+        <input
+          id="otp-code"
+          ref="otpInput"
+          :value="otpCode"
+          type="text"
+          inputmode="numeric"
+          pattern="[0-9]{6}"
+          maxlength="6"
+          autocomplete="one-time-code"
+          class="otp-code-field"
+          :placeholder="t('auth.otpCodePlaceholder')"
+          :aria-describedby="localError || backendError ? 'otp-error' : undefined"
+          :disabled="loading"
+          autofocus
+          @input="handleOtpInput"
+          @paste="handlePaste"
+        />
 
         <AppButton
           id="otp-submit-btn"
           type="submit"
           variant="primary"
           size="lg"
+          :loading="loading"
           :disabled="loading || !isComplete"
           style="width: 100%; margin-top: var(--space-4);"
         >
@@ -99,8 +101,8 @@ const purpose = computed<OtpPurpose>(() => {
   return 'register'
 })
 
-const digits = ref<string[]>(['', '', '', '', '', ''])
-const inputRefs = ref<HTMLInputElement[]>([])
+const otpCode = ref('')
+const otpInput = ref<HTMLInputElement | null>(null)
 
 const loading = ref(false)
 const resending = ref(false)
@@ -112,15 +114,13 @@ const localError = ref<{ key: string; params?: Record<string, string | number> }
 const backendError = ref<string | null>(null)
 const localSuccess = ref<{ key: string; params?: Record<string, string | number> } | null>(null)
 
-const isComplete = computed(() => digits.value.every(d => d !== ''))
+const isComplete = computed(() => /^\d{6}$/.test(otpCode.value))
 const resendSeconds = computed(() =>
   Math.max(0, Math.ceil((resendAvailableAt.value - now.value) / 1000))
 )
 
 onMounted(() => {
-  if (inputRefs.value[0]) {
-    inputRefs.value[0].focus()
-  }
+  otpInput.value?.focus()
   countdownTimer = window.setInterval(() => {
     now.value = Date.now()
   }, 1000)
@@ -130,37 +130,18 @@ onUnmounted(() => {
   if (countdownTimer !== undefined) window.clearInterval(countdownTimer)
 })
 
-function handleInput(e: Event, idx: number) {
-  const inputEl = e.target as HTMLInputElement
-  const val = inputEl.value.replace(/[^0-9]/g, '') // only allow digits
-
-  digits.value[idx] = val
-
-  if (val && idx < 5) {
-    inputRefs.value[idx + 1]?.focus()
-  }
+function handleOtpInput(event: Event) {
+  const input = event.target as HTMLInputElement
+  const sanitized = input.value.replace(/\D/g, '').slice(0, 6)
+  otpCode.value = sanitized
+  if (input.value !== sanitized) input.value = sanitized
 }
 
-function handleDelete(_e: KeyboardEvent, idx: number) {
-  if (digits.value[idx] === '' && idx > 0) {
-    digits.value[idx - 1] = ''
-    inputRefs.value[idx - 1]?.focus()
-  } else {
-    digits.value[idx] = ''
-  }
-}
-
-function handlePaste(e: ClipboardEvent) {
-  e.preventDefault()
-  const data = e.clipboardData?.getData('text') || ''
-  const numbersOnly = data.replace(/[^0-9]/g, '').slice(0, 6)
-
-  for (let i = 0; i < numbersOnly.length; i++) {
-    digits.value[i] = numbersOnly[i]
-  }
-
-  const nextIdx = Math.min(numbersOnly.length, 5)
-  inputRefs.value[nextIdx]?.focus()
+function handlePaste(event: ClipboardEvent) {
+  event.preventDefault()
+  otpCode.value = (event.clipboardData?.getData('text') || '')
+    .replace(/\D/g, '')
+    .slice(0, 6)
 }
 
 async function handleVerify() {
@@ -170,13 +151,11 @@ async function handleVerify() {
   backendError.value = null
   localSuccess.value = null
 
-  const otpCode = digits.value.join('')
-
   try {
     const endpoint = otpVerificationEndpoint(purpose.value)
     const { data } = await apiClient.post(endpoint, {
       email: email.value,
-      otpCode,
+      otpCode: otpCode.value,
       ...(purpose.value === 'update_email' ? {} : { purpose: purpose.value }),
     })
 
@@ -223,7 +202,7 @@ async function handleVerify() {
 }
 
 async function handleResend() {
-  if (resending.value) return
+  if (resending.value || resendSeconds.value > 0) return
   resending.value = true
   localError.value = null
   backendError.value = null
@@ -241,11 +220,8 @@ async function handleResend() {
       settingsStore.showToastKey('auth.otpResentSuccess', undefined, 'success')
       resendAvailableAt.value = parseOtpDate(data.resendAvailableAt)
       now.value = Date.now()
-      // Reset inputs
-      digits.value = ['', '', '', '', '', '']
-      if (inputRefs.value[0]) {
-        inputRefs.value[0].focus()
-      }
+      otpCode.value = ''
+      otpInput.value?.focus()
     }
   } catch (err: any) {
     const errorCode = err.response?.data?.code
@@ -304,6 +280,14 @@ async function handleResend() {
   line-height: 1.5;
 }
 
+.auth-mail-hint {
+  margin: calc(var(--space-2) * -1) 0 0;
+  color: var(--color-text-muted, #757575);
+  font-size: var(--font-size-xs, 0.75rem);
+  line-height: 1.5;
+  text-align: center;
+}
+
 .auth-error {
   background: #2d1010;
   border: 1px solid #3d1515;
@@ -328,32 +312,39 @@ async function handleResend() {
   gap: var(--space-4);
 }
 
-.otp-inputs-row {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-2);
+.otp-label {
+  color: var(--color-text-secondary, #a0a0a0);
+  font-size: var(--font-size-sm, 0.875rem);
+  font-weight: var(--font-weight-medium, 500);
 }
 
-.otp-digit-field {
-  width: 48px;
-  height: 48px;
+.otp-code-field {
+  width: 100%;
+  min-height: 52px;
   background: var(--color-bg-elevated, #181818);
   border: 1px solid var(--color-border-input, #262626);
   border-radius: var(--radius-md, 8px);
   color: var(--color-text-primary, #f3f5f7);
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 700;
   font-family: var(--font-family-mono, monospace);
   text-align: center;
+  letter-spacing: 0.4em;
+  padding: var(--space-3) var(--space-4);
   outline: none;
   transition: border-color var(--transition-fast, 0.15s);
 }
 
-.otp-digit-field:focus {
+.otp-code-field::placeholder {
+  color: var(--color-text-muted, #616161);
+  letter-spacing: 0.28em;
+}
+
+.otp-code-field:focus {
   border-color: #4a4a4a;
 }
 
-.otp-digit-field:disabled {
+.otp-code-field:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

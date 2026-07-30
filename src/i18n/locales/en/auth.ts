@@ -42,12 +42,16 @@ export default {
   displayNamePlaceholder: 'Your name',
   passwordMinLength: '8+ characters with upper, lower, and number',
   creatingAccount: 'Creating account…',
+  sendingVerificationCode: 'Sending verification code…',
   createAccountBtn: 'Create account',
   hasAccountText: 'Already have an account?',
   signInLink: 'Sign in',
 
   verifyOtpTitle: 'Verify OTP Code',
   verifyOtpSub: 'Enter the 6-digit verification code sent to {email}.',
+  checkSpamHint: 'Delivery may take a moment. Please also check your spam or junk folder.',
+  otpCodeLabel: 'Verification code',
+  otpCodePlaceholder: '000000',
   verifyingBtn: 'Verifying...',
   verifyBtn: 'Verify',
   noCodeText: "Didn't receive a code?",
@@ -55,4 +59,5 @@ export default {
   resendBtn: 'Resend Code',
   resendIn: 'Resend in {seconds}s',
   otpResentSuccess: 'A new verification code has been sent to your email.',
+  forgotCurrentPassword: 'Forgot your current password?',
 } as const
