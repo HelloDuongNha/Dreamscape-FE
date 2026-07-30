@@ -16,6 +16,7 @@ export default {
   // Common errors
   loginFailed: 'Login failed. Please check your credentials.',
   registrationFailed: 'Registration failed. Please try again.',
+  registrationRetryAfter: 'Too many registration attempts. Try again in {seconds} seconds.',
   verificationFailed: 'Verification failed. Please check the code.',
   resendFailed: 'Failed to resend code. Please try again.',
   otpInvalidOrExpired: 'The verification code is incorrect or has expired.',

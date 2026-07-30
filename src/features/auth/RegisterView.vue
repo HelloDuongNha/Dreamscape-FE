@@ -7,24 +7,13 @@
       <h1 class="auth-title">{{ t('auth.signUpTitle') }}</h1>
       <p class="auth-sub">{{ t('auth.signUpSub') }}</p>
 
-      <div v-if="localError || backendError" class="auth-error" role="alert">
-        <span v-if="localError">{{ t(localError.key, localError.params || {}) }}</span>
+      <div v-if="retrySeconds > 0 || localError || backendError" class="auth-error" role="alert">
+        <span v-if="retrySeconds > 0">{{ t('errors.registrationRetryAfter', { seconds: retrySeconds }) }}</span>
+        <span v-else-if="localError">{{ t(localError.key, localError.params || {}) }}</span>
         <span v-else>{{ backendError }}</span>
       </div>
 
       <form class="auth-form" novalidate @submit.prevent="handleRegister">
-        <div class="auth-field">
-          <label for="reg-username" class="auth-label">{{ t('auth.usernameLabel') }}</label>
-          <AppInput
-            id="reg-username"
-            v-model="username"
-            type="text"
-            :placeholder="t('auth.usernamePlaceholder')"
-            autocomplete="username"
-            :disabled="loading"
-          />
-        </div>
-
         <div class="auth-field">
           <label for="reg-displayname" class="auth-label">{{ t('auth.displayNameLabel') }}</label>
           <AppInput
@@ -33,6 +22,18 @@
             type="text"
             :placeholder="t('auth.displayNamePlaceholder')"
             autocomplete="name"
+            :disabled="loading"
+          />
+        </div>
+
+        <div class="auth-field">
+          <label for="reg-username" class="auth-label">{{ t('auth.accountTagLabel') }}</label>
+          <AppInput
+            id="reg-username"
+            v-model="username"
+            type="text"
+            :placeholder="t('auth.accountTagPlaceholder')"
+            autocomplete="username"
             :disabled="loading"
           />
         </div>
@@ -67,10 +68,16 @@
           variant="primary"
           size="lg"
           :loading="loading"
-          :disabled="loading || !username || !displayName || !email || password.length < 8"
+          :disabled="loading || retrySeconds > 0 || !username || !displayName || !email || password.length < 8"
           style="width: 100%; margin-top: var(--space-2);"
         >
-          {{ loading ? t('auth.sendingVerificationCode') : t('auth.createAccountBtn') }}
+          {{
+            loading
+              ? t('auth.sendingVerificationCode')
+              : retrySeconds > 0
+                ? t('auth.retryIn', { seconds: retrySeconds })
+                : t('auth.createAccountBtn')
+          }}
         </AppButton>
       </form>
 
@@ -85,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppInput          from '@/components/common/AppInput.vue'
@@ -104,11 +111,28 @@ const displayName = ref('')
 const email       = ref('')
 const password    = ref('')
 const loading     = ref(false)
+const retryAvailableAt = ref(0)
+const now = ref(Date.now())
+let retryTimer: number | undefined
 
 const localError = ref<{ key: string; params?: Record<string, string | number> } | null>(null)
 const backendError = ref<string | null>(null)
+const retrySeconds = computed(() =>
+  Math.max(0, Math.ceil((retryAvailableAt.value - now.value) / 1000))
+)
+
+onMounted(() => {
+  retryTimer = window.setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
+})
+
+onUnmounted(() => {
+  if (retryTimer !== undefined) window.clearInterval(retryTimer)
+})
 
 async function handleRegister() {
+  if (loading.value || retrySeconds.value > 0) return
   localError.value = null
   backendError.value = null
 
@@ -159,9 +183,19 @@ async function handleRegister() {
     }
   } catch (err: unknown) {
     const response = (err as {
-      response?: { data?: { code?: string; message?: string } }
+      response?: {
+        data?: { code?: string; message?: string; retryAfterSeconds?: number }
+      }
     }).response
-    if (response?.data?.code === 'email_delivery_failed') {
+    const retryAfterSeconds = Number(response?.data?.retryAfterSeconds || 0)
+    if (
+      retryAfterSeconds > 0 &&
+      (response?.data?.code === 'rate_limit_exceeded' ||
+        response?.data?.code === 'otp_issue_limit')
+    ) {
+      retryAvailableAt.value = Date.now() + retryAfterSeconds * 1000
+      now.value = Date.now()
+    } else if (response?.data?.code === 'email_delivery_failed') {
       localError.value = { key: otpErrorKey(response.data.code) }
     } else if (response?.data?.message) {
       backendError.value = response.data.message
