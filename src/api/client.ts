@@ -10,7 +10,7 @@ const _bootstrapLocale = normalizeLocale(
 
 // ─── Axios Instance ────────────────────────────────────────────────────────────
 const apiClient = axios.create({
-  baseURL: 'http://localhost:5001/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api',
   headers: {
     'Content-Type': 'application/json',
     'Accept-Language': _bootstrapLocale,

@@ -16,7 +16,7 @@ import type {
   SocketStatusUpdate,
 } from '@/api/types'
 
-const SOCKET_URL = 'http://localhost:5001'
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5001'
 const TOKEN_KEY  = 'ds_token'
 const MUTED_CONVERSATIONS_KEY = 'ds_muted_conversations'
 const ONLINE_HEARTBEAT_WINDOW_MS = 90_000
