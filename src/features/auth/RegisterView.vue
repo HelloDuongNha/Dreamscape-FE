@@ -73,6 +73,8 @@
         </AppButton>
       </form>
 
+      <GoogleAuthButton />
+
       <p class="auth-switch">
         {{ t('auth.hasAccountText') }}
         <RouterLink to="/login" class="auth-link">{{ t('auth.signInLink') }}</RouterLink>
@@ -88,6 +90,7 @@ import { useI18n } from 'vue-i18n'
 import AppInput          from '@/components/common/AppInput.vue'
 import AppButton         from '@/components/common/AppButton.vue'
 import AuthLocaleSwitch  from '@/components/common/AuthLocaleSwitch.vue'
+import GoogleAuthButton  from './GoogleAuthButton.vue'
 import { useAuthStore }  from '@/store/useAuthStore'
 
 const { t } = useI18n()

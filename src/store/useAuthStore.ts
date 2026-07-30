@@ -70,6 +70,11 @@ export const useAuthStore = defineStore('auth', () => {
     _persist(data.token, data.user)
   }
 
+  async function loginWithGoogle(idToken: string): Promise<void> {
+    const { data } = await apiClient.post<AuthResponse>('/auth/google', { idToken })
+    _persist(data.token, data.user)
+  }
+
   async function logout(): Promise<void> {
     try {
       await apiClient.post('/auth/logout')
@@ -95,5 +100,5 @@ export const useAuthStore = defineStore('auth', () => {
     if (user.value?._id) useOracleChatStore().startAccountSession(user.value._id)
   }
 
-  return { token, user, isLoggedIn, myId, myUser, register, login, logout, updateCurrentUser, clearSession }
+  return { token, user, isLoggedIn, myId, myUser, register, login, loginWithGoogle, logout, updateCurrentUser, clearSession }
 })

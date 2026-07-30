@@ -26,9 +26,6 @@
             autocomplete="email"
             :disabled="loading"
           />
-          <RouterLink to="/forgot-password" class="auth-link auth-link--forgot">
-            {{ t('auth.forgotPasswordLink') }}
-          </RouterLink>
         </div>
 
         <div class="auth-field">
@@ -41,6 +38,9 @@
             autocomplete="current-password"
             :disabled="loading"
           />
+          <RouterLink to="/forgot-password" class="auth-link auth-link--forgot">
+            {{ t('auth.forgotPasswordLink') }}
+          </RouterLink>
         </div>
 
         <AppButton
@@ -54,6 +54,8 @@
           {{ loading ? t('auth.signingIn') : t('auth.signInBtn') }}
         </AppButton>
       </form>
+
+      <GoogleAuthButton />
 
       <p class="auth-switch">
         {{ t('auth.noAccountText') }}
@@ -70,6 +72,7 @@ import { useI18n } from 'vue-i18n'
 import AppInput  from '@/components/common/AppInput.vue'
 import AppButton from '@/components/common/AppButton.vue'
 import AuthLocaleSwitch from '@/components/common/AuthLocaleSwitch.vue'
+import GoogleAuthButton from './GoogleAuthButton.vue'
 import { useAuthStore } from '@/store/useAuthStore'
 
 const { t } = useI18n()
