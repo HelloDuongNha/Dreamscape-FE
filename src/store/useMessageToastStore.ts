@@ -8,6 +8,7 @@ export interface MessageToast {
   senderName:     string
   senderAvatar:   string
   senderUsername: string
+  senderStreakCount?: number
   content:        string
   timestamp:      string
 }

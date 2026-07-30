@@ -18,6 +18,7 @@ import {
   type ReaderBuildTimingSample,
 } from '@/features/library/services/structuredReaderEstimate.service'
 import type {
+  PdfProcessingResponse,
   StructuredReaderImportResponse,
   StructuredReaderReimportResponse,
 } from '@/api/academicSourceProcessing.types'
@@ -33,6 +34,7 @@ type SmartReaderResult = 'success' | 'failed' | 'limited' | 'ocr_needed'
 type PdfResult = 'success' | 'failed' | 'blocked' | 'external_only' | 'no_candidate' | 'none'
 type ReaderSource = 'jats' | 'html' | 'pdf_text' | 'docling_pdf' | 'none'
 type PdfStage =
+  | 'queued'
   | 'received'
   | 'inspecting_text'
   | 'ocr_processing'
@@ -210,7 +212,12 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       isDialogVisible.value = false
       isPinnedVisible.value = true
       clockStartedAt = Number(saved.startedAt) || Date.now()
-      if (status.value === 'pending') startClock(clockStartedAt)
+      if (status.value === 'pending') {
+        startClock(clockStartedAt)
+        if (pipelineKind.value === 'pdf') {
+          startPdfProgressPolling(saved.contributionId, currentTargetType.value)
+        }
+      }
       else if (saved.expiresAt) {
         persistedExpiresAt = saved.expiresAt
         terminalTimer = setTimeout(() => {
@@ -269,6 +276,7 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
     if (!stage || stage === pdfStage.value) return
     pdfStage.value = stage
     const stageCopy = {
+      queued: ['Đang chờ nhập bản đọc...', 'Tác vụ sẽ tự bắt đầu khi tài liệu trước hoàn tất.', 5],
       received: ['Đã tiếp nhận PDF gốc.', 'Tệp nguồn được giữ nguyên để đối chiếu.', 20],
       inspecting_text: ['Đang kiểm tra lớp văn bản và nhu cầu OCR...', 'Đếm trang có văn bản và xác định chiến lược nhận dạng.', 35],
       ocr_processing: ['Đang nhận dạng văn bản tiếng Việt...', 'Docling đang chạy OCR toàn trang với ngôn ngữ tiếng Việt và tiếng Anh.', 52],
@@ -310,7 +318,84 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
           ? `Mã lỗi: ${active.failureCode}. Bản đọc trước đó vẫn được giữ nguyên.`
           : 'Bản đọc trước đó vẫn được giữ nguyên.'
       }
+      if (active.stage === 'completed'
+        || active.stage === 'failed'
+        || active.stage === 'cancelled') {
+        applyTerminalPdfState(active.stage, active.result)
+      }
     }
+    return response
+  }
+
+  function applyTerminalPdfState(
+    stage: 'completed' | 'failed' | 'cancelled',
+    result?: PdfProcessingResponse,
+  ) {
+    if (stage === 'cancelled' || result?.cancelled) {
+      status.value = 'cancelled'
+      smartReaderResult.value = 'failed'
+      stepText.value = result?.message || 'Đã hủy nhập PDF.'
+    } else if (stage === 'completed' && result?.success !== false) {
+      status.value = 'success'
+      smartReaderResult.value = 'success'
+      pdfResult.value = 'success'
+      selectedSource.value = result?.selectedSource || 'docling_pdf'
+      stepText.value = result?.message || 'Đã dựng Bản đọc thông minh.'
+    } else {
+      status.value = 'failed'
+      smartReaderResult.value = result?.requiresOcr ? 'ocr_needed' : 'failed'
+      stepText.value = result?.message || 'Không thể dựng Bản đọc thông minh.'
+    }
+    if (result?.resolvedTitle) sourceTitle.value = result.resolvedTitle
+    detectedIdentifiers.value = result?.detectedIdentifiers || null
+    isDialogVisible.value = false
+    isPinnedVisible.value = true
+    finishTimers()
+    scheduleTerminalDismiss()
+  }
+
+  async function waitForPdfImportCompletion(
+    id: string,
+    targetType: SourceTargetType,
+    initial: PdfProcessingResponse,
+    signal: AbortSignal,
+  ): Promise<PdfProcessingResponse> {
+    if (!initial.accepted) return initial
+    while (true) {
+      if (signal.aborted) throw new DOMException('PDF import cancelled.', 'AbortError')
+      const response = await syncPdfProgress(id, targetType)
+      const serverProgress = response.progress
+      if (serverProgress?.result) {
+        return {
+          ...serverProgress.result,
+          timing: {
+            expectedDurationSeconds: serverProgress.expectedDurationSeconds,
+            timingDeltaSeconds: serverProgress.timingDeltaSeconds,
+          },
+        }
+      }
+      if (serverProgress?.stage === 'cancelled') {
+        return { success: false, cancelled: true, message: 'Đã hủy nhập PDF.' }
+      }
+      if (serverProgress?.stage === 'failed') {
+        return { success: false, message: serverProgress.failureMessage || 'Không thể dựng Bản đọc thông minh.' }
+      }
+      await waitForNextPdfPoll(signal)
+    }
+  }
+
+  function waitForNextPdfPoll(signal: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer)
+        reject(new DOMException('PDF import cancelled.', 'AbortError'))
+      }
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort)
+        resolve()
+      }, 1500)
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
   }
 
   function startPdfProgressPolling(id: string, targetType: SourceTargetType) {
@@ -382,7 +467,13 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
         ? processUploadedPdfForContribution(id, forceReplace, structuredFirst, requestController.signal)
         : processUploadedPdfForApprovedSource(id, forceReplace, structuredFirst, requestController.signal)
       startPdfProgressPolling(id, targetType)
-      const runRes = await request
+      const accepted = await request
+      const runRes = await waitForPdfImportCompletion(
+        id,
+        targetType,
+        accepted,
+        requestController.signal,
+      )
       if (runRes.cancelled || taskWasCancelled()) return
       progress.value = 85
       stopSmoothProgress()
@@ -514,7 +605,13 @@ export const useSourceProgressStore = defineStore('sourceProgress', () => {
       stageDetail.value = 'Docling đang phục hồi thứ tự đọc, heading, table và figure; bước làm sạch OCR chạy tự động trước khi lưu.'
       startSmoothProgress(92, 120_000)
       try {
-        const doclingRes = await processUploadedPdfForContribution(id, false, false, requestController.signal)
+        const accepted = await processUploadedPdfForContribution(id, false, false, requestController.signal)
+        const doclingRes = await waitForPdfImportCompletion(
+          id,
+          'contribution',
+          accepted,
+          requestController.signal,
+        )
         if (doclingRes.success && doclingRes.readerCreated) {
           smartReaderResult.value = 'success'
           selectedSource.value = doclingRes.selectedSource || 'pdf_text'

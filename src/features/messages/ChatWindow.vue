@@ -24,18 +24,17 @@
           <path d="m15 18-6-6 6-6"/>
         </svg>
       </button>
-      <div
+      <span
+        v-if="chatStore.activePartner"
         class="chat-header__avatar"
-        :style="{ background: partnerAvatarBg }"
-        aria-hidden="true"
       >
-        {{ partnerInitials }}
+        <UserAvatar :user="chatStore.activePartner" size="md" show-streak />
         <span
           v-if="partnerIsOnline"
           class="chat-header__online-indicator"
           :aria-label="t('messages.activeNow')"
         />
-      </div>
+      </span>
       <div class="chat-header__info">
         <span class="chat-header__name">{{ chatStore.activePartner?.display_name ?? '…' }}</span>
         <span class="chat-header__presence">{{ partnerPresenceLabel }}</span>
@@ -80,13 +79,13 @@
         <!-- ── OTHER: inner row (avatar + bubble bottom-aligned) + time below ── -->
         <template v-if="!isMe(msg)">
           <div class="chat-bubble-row">
-            <div
+            <span
+              v-if="chatStore.activePartner"
               class="chat-bubble-wrap__avatar"
-              :style="{ background: partnerAvatarBg }"
               :aria-label="chatStore.activePartner?.display_name"
             >
-              {{ partnerInitials }}
-            </div>
+              <UserAvatar :user="chatStore.activePartner" size="sm" show-streak />
+            </span>
             <div class="chat-bubble chat-bubble--other">
               {{ msg.content_unavailable ? t('messages.contentUnavailable') : msg.content }}
             </div>
@@ -99,7 +98,10 @@
           <div class="chat-bubble-col">
             <div
               class="chat-bubble chat-bubble--me"
-              :class="{ 'chat-bubble--optimistic': msg._id.startsWith('temp-') }"
+              :class="{
+                'chat-bubble--optimistic': msg.deliveryState === 'sending',
+                'chat-bubble--failed': msg.deliveryState === 'failed',
+              }"
             >
               {{ msg.content_unavailable ? t('messages.contentUnavailable') : msg.content }}
             </div>
@@ -110,7 +112,16 @@
               class="chat-bubble__status"
               :aria-label="`Message ${msg.status ?? 'sent'}`"
             >
-              {{ statusLabel(msg.status) }}
+              <template v-if="msg.deliveryState === 'sending'">{{ t('messages.sending') }}</template>
+              <button
+                v-else-if="msg.deliveryState === 'failed'"
+                type="button"
+                class="chat-bubble__retry"
+                @click="chatStore.retryMessage(msg)"
+              >
+                {{ t('messages.retrySend') }}
+              </button>
+              <template v-else>{{ statusLabel(msg.status) }}</template>
             </span>
           </div>
         </template>
@@ -135,7 +146,7 @@
       <button
         :id="`send-btn-${chatStore.activeConversationId}`"
         class="chat-send-btn"
-        :disabled="!newMessage.trim()"
+        :disabled="!newMessage.trim() || isSending || chatStore.socketState !== 'connected'"
         :aria-label="t('messages.sendMessage')"
         @click="handleSend"
       >
@@ -152,10 +163,10 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useChatStore }            from '@/store/useChatStore'
-import { getInitials, getAvatarBg } from '@/utils/avatar'
 import { timeAgo }                 from '@/utils/timeAgo'
 import { useLocaleStore }          from '@/store/useLocaleStore'
 import type { ApiMessage }         from '@/api/types'
+import UserAvatar                  from '@/components/common/UserAvatar.vue'
 import ConversationActionsMenu     from './ConversationActionsMenu.vue'
 
 defineEmits<{ back: [] }>()
@@ -168,16 +179,11 @@ const messageListRef = ref<HTMLElement | null>(null)
 const inputId       = `chat-input-${Math.random().toString(36).slice(2, 6)}`
 const isDeleting    = ref(false)
 const isComposing   = ref(false)
+const isSending     = ref(false)
 const presenceClock = ref(Date.now())
 let presenceTimer: ReturnType<typeof setInterval> | null = null
 
 // ── Partner visuals ─────────────────────────────────────────────────────────
-const partnerInitials = computed(() =>
-  chatStore.activePartner ? getInitials(chatStore.activePartner.display_name) : '?'
-)
-const partnerAvatarBg = computed(() =>
-  chatStore.activePartner ? getAvatarBg(chatStore.activePartner._id) : '#262626'
-)
 const partnerIsOnline = computed(() => {
   const partner = chatStore.activePartner
   return Boolean(partner && chatStore.isUserOnline(partner._id, partner.lastHeartbeatAt))
@@ -222,18 +228,20 @@ function isLastSentMsg(msg: ApiMessage): boolean {
 // ── Status label text ─────────────────────────────────────────────────────────
 function statusLabel(status?: 'sent' | 'delivered' | 'seen'): string {
   switch (status) {
-    case 'delivered': return 'Delivered'
-    case 'seen':      return 'Seen'
-    default:          return 'Sent'
+    case 'delivered': return t('messages.delivered')
+    case 'seen':      return t('messages.seen')
+    default:          return t('messages.sent')
   }
 }
 
 // ── Send ────────────────────────────────────────────────────────────────────
-function handleSend() {
+async function handleSend() {
   const content = newMessage.value.trim()
-  if (!content) return
-  chatStore.sendMessage(content)
-  newMessage.value = ''
+  if (!content || isSending.value) return
+  isSending.value = true
+  const sent = await chatStore.sendMessage(content)
+  if (sent && newMessage.value.trim() === content) newMessage.value = ''
+  isSending.value = false
   scrollToBottom()
 }
 
@@ -311,15 +319,7 @@ function handleToggleMute() {
 }
 .chat-header__avatar {
   position: relative;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  color: #fff;
+  display: inline-flex;
   flex-shrink: 0;
 }
 .chat-header__online-indicator {
@@ -400,15 +400,7 @@ function handleToggleMute() {
 }
 
 .chat-bubble-wrap__avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: var(--font-weight-bold);
-  color: #fff;
+  display: inline-flex;
   flex-shrink: 0;
 }
 
@@ -440,6 +432,10 @@ function handleToggleMute() {
 .chat-bubble--optimistic {
   opacity: 0.75;
 }
+.chat-bubble--failed {
+  opacity: 0.72;
+  outline: 1px solid rgba(239, 68, 68, 0.65);
+}
 
 /* Other — solid dark gray */
 .chat-bubble--other {
@@ -466,6 +462,16 @@ function handleToggleMute() {
   letter-spacing: 0.01em;
   opacity: 0.8;
 }
+.chat-bubble__retry {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #f87171;
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+.chat-bubble__retry:hover { text-decoration: underline; }
 
 /* ── Input area ── */
 .chat-input-area {

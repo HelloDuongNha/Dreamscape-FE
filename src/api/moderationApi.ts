@@ -15,7 +15,7 @@ export interface ReviewSourcePayload {
 
 export interface PdfImportProgressResponse {
   progress: {
-    stage: 'received' | 'inspecting_text' | 'ocr_processing' | 'parsing_layout' | 'cleaning_ocr' | 'compiling_reader' | 'completed' | 'failed' | 'cancelled'
+    stage: 'queued' | 'received' | 'inspecting_text' | 'ocr_processing' | 'parsing_layout' | 'cleaning_ocr' | 'compiling_reader' | 'completed' | 'failed' | 'cancelled'
     startedAt: string
     updatedAt: string
     expectedDurationSeconds: number
@@ -27,6 +27,8 @@ export interface PdfImportProgressResponse {
     timingDeltaSeconds?: number
     failureCode?: string
     failureMessage?: string
+    result?: PdfProcessingResponse
+    queuePosition?: number
   } | null
   estimateSeconds: number
   history: Array<{

@@ -9,12 +9,7 @@
     @keydown.enter="$emit('click')"
   >
     <div class="message-toast__avatar-col">
-      <div v-if="message.senderAvatar" class="message-toast__avatar">
-        <img :src="message.senderAvatar" alt="" class="message-toast__avatar-img" />
-      </div>
-      <div v-else class="message-toast__avatar-placeholder" :style="{ background: avatarBg }">
-        {{ initials }}
-      </div>
+      <UserAvatar :user="sender" size="md" show-streak />
     </div>
     
     <div class="message-toast__content-col">
@@ -42,7 +37,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { getInitials, getAvatarBg } from '@/utils/avatar'
+import UserAvatar from '@/components/common/UserAvatar.vue'
 
 interface MessageToastProps {
   message: {
@@ -51,6 +46,7 @@ interface MessageToastProps {
     senderName:     string
     senderAvatar:   string
     senderUsername: string
+    senderStreakCount?: number
     content:        string
     timestamp:      string
   }
@@ -65,8 +61,12 @@ defineEmits<{
   (e: 'dismiss'): void
 }>()
 
-const initials = computed(() => getInitials(props.message.senderName))
-const avatarBg = computed(() => getAvatarBg(props.message.senderId))
+const sender = computed(() => ({
+  _id: props.message.senderId,
+  display_name: props.message.senderName,
+  avatar: props.message.senderAvatar,
+  streakCount: props.message.senderStreakCount ?? 0,
+}))
 
 const cardStyle = computed(() => {
   const idx = props.index
@@ -124,31 +124,6 @@ const cardStyle = computed(() => {
   display: flex;
   align-items: center;
 }
-.message-toast__avatar {
-  width: var(--space-9);
-  height: var(--space-9);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  border: 1px solid #262626;
-}
-.message-toast__avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.message-toast__avatar-placeholder {
-  width: var(--space-9);
-  height: var(--space-9);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: #fff;
-  border: 1px solid #262626;
-}
-
 /* Content styling */
 .message-toast__content-col {
   flex: 1;

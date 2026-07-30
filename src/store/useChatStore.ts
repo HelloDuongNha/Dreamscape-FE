@@ -20,6 +20,16 @@ import type {
 const TOKEN_KEY  = 'ds_token'
 const MUTED_CONVERSATIONS_KEY = 'ds_muted_conversations'
 const ONLINE_HEARTBEAT_WINDOW_MS = 90_000
+const MESSAGE_ACK_TIMEOUT_MS = 12_000
+
+type SocketConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
+
+interface SendMessageAcknowledgement {
+  success: boolean
+  code?: string
+  message?: string
+  data?: SocketMessage
+}
 
 // ─── Exported Types ───────────────────────────────────────────────────────────
 
@@ -38,6 +48,7 @@ export const useChatStore = defineStore('chat', () => {
   const activeConversationId = ref<string | null>(null)
   const isLoadingConvs       = ref(false)
   const isLoadingMsgs        = ref(false)
+  const socketState          = ref<SocketConnectionState>('idle')
   const sessionUserId        = ref<string>(
     (() => {
       try { return JSON.parse(localStorage.getItem('ds_user') ?? '{}')._id ?? '' }
@@ -182,8 +193,11 @@ export const useChatStore = defineStore('chat', () => {
       transports:  ['websocket', 'polling'],
       autoConnect: true,
     })
+    socketState.value = 'connecting'
 
     socket.on('connect', handleSocketConnected)
+    socket.on('connect_error', handleSocketConnectionError)
+    socket.on('disconnect', handleSocketDisconnected)
 
     socket.on('user_presence_changed', handlePresenceChanged)
 
@@ -207,15 +221,8 @@ export const useChatStore = defineStore('chat', () => {
     })
 
     socket.on('error_message', (err: { code?: string; tempId?: string }) => {
-      if (err.tempId) {
-        messages.value = messages.value.filter(message => message._id !== err.tempId)
-      }
-      void import('@/store/useSettingsStore').then(({ useSettingsStore }) => {
-        const key = err.code === 'conversation_access_denied'
-          ? 'messages.conversationUnavailable'
-          : 'messages.sendFailed'
-        useSettingsStore().showToastKey(key, undefined, 'error')
-      })
+      const changed = err.tempId ? failOptimisticMessage(err.tempId) : true
+      if (changed) showSendError(err.code)
     })
 
     // ── Incoming notification ────────────────────────────────────────────────
@@ -240,7 +247,34 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function handleSocketConnected(): void {
+    socketState.value = 'connected'
+    void reconcileMessagingStateAfterConnect()
     void reconcileVisibleCitationState()
+  }
+
+  function handleSocketConnectionError(): void {
+    const shouldNotify = socketState.value !== 'error'
+    socketState.value = 'error'
+    if (shouldNotify) showSocketUnavailable()
+  }
+
+  function handleSocketDisconnected(): void {
+    socketState.value = 'disconnected'
+  }
+
+  async function reconcileMessagingStateAfterConnect(): Promise<void> {
+    try {
+      const { useNotificationStore } = await import('@/store/useNotificationStore')
+      await Promise.all([
+        loadConversations(),
+        useNotificationStore().fetchNotifications(),
+      ])
+      if (activeConversationId.value) {
+        await refreshConversationMessages(activeConversationId.value)
+      }
+    } catch (error) {
+      console.warn('Could not reconcile messaging state after reconnect.', error)
+    }
   }
 
   function handlePresenceChanged(payload: SocketPresenceUpdate): void {
@@ -291,6 +325,8 @@ export const useChatStore = defineStore('chat', () => {
       content: payload.content,
       timestamp: String(payload.timestamp),
       status: payload.status,
+      clientMessageId: payload.clientMessageId,
+      deliveryState: 'persisted',
     }
   }
 
@@ -329,6 +365,7 @@ export const useChatStore = defineStore('chat', () => {
       senderName: partner?.display_name ?? 'Unknown User',
       senderAvatar: partner?.avatar ?? '',
       senderUsername: partner?.username ?? '',
+      senderStreakCount: partner?.streakCount ?? 0,
       content: payload.content,
       timestamp: payload.timestamp,
     })
@@ -361,6 +398,7 @@ export const useChatStore = defineStore('chat', () => {
     socket?.removeAllListeners()
     socket?.disconnect()
     socket = null
+    socketState.value = 'idle'
   }
 
   function scheduleDreamCitationRefresh(dreamIds: string[]): void {
@@ -476,6 +514,21 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  async function refreshConversationMessages(convId: string): Promise<void> {
+    const { data } = await apiClient.get<{ success: boolean; data: ApiMessage[] }>(
+      `/conversations/messages/${convId}`
+    )
+    const otherMessages = messages.value.filter(message => message.conversationId !== convId)
+    const failedLocalMessages = messages.value.filter(message => (
+      message.conversationId === convId && message.deliveryState === 'failed'
+    ))
+    messages.value = [
+      ...otherMessages,
+      ...data.data.map(message => ({ ...message, deliveryState: 'persisted' as const })),
+      ...failedLocalMessages,
+    ]
+  }
+
   /** Search users by @username */
   async function searchUsers(query: string): Promise<ApiUser[]> {
     if (!query.trim()) return []
@@ -524,10 +577,14 @@ export const useChatStore = defineStore('chat', () => {
    * Send a message via socket.
    * Uses temp- prefixed ID so the server echo can locate and replace it in-place.
    */
-  function sendMessage(content: string): void {
-    if (!activeConversationId.value || !content.trim() || !socket) return
+  async function sendMessage(content: string): Promise<boolean> {
+    if (!activeConversationId.value || !content.trim()) return false
+    if (!socket?.connected) {
+      showSocketUnavailable()
+      return false
+    }
 
-    const tempId = `temp-${Date.now()}`
+    const tempId = createClientMessageId()
 
     const optimistic: ApiMessage = {
       _id:            tempId,
@@ -536,6 +593,8 @@ export const useChatStore = defineStore('chat', () => {
       content:        content.trim(),
       timestamp:      new Date().toISOString(),
       status:         'sent',
+      clientMessageId: tempId,
+      deliveryState: 'sending',
     }
     messages.value.push(optimistic)
 
@@ -546,10 +605,73 @@ export const useChatStore = defineStore('chat', () => {
       conv.updated_at   = optimistic.timestamp
     }
 
-    socket.emit('send_message', {
-      conversationId: activeConversationId.value,
-      content:        content.trim(),
-      tempId,
+    return transmitMessage(optimistic)
+  }
+
+  async function retryMessage(message: ApiMessage): Promise<boolean> {
+    if (message.deliveryState !== 'failed' || !socket?.connected) {
+      if (!socket?.connected) showSocketUnavailable()
+      return false
+    }
+    message.deliveryState = 'sending'
+    return transmitMessage(message)
+  }
+
+  function transmitMessage(message: ApiMessage): Promise<boolean> {
+    return new Promise(resolve => {
+      if (!socket?.connected) {
+        failOptimisticMessage(message._id)
+        showSocketUnavailable()
+        resolve(false)
+        return
+      }
+      socket.timeout(MESSAGE_ACK_TIMEOUT_MS).emit(
+        'send_message',
+        {
+          conversationId: message.conversationId,
+          content: message.content,
+          tempId: message._id,
+          clientMessageId: message.clientMessageId || message._id,
+        },
+        (timeoutError: Error | null, acknowledgement?: SendMessageAcknowledgement) => {
+          if (timeoutError || !acknowledgement?.success || !acknowledgement.data) {
+            const changed = failOptimisticMessage(message._id)
+            if (changed) showSendError(acknowledgement?.code)
+            resolve(false)
+            return
+          }
+          handleReceivedMessage(acknowledgement.data)
+          resolve(true)
+        },
+      )
+    })
+  }
+
+  function failOptimisticMessage(tempId: string): boolean {
+    const message = messages.value.find(item => item._id === tempId)
+    if (!message || message.deliveryState === 'failed') return false
+    message.deliveryState = 'failed'
+    return true
+  }
+
+  function createClientMessageId(): string {
+    const randomId = globalThis.crypto?.randomUUID?.()
+      || `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+    return `msg-${randomId}`
+  }
+
+  function showSocketUnavailable(): void {
+    void import('@/store/useSettingsStore').then(({ useSettingsStore }) => {
+      useSettingsStore().showToastKey('messages.connectionUnavailable', undefined, 'error')
+    })
+  }
+
+  function showSendError(code?: string): void {
+    void import('@/store/useSettingsStore').then(({ useSettingsStore }) => {
+      const key = code === 'conversation_access_denied'
+        ? 'messages.conversationUnavailable'
+        : 'messages.sendFailed'
+      useSettingsStore().showToastKey(key, undefined, 'error')
     })
   }
 
@@ -597,6 +719,7 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId,
     isLoadingConvs,
     isLoadingMsgs,
+    socketState,
     mutedConversations,
     // Getters
     totalUnread,
@@ -618,6 +741,7 @@ export const useChatStore = defineStore('chat', () => {
     searchUsers,
     searchMessaging,
     sendMessage,
+    retryMessage,
     deleteConversation,
     toggleMute,
     clearActiveConversation,

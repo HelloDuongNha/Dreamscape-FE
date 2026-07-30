@@ -73,14 +73,14 @@
           :aria-selected="false"
           @click="openConversationResult(item)"
         >
-          <div class="conv-list__avatar" :style="{ background: getAvatarBg(item.user._id) }">
-            {{ getInitials(item.user.display_name) }}
+          <span class="conv-list__avatar-wrap">
+            <UserAvatar :user="item.user" size="md" show-streak />
             <span
               v-if="chatStore.isUserOnline(item.user._id, item.user.lastHeartbeatAt)"
               class="conv-list__online-indicator"
               :aria-label="t('messages.activeNow')"
             />
-          </div>
+          </span>
           <div class="conv-list__user-info">
             <span class="conv-list__user-name">{{ item.user.display_name }}</span>
             <span class="conv-list__user-handle">{{ item.user.username }}</span>
@@ -138,14 +138,14 @@
         @click="$emit('select', item.conversation._id)"
         @keydown.enter.self="$emit('select', item.conversation._id)"
       >
-        <div class="conv-list__avatar" :style="{ background: getAvatarBg(item.partner._id) }">
-          {{ getInitials(item.partner.display_name) }}
+        <span class="conv-list__avatar-wrap">
+          <UserAvatar :user="item.partner" size="md" show-streak />
           <span
             v-if="chatStore.isUserOnline(item.partner._id, item.partner.lastHeartbeatAt)"
             class="conv-list__online-indicator"
             :aria-label="t('messages.activeNow')"
           />
-        </div>
+        </span>
         <div class="conv-list__item-body">
           <div class="conv-list__item-top">
             <span class="conv-list__item-identity">
@@ -222,7 +222,7 @@
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppConfirm from '@/components/common/AppConfirm.vue'
-import { getInitials, getAvatarBg } from '@/utils/avatar'
+import UserAvatar from '@/components/common/UserAvatar.vue'
 import { timeAgo }                  from '@/utils/timeAgo'
 import { useChatStore }             from '@/store/useChatStore'
 import { useSettingsStore }         from '@/store/useSettingsStore'
@@ -559,17 +559,9 @@ async function confirmDelete(): Promise<void> {
 .conv-list__item:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: -2px; }
 
 /* Shared avatar */
-.conv-list__avatar {
+.conv-list__avatar-wrap {
   position: relative;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
-  color: #fff;
+  display: inline-flex;
   flex-shrink: 0;
 }
 
@@ -709,10 +701,7 @@ async function confirmDelete(): Promise<void> {
     padding: 11px 14px;
   }
 
-  .conv-list__avatar {
-    width: 44px;
-    height: 44px;
-  }
+  .conv-list__avatar-wrap { margin: 2px; }
 
   .conv-list__item-snippet {
     max-width: min(64vw, 280px);

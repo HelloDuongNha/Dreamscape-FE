@@ -456,6 +456,8 @@ export interface ApiMessage {
   timestamp:      string            // ISO-8601
   status?:        'sent' | 'delivered' | 'seen'  // delivery receipt
   content_unavailable?: boolean
+  clientMessageId?: string
+  deliveryState?: 'sending' | 'persisted' | 'failed'
 }
 
 /** Payload emitted by the server's receive_message socket event */
@@ -467,6 +469,7 @@ export interface SocketMessage {
   timestamp:      string
   status:         'sent' | 'delivered' | 'seen'
   tempId?:        string           // echoed back to sender so it can swap the optimistic entry
+  clientMessageId?: string
 }
 
 /** Payload emitted by the server's message_status_updated socket event */

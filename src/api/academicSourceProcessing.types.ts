@@ -36,6 +36,8 @@ export interface PdfCacheResponse {
 
 export interface PdfProcessingResponse {
   success: boolean
+  accepted?: boolean
+  reused?: boolean
   cancelled?: boolean
   readerCreated?: boolean
   requiresOcr?: boolean
