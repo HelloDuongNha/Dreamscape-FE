@@ -25,11 +25,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/useAuthStore'
-import { beginGoogleSignIn, consumeGoogleRedirect } from './googleSignIn.service'
+import { beginGoogleSignIn } from './googleSignIn.service'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -37,8 +37,7 @@ const authStore = useAuthStore()
 const loading = ref(false)
 const error = ref('')
 
-async function finish(idToken: string | null) {
-  if (!idToken) return
+async function finish(idToken: string) {
   await authStore.loginWithGoogle(idToken)
   await router.replace('/')
 }
@@ -54,17 +53,6 @@ async function start() {
     loading.value = false
   }
 }
-
-onMounted(async () => {
-  loading.value = true
-  try {
-    await finish(await consumeGoogleRedirect())
-  } catch (cause) {
-    error.value = readableError(cause)
-  } finally {
-    loading.value = false
-  }
-})
 
 function readableError(cause: unknown): string {
   const backendMessage = (cause as { response?: { data?: { message?: string } } })

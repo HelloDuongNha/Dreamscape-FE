@@ -100,6 +100,7 @@ import { useAcademicJobQueueStore } from '@/store/useAcademicJobQueueStore'
 import MessageToast             from './MessageToast.vue'
 import PinnedTaskToast from './PinnedTaskToast.vue'
 import { useOracleChatStore } from '@/store/useOracleChatStore'
+import { useAuthStore } from '@/store/useAuthStore'
 import type { DreamAnalysisTask } from '@/store/useOracleStore'
 import { useDreamContinuationStore, type DreamContinuationTask } from '@/store/useDreamContinuationStore'
 import { usePostStore } from '@/store/usePostStore'
@@ -116,6 +117,7 @@ const extractionStore = useExtractionStore()
 const sourceProgressStore = useSourceProgressStore()
 const academicQueue = useAcademicJobQueueStore()
 const oracleChatStore = useOracleChatStore()
+const authStore = useAuthStore()
 const continuationStore = useDreamContinuationStore()
 const notificationStore = useNotificationStore()
 const settingsStore = useSettingsStore()
@@ -123,6 +125,7 @@ const { t } = useI18n()
 const isHomeRoute = computed(() => router.currentRoute.value.path === '/')
 const oracleClock = ref(Date.now())
 let oracleClockTimer: ReturnType<typeof setInterval> | null = null
+let restoredAccountId: string | null = null
 
 type DreamPinnedEntry =
   | { kind: 'dream-analysis'; task: DreamAnalysisTask }
@@ -222,12 +225,31 @@ const oracleRunMessage = computed(() => {
 
 onMounted(() => {
   syncOracleClock(Boolean(oracleChatStore.backgroundRun))
+  restoreAuthenticatedBackgroundState()
+})
+
+watch(
+  () => authStore.isLoggedIn ? authStore.myId : '',
+  (accountId) => {
+    if (!accountId) {
+      restoredAccountId = null
+      return
+    }
+    restoreAuthenticatedBackgroundState()
+  },
+)
+
+function restoreAuthenticatedBackgroundState(): void {
+  const accountId = authStore.myId
+  if (!authStore.isLoggedIn || !accountId || restoredAccountId === accountId) return
+
+  restoredAccountId = accountId
   void oracleChatStore.loadThreads().catch(() => undefined)
   void oracleStore.restoreTracking()
   void continuationStore.restoreTracking()
   void extractionStore.restoreTracking()
   sourceProgressStore.restoreTracking()
-})
+}
 
 function formatElapsed(seconds: number) {
   if (seconds < 60) return t('oracle.continuationElapsedSeconds', { seconds })
