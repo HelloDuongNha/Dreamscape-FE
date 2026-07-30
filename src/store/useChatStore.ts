@@ -5,6 +5,7 @@ import apiClient from '@/api/client'
 import router from '@/router'
 import { useDreamStore } from '@/store/useDreamStore'
 import { usePostStore } from '@/store/usePostStore'
+import { BACKEND_URL } from '@/config/runtime'
 import type {
   ApiConversation,
   ApiMessage,
@@ -16,7 +17,6 @@ import type {
   SocketStatusUpdate,
 } from '@/api/types'
 
-const SOCKET_URL = 'http://localhost:5001'
 const TOKEN_KEY  = 'ds_token'
 const MUTED_CONVERSATIONS_KEY = 'ds_muted_conversations'
 const ONLINE_HEARTBEAT_WINDOW_MS = 90_000
@@ -177,7 +177,7 @@ export const useChatStore = defineStore('chat', () => {
       socket = null
     }
 
-    socket = io(SOCKET_URL, {
+    socket = io(BACKEND_URL, {
       auth:        { token },
       transports:  ['websocket', 'polling'],
       autoConnect: true,
