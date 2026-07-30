@@ -253,9 +253,10 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function handleSocketConnectionError(): void {
-    const shouldNotify = socketState.value !== 'error'
     socketState.value = 'error'
-    if (shouldNotify) showSocketUnavailable()
+    // Socket.IO retries transient cold-start and network failures itself. Do not
+    // show an error toast for the first failed handshake; the send/retry actions
+    // still surface a clear error when the user actually needs the connection.
   }
 
   function handleSocketDisconnected(): void {

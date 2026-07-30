@@ -34,7 +34,7 @@
       <!-- Center Column: Reader Tabs + Content Area -->
       <div class="workspace-center">
         <!-- Twin Tabs for Reader Mode (only if readable or has PDF) -->
-        <div v-if="source.readableInApp || !!getOriginalPdfUrl(source)" class="reader-tabs-row">
+        <div v-if="source.readableInApp || hasOriginalDocument(source)" class="reader-tabs-row">
           <button 
             v-if="source.readableInApp"
             :class="['bookmark-tab', { active: activeTab === 'smart' }]" 
@@ -45,7 +45,7 @@
             <span v-if="extractionQuality === 'low'" class="tab-warning-badge" :title="t('library.reader.layoutNotOptimal')">{{ t('library.reader.compareRequired') }}</span>
           </button>
           <button 
-            v-if="source.readableInApp || !!getOriginalPdfUrl(source)"
+            v-if="source.readableInApp || hasOriginalDocument(source)"
             :class="['bookmark-tab', { active: activeTab === 'original' }]" 
             @click="handleSwitchToOriginal"
           >
@@ -59,7 +59,7 @@
           <div class="reader-scroll-area" :style="source.readableInApp ? { '--reader-font-size': `${fontSize}px` } : {}">
             
             <!-- Case A: Source is readable or has PDF -> Show reader/PDF directly in the main column -->
-            <template v-if="source.readableInApp || !!getOriginalPdfUrl(source)">
+            <template v-if="source.readableInApp || hasOriginalDocument(source)">
               <!-- Mode A: Original View -->
               <div v-if="activeTab === 'original' || !source.readableInApp" class="original-view-container" style="position: relative;">
                 <!-- Full-size loading panel overlay during upload, cache, delete or render resolving state -->
@@ -2299,6 +2299,10 @@ function hasValidOriginalFilePdf(source: any): boolean {
     name.toLowerCase().endsWith('.pdf') ||
     format.toLowerCase() === 'pdf'
   )
+}
+
+function hasOriginalDocument(source: any): boolean {
+  return hasValidOriginalFilePdf(source) || !!getOriginalPdfUrl(source)
 }
 
 function isPaywalledOrBlockedUrl(url: string): boolean {
