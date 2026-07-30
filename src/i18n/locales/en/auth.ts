@@ -27,6 +27,10 @@ export default {
   continueWithGoogle: 'Continue with Google',
   connectingGoogle: 'Connecting to Google…',
   googleSignInFailed: 'Google sign-in could not be completed. Please try again.',
+  googleOnboardingTitle: 'Finish creating your account',
+  googleOnboardingSub: 'Google verified your email. Review your name and username, then create a DreamScape password.',
+  completeGoogleAccount: 'Create account',
+  completingGoogleAccount: 'Creating account…',
   noAccountText: "Don't have an account?",
   createAccountLink: 'Create one',
  

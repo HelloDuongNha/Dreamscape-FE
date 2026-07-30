@@ -27,6 +27,10 @@ export default {
   continueWithGoogle: 'Tiếp tục với Google',
   connectingGoogle: 'Đang kết nối Google…',
   googleSignInFailed: 'Không thể hoàn tất đăng nhập Google. Vui lòng thử lại.',
+  googleOnboardingTitle: 'Hoàn tất tạo tài khoản',
+  googleOnboardingSub: 'Google đã xác minh email. Hãy kiểm tra tên, username và tạo mật khẩu DreamScape.',
+  completeGoogleAccount: 'Tạo tài khoản',
+  completingGoogleAccount: 'Đang tạo tài khoản…',
   noAccountText: 'Chưa có tài khoản?',
   createAccountLink: 'Tạo tài khoản mới',
  

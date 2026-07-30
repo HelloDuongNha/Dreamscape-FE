@@ -5,6 +5,17 @@ import { useChatStore } from '@/store/useChatStore'
 import { useOracleChatStore } from '@/store/useOracleChatStore'
 import type { ApiUser, AuthResponse } from '@/api/types'
 
+export interface GoogleOnboardingState {
+  status: 'onboarding_required'
+  onboardingToken: string
+  profile: {
+    email: string
+    username: string
+    display_name: string
+    avatar: string
+  }
+}
+
 const TOKEN_KEY = 'ds_token'
 const USER_KEY  = 'ds_user'
 
@@ -70,8 +81,24 @@ export const useAuthStore = defineStore('auth', () => {
     _persist(data.token, data.user)
   }
 
-  async function loginWithGoogle(idToken: string): Promise<void> {
-    const { data } = await apiClient.post<AuthResponse>('/auth/google', { idToken })
+  async function loginWithGoogle(idToken: string): Promise<GoogleOnboardingState | null> {
+    const { data } = await apiClient.post<AuthResponse & Partial<GoogleOnboardingState>>(
+      '/auth/google',
+      { idToken },
+    )
+    if (data.status === 'onboarding_required') return data as GoogleOnboardingState
+    _persist(data.token, data.user)
+    return null
+  }
+
+  async function completeGoogleOnboarding(payload: {
+    onboardingToken: string
+    username: string
+    display_name: string
+    password: string
+    confirmPassword: string
+  }): Promise<void> {
+    const { data } = await apiClient.post<AuthResponse>('/auth/google/complete', payload)
     _persist(data.token, data.user)
   }
 
@@ -100,5 +127,18 @@ export const useAuthStore = defineStore('auth', () => {
     if (user.value?._id) useOracleChatStore().startAccountSession(user.value._id)
   }
 
-  return { token, user, isLoggedIn, myId, myUser, register, login, loginWithGoogle, logout, updateCurrentUser, clearSession }
+  return {
+    token,
+    user,
+    isLoggedIn,
+    myId,
+    myUser,
+    register,
+    login,
+    loginWithGoogle,
+    completeGoogleOnboarding,
+    logout,
+    updateCurrentUser,
+    clearSession,
+  }
 })

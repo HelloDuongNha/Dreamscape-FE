@@ -21,24 +21,38 @@
       <span>{{ loading ? t('auth.connectingGoogle') : t('auth.continueWithGoogle') }}</span>
     </button>
     <p v-if="error" class="google-auth__error" role="alert">{{ error }}</p>
+    <GoogleOnboardingModal
+      v-if="onboarding"
+      :onboarding="onboarding"
+      @close="onboarding = null"
+      @completed="complete"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/store/useAuthStore'
-import { beginGoogleSignIn } from './googleSignIn.service'
+import { useAuthStore, type GoogleOnboardingState } from '@/store/useAuthStore'
+import { beginGoogleSignIn, consumeGoogleRedirect } from './googleSignIn.service'
+import GoogleOnboardingModal from './GoogleOnboardingModal.vue'
 
 const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const loading = ref(false)
 const error = ref('')
+const onboarding = ref<GoogleOnboardingState | null>(null)
 
 async function finish(idToken: string) {
-  await authStore.loginWithGoogle(idToken)
+  onboarding.value = await authStore.loginWithGoogle(idToken)
+  if (onboarding.value) return
+  await router.replace('/')
+}
+
+async function complete() {
+  onboarding.value = null
   await router.replace('/')
 }
 
@@ -46,13 +60,26 @@ async function start() {
   loading.value = true
   error.value = ''
   try {
-    await finish(await beginGoogleSignIn())
+    const idToken = await beginGoogleSignIn()
+    if (idToken) await finish(idToken)
   } catch (cause) {
     error.value = readableError(cause)
   } finally {
     loading.value = false
   }
 }
+
+onMounted(async () => {
+  loading.value = true
+  try {
+    const idToken = await consumeGoogleRedirect()
+    if (idToken) await finish(idToken)
+  } catch (cause) {
+    error.value = readableError(cause)
+  } finally {
+    loading.value = false
+  }
+})
 
 function readableError(cause: unknown): string {
   const backendMessage = (cause as { response?: { data?: { message?: string } } })
