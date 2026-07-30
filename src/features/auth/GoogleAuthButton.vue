@@ -35,7 +35,7 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAuthStore, type GoogleOnboardingState } from '@/store/useAuthStore'
-import { beginGoogleSignIn, consumeGoogleRedirect } from './googleSignIn.service'
+import { beginGoogleSignIn, prepareGoogleSignIn } from './googleSignIn.service'
 import GoogleOnboardingModal from './GoogleOnboardingModal.vue'
 
 const { t } = useI18n()
@@ -72,8 +72,7 @@ async function start() {
 onMounted(async () => {
   loading.value = true
   try {
-    const idToken = await consumeGoogleRedirect()
-    if (idToken) await finish(idToken)
+    await prepareGoogleSignIn()
   } catch (cause) {
     error.value = readableError(cause)
   } finally {
