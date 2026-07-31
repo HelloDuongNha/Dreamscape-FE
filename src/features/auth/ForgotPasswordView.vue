@@ -5,46 +5,71 @@
       <div class="recovery-logo" aria-hidden="true">◈</div>
       <h1>{{ t('auth.forgotPasswordTitle') }}</h1>
       <p>{{ t('auth.forgotPasswordSub') }}</p>
-      <form class="recovery-form" @submit.prevent="submit">
-        <AppInput id="recovery-email" v-model="email" type="email" :label="t('auth.emailLabel')" :placeholder="t('auth.emailPlaceholder')" autocomplete="email" :disabled="loading" />
-        <AppButton type="submit" variant="primary" size="lg" :loading="loading" :disabled="loading || !email.trim()">
-          {{ loading ? t('auth.sendingRecoveryCode') : t('auth.sendRecoveryCode') }}
-        </AppButton>
-      </form>
+      <div class="recovery-skip-status">
+        <strong>{{ t('auth.otpSkipStatus') }}</strong>
+        <span>{{ t('auth.googleVerificationRequired') }}</span>
+      </div>
+      <div v-if="errorKey" class="recovery-error" role="alert">{{ t(errorKey) }}</div>
+      <div class="recovery-form">
+        <AppInput id="recovery-new-password" v-model="password" type="password" :label="t('auth.newPasswordLabel')" autocomplete="new-password" :disabled="loading" />
+        <AppInput id="recovery-confirm-password" v-model="confirmation" type="password" :label="t('auth.confirmPasswordLabel')" autocomplete="new-password" :disabled="loading" />
+        <GoogleAuthButton
+          manual
+          :show-divider="false"
+          :disabled="loading || !canSubmit"
+          @verified="resetWithGoogle"
+        />
+      </div>
       <RouterLink to="/login" class="recovery-link">{{ t('auth.backToSignIn') }}</RouterLink>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import apiClient from '@/api/client'
-import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
 import AuthLocaleSwitch from '@/components/common/AuthLocaleSwitch.vue'
+import GoogleAuthButton from './GoogleAuthButton.vue'
 import { useSettingsStore } from '@/store/useSettingsStore'
-import { otpErrorKey } from './otpPresentation'
 
 const { t } = useI18n()
 const router = useRouter()
 const settings = useSettingsStore()
-const email = ref('')
+const password = ref('')
+const confirmation = ref('')
 const loading = ref(false)
+const errorKey = ref('')
+const canSubmit = computed(() => (
+  password.value.length >= 8
+  && password.value === confirmation.value
+))
 
-async function submit() {
-  if (loading.value || !email.value.trim()) return
+async function resetWithGoogle(idToken: string) {
+  if (loading.value || !canSubmit.value) return
+  if (!/[a-z]/u.test(password.value) || !/[A-Z]/u.test(password.value) || !/\d/u.test(password.value)) {
+    errorKey.value = 'errors.passwordComplexity'
+    return
+  }
   loading.value = true
+  errorKey.value = ''
   try {
-    const { data } = await apiClient.post('/auth/forgot-password', { email: email.value.trim() })
-    settings.showToastKey('toasts.recoveryCodeSent', undefined, 'success')
-    router.push({ path: '/verify-otp', query: { email: email.value.trim(), purpose: 'forgot_password', resendAvailableAt: data.resendAvailableAt } })
-  } catch (error: any) {
-    const errorKey = error.response?.data?.code
-      ? otpErrorKey(error.response.data.code)
-      : 'errors.networkError'
-    settings.showToastKey(errorKey, undefined, 'error')
+    await apiClient.post('/auth/password/google-reset', {
+      idToken,
+      newPassword: password.value,
+      confirmPassword: confirmation.value,
+    })
+    settings.showToastKey('toasts.passwordUpdatedSuccess', undefined, 'success')
+    await router.replace('/login')
+  } catch (error: unknown) {
+    const code = (error as { response?: { data?: { code?: string } } }).response?.data?.code
+    errorKey.value = code === 'password_reused'
+      ? 'errors.passwordReused'
+      : code === 'password_complexity_invalid'
+        ? 'errors.passwordComplexity'
+        : 'errors.googlePasswordRecoveryFailed'
   } finally {
     loading.value = false
   }

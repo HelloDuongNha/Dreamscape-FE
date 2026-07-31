@@ -1,6 +1,6 @@
 <template>
   <div class="google-auth">
-    <div class="google-auth__divider" aria-hidden="true">
+    <div v-if="showDivider" class="google-auth__divider" aria-hidden="true">
       <span />
       <span>{{ t('auth.orContinueWith') }}</span>
       <span />
@@ -8,7 +8,7 @@
     <button
       class="google-auth__button"
       type="button"
-      :disabled="loading"
+      :disabled="loading || disabled"
       :aria-label="t('auth.continueWithGoogle')"
       @click="start"
     >
@@ -42,11 +42,18 @@ import { resolveAuthRedirect } from './authRedirect'
 const { t } = useI18n()
 const props = withDefaults(defineProps<{
   consentGranted?: boolean
+  disabled?: boolean
+  manual?: boolean
+  showDivider?: boolean
 }>(), {
   consentGranted: true,
+  disabled: false,
+  manual: false,
+  showDivider: true,
 })
 const emit = defineEmits<{
   'consent-required': []
+  verified: [idToken: string]
 }>()
 const route = useRoute()
 const router = useRouter()
@@ -67,6 +74,7 @@ async function complete() {
 }
 
 async function start() {
+  if (props.disabled) return
   if (!props.consentGranted) {
     emit('consent-required')
     return
@@ -75,7 +83,12 @@ async function start() {
   error.value = ''
   try {
     const idToken = await beginGoogleSignIn()
-    if (idToken) await finish(idToken)
+    if (!idToken) return
+    if (props.manual) {
+      emit('verified', idToken)
+      return
+    }
+    await finish(idToken)
   } catch (cause) {
     error.value = readableError(cause)
   } finally {

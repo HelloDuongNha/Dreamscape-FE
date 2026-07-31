@@ -15,10 +15,25 @@
 
         <form class="google-onboarding__form" @submit.prevent="submit">
           <AppInput v-model="displayName" :label="t('auth.displayNameLabel')" autocomplete="name" :disabled="loading" required />
-          <AppInput v-model="username" :label="t('auth.usernameLabel')" autocomplete="username" :disabled="loading" required />
+          <AppInput
+            :model-value="username"
+            :label="t('auth.usernameLabel')"
+            prefix-icon="@"
+            autocomplete="username"
+            :disabled="loading"
+            required
+            @update:model-value="setUsername"
+          />
           <AppInput :model-value="profile.email" :label="t('auth.emailLabel')" type="email" readonly />
           <AppInput v-model="password" :label="t('auth.newPasswordLabel')" type="password" autocomplete="new-password" :hint="t('auth.passwordMinLength')" :disabled="loading" required />
           <AppInput v-model="confirmation" :label="t('auth.confirmPasswordLabel')" type="password" autocomplete="new-password" :disabled="loading" required />
+          <AuthDataConsent
+            id="google-onboarding-data-consent"
+            v-model="dataConsent"
+            :invalid="consentInvalid"
+            :disabled="loading"
+            @update:model-value="consentInvalid = false"
+          />
           <p v-if="error" class="google-onboarding__error" role="alert">{{ error }}</p>
           <AppButton type="submit" variant="primary" size="lg" :disabled="loading || !canSubmit">
             {{ loading ? t('auth.completingGoogleAccount') : t('auth.completeGoogleAccount') }}
@@ -34,6 +49,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/common/AppButton.vue'
 import AppInput from '@/components/common/AppInput.vue'
+import AuthDataConsent from './AuthDataConsent.vue'
 import { useAuthStore, type GoogleOnboardingState } from '@/store/useAuthStore'
 
 const props = defineProps<{ onboarding: GoogleOnboardingState }>()
@@ -46,6 +62,8 @@ const displayName = ref(profile.display_name)
 const username = ref(profile.username)
 const password = ref('')
 const confirmation = ref('')
+const dataConsent = ref(false)
+const consentInvalid = ref(false)
 const loading = ref(false)
 const error = ref('')
 const canSubmit = computed(() => (
@@ -53,10 +71,20 @@ const canSubmit = computed(() => (
   && username.value.replace(/^@+/u, '').trim().length >= 2
   && password.value.length >= 8
   && password.value === confirmation.value
+  && dataConsent.value
 ))
+
+// Keeps the visual @ prefix out of the canonical username stored by the API.
+function setUsername(value: string): void {
+  username.value = value.replace(/^@+/u, '')
+}
 
 async function submit() {
   error.value = ''
+  if (!dataConsent.value) {
+    consentInvalid.value = true
+    return
+  }
   if (!/[a-z]/u.test(password.value) || !/[A-Z]/u.test(password.value) || !/\d/u.test(password.value)) {
     error.value = t('errors.passwordComplexity')
     return

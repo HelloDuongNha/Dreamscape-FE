@@ -36,6 +36,7 @@ export default {
   recoverySessionMissing: 'Phiên khôi phục đã mất hoặc hết hạn. Vui lòng bắt đầu lại.',
   currentPasswordInvalid: 'Mật khẩu hiện tại không đúng.',
   passwordProviderConflict: 'Tài khoản này dùng đăng nhập Google và không có mật khẩu để thay đổi.',
+  googlePasswordRecoveryFailed: 'Google không thể xác minh tài khoản này. Vui lòng chọn đúng tài khoản Google đã đăng ký.',
   emailAlreadyUsed: 'Địa chỉ email này đã được sử dụng.',
   usernameInvalid: 'Tên người dùng chỉ được chứa chữ cái, chữ số và dấu gạch dưới.',
   usernameLength: 'Tên người dùng phải từ 2 đến 29 ký tự.',

@@ -5,6 +5,14 @@ import { useDreamStore }  from '@/store/useDreamStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
 import type { ApiComment, CommentListResponse, ApiDream } from '@/api/types'
 
+interface DeleteCommentResponse {
+  success: boolean
+  data?: {
+    deletedCommentIds?: string[]
+  }
+  deletedCommentIds?: string[]
+}
+
 export const usePostStore = defineStore('post', () => {
 
   // ── Focused post id ──────────────────────────────────────────────
@@ -143,11 +151,8 @@ export const usePostStore = defineStore('post', () => {
 
   async function deleteComment(commentId: string): Promise<void> {
     const focusedDreamId = focusedId.value
-    const { data } = await apiClient.delete<{
-      success: boolean
-      data: { deletedCommentIds?: string[] }
-    }>(`/comments/${commentId}`)
-    const deletedIds = new Set(data.data.deletedCommentIds || [commentId])
+    const { data } = await apiClient.delete<DeleteCommentResponse>(`/comments/${commentId}`)
+    const deletedIds = resolveDeletedCommentIds(data, commentId)
     focusedComments.value = focusedComments.value.filter(
       comment => !deletedIds.has(comment._id),
     )
@@ -202,3 +207,15 @@ export const usePostStore = defineStore('post', () => {
     setCommentsEnabled,
   }
 })
+
+// Normalize both the current cascade response and the earlier single-delete contract.
+function resolveDeletedCommentIds(
+  response: DeleteCommentResponse,
+  requestedCommentId: string,
+): Set<string> {
+  const returnedIds = response.data?.deletedCommentIds ?? response.deletedCommentIds
+  const validIds = Array.isArray(returnedIds)
+    ? returnedIds.filter(id => typeof id === 'string' && id.length > 0)
+    : []
+  return new Set(validIds.length > 0 ? validIds : [requestedCommentId])
+}

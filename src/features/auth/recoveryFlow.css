@@ -19,3 +19,15 @@
 .recovery-form { display: flex; flex-direction: column; gap: var(--space-4); }
 .recovery-link { color: var(--color-text-primary); text-align: center; }
 .recovery-error { padding: var(--space-3); border: 1px solid #3d1515; border-radius: var(--radius-md); background: #2d1010; color: #ed4956; }
+.recovery-skip-status {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid #264535;
+  border-radius: var(--radius-md);
+  background: #13271d;
+  color: #8ee0ad;
+  text-align: center;
+  font-size: var(--font-size-sm);
+}
+.recovery-skip-status span { color: var(--color-text-muted); }

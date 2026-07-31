@@ -36,6 +36,7 @@ export default {
   recoverySessionMissing: 'Your recovery session is missing or expired. Start again.',
   currentPasswordInvalid: 'Current password is incorrect.',
   passwordProviderConflict: 'This account uses Google sign-in and does not have a password to change.',
+  googlePasswordRecoveryFailed: 'Google could not verify this account. Choose the Google account used to register.',
   emailAlreadyUsed: 'This email address is already in use.',
   usernameInvalid: 'Username can only contain letters, numbers, and underscores.',
   usernameLength: 'Username must be between 2 and 29 characters.',
