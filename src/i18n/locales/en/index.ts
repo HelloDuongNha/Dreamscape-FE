@@ -11,6 +11,7 @@ import library from './library.js'
 import rules from './rules.js'
 import oracle from './oracle.js'
 import messages from './messages.js'
+import achievements from './achievements.js'
 
 export default {
   common,
@@ -26,4 +27,5 @@ export default {
   rules,
   oracle,
   messages,
+  achievements,
 }

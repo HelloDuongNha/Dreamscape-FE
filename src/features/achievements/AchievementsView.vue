@@ -71,45 +71,45 @@
     <!-- Left Column (3/5 width) -->
     <div class="calendar-left">
       <div class="calendar-left__header">
-        <h1 class="calendar-left__title">Calendar</h1>
-        <p class="calendar-left__subtitle">Your dream check-in history</p>
+        <h1 class="calendar-left__title">{{ t('achievements.calendar.title') }}</h1>
+        <p class="calendar-left__subtitle">{{ t('achievements.calendar.subtitle') }}</p>
       </div>
 
       <!-- Stats Row (Day Streak, Total Check-ins, Time Online Today) -->
       <div class="stats-row">
         <div class="stat-card">
           <span class="stat-card__value">{{ streakCount }}</span>
-          <span class="stat-card__label">Day Streak</span>
+          <span class="stat-card__label">{{ t('achievements.calendar.dayStreak') }}</span>
         </div>
         <div class="stat-card">
           <span class="stat-card__value">{{ loginHistory.length }}</span>
-          <span class="stat-card__label">Total Check-ins</span>
+          <span class="stat-card__label">{{ t('achievements.calendar.totalCheckIns') }}</span>
         </div>
         <div class="stat-card">
-          <span class="stat-card__value">{{ timeOnlineToday }}m</span>
-          <span class="stat-card__label">Time Online Today</span>
+          <span class="stat-card__value">{{ t('achievements.minutesShort', { count: timeOnlineToday }) }}</span>
+          <span class="stat-card__label">{{ t('achievements.calendar.timeOnlineToday') }}</span>
         </div>
       </div>
 
       <!-- Health Warning Text Footer -->
       <p class="health-warning-text">
-        Khuyến nghị: Không sử dụng quá 180 phút mỗi ngày để bảo vệ sức khỏe tâm thần.
+        {{ t('achievements.calendar.healthWarning') }}
       </p>
 
       <!-- Month Navigator -->
       <div class="month-nav">
-        <button id="prev-month-btn" class="month-nav__btn" aria-label="Previous month" @click="shiftMonth(-1)">
+        <button id="prev-month-btn" class="month-nav__btn" :aria-label="t('achievements.calendar.previousMonth')" @click="shiftMonth(-1)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
         <span class="month-nav__label">{{ monthLabel }}</span>
-        <button id="next-month-btn" class="month-nav__btn" aria-label="Next month" @click="shiftMonth(1)">
+        <button id="next-month-btn" class="month-nav__btn" :aria-label="t('achievements.calendar.nextMonth')" @click="shiftMonth(1)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
       </div>
 
       <!-- Calendar Grid -->
       <div class="calendar-grid-wrapper">
-        <div class="calendar-grid" role="grid" :aria-label="`Calendar for ${monthLabel}`">
+        <div class="calendar-grid" role="grid" :aria-label="t('achievements.calendar.calendarFor', { month: monthLabel })">
           <!-- Weekday headers -->
           <div
             v-for="day in WEEKDAYS"
@@ -137,7 +137,7 @@
             :isToday="isToday(day)"
             :isCheckedIn="isCheckedIn(day)"
             :isFuture="isFuture(day)"
-            :ariaLabel="`${day} ${monthLabel}${isCheckedIn(day) ? ' — checked in' : ''}`"
+            :ariaLabel="`${day} ${monthLabel}${isCheckedIn(day) ? ` - ${t('achievements.calendar.checkedIn')}` : ''}`"
           />
 
           <!-- Empty cells after month end to fill up to 42 cells (6 rows * 7 days) -->
@@ -156,13 +156,13 @@
       <div class="rank-container">
         <div class="rank-container__header">
           <div class="rank-title-wrapper">
-            <span class="rank-container__title">Rank Progression</span>
+            <span class="rank-container__title">{{ t('achievements.rank.title') }}</span>
             <button
               ref="rankRulesBtnRef"
               type="button"
               class="info-question-btn"
               @click.stop="toggleRankRules"
-              aria-label="Xem Quy tắc Xếp hạng"
+              :aria-label="t('achievements.rank.rulesAria')"
             >
               ?
             </button>
@@ -170,19 +170,20 @@
             <!-- Floating Popover Dialog -->
             <div v-if="showRankRules" ref="popoverRef" class="rank-rules-popover" @click.stop>
               <div class="rank-rules-popover__header">
-                <span>Quy tắc Xếp hạng</span>
+                <span>{{ t('achievements.rank.rulesTitle') }}</span>
               </div>
               <div class="rank-rules-popover__content">
-                <p class="rules-section-title">Ngưỡng Xếp hạng:</p>
+                <p class="rules-section-title">{{ t('achievements.rank.thresholds') }}</p>
                 <ul class="rules-list">
-                  <li v-for="tier in RANK_TIERS" :key="tier.title" :style="{ color: tier.color || '#fff' }">
-                    <strong>{{ tier.title }}</strong>: {{ tier.minPoints === 15001 ? '15001+' : (tier.minPoints + '+') }} pts
+                  <li v-for="tier in RANK_TIERS" :key="tier.id" :style="{ color: tier.color || '#fff' }">
+                    <strong>{{ t(`achievements.rank.tiers.${tier.id}`) }}</strong>:
+                    {{ t('achievements.pointsShort', { count: tier.minPoints === 15001 ? '15001+' : `${tier.minPoints}+` }) }}
                   </li>
                 </ul>
-                <p class="rules-section-title mt-8">Quy tắc tích điểm:</p>
+                <p class="rules-section-title mt-8">{{ t('achievements.rank.earningRules') }}</p>
                 <p class="rules-text">
-                  • Nhận +10 pts đăng nhập hàng ngày + lợi tức chuỗi tối đa +5 pts.<br>
-                  • Hoàn thành milestones (+20 pts mỗi mốc).
+                  • {{ t('achievements.rank.dailyLoginRule') }}<br>
+                  • {{ t('achievements.rank.milestoneRule') }}
                 </p>
               </div>
             </div>
@@ -195,7 +196,7 @@
 
         <!-- Rank Names Row -->
         <div class="rank-names-row">
-          <span class="rank-name--current">{{ currentRank }}</span>
+          <span class="rank-name--current">{{ currentRankLabel }}</span>
           <span class="rank-name--next" v-if="nextRankName">{{ nextRankName }}</span>
         </div>
       </div>
@@ -203,14 +204,14 @@
       <!-- Achievements & Milestones Container -->
       <div class="achievements-container">
         <div class="achievements-container__header">
-          <span class="achievements-container__title">Milestones & Achievements</span>
-          <span class="achievements-container__subtitle">Accumulate metrics to earn bonuses</span>
+          <span class="achievements-container__title">{{ t('achievements.milestones.title') }}</span>
+          <span class="achievements-container__subtitle">{{ t('achievements.milestones.subtitle') }}</span>
         </div>
 
         <div class="achievements-list">
           <div
             v-for="item in achievements"
-            :key="item.title"
+            :key="item.id"
             class="achievement-row"
           >
             <div class="achievement-row__header">
@@ -219,8 +220,8 @@
                 <span class="achievement-row__subtitle">{{ item.description }}</span>
               </div>
               <div class="achievement-row__status">
-                <span class="achievement-row__reward" v-if="!item.isCompleted">+{{ item.rewardPoints }} pts</span>
-                <span class="achievement-row__reward" v-else>[Đã hoàn thành]</span>
+                <span class="achievement-row__reward" v-if="!item.isCompleted">+{{ t('achievements.pointsShort', { count: item.rewardPoints }) }}</span>
+                <span class="achievement-row__reward" v-else>[{{ t('achievements.milestones.completed') }}]</span>
                 <span class="achievement-row__ratio">{{ item.trackerText }}</span>
               </div>
             </div>
@@ -234,6 +235,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/store/useAuthStore'
 import apiClient from '@/api/client'
 import AppProgressBar from '@/components/common/AppProgressBar.vue'
@@ -242,17 +244,18 @@ import AppSkeleton from '@/components/common/AppSkeleton.vue'
 
 // ── Rank tiers (mirror of BE/src/utils/rankEngine.ts) ──────────────────────
 const RANK_TIERS = [
-  { minPoints: 0,     title: 'Nhà Mơ Mộng Mới',       color: '#B45309' },
-  { minPoints: 101,   title: 'Người Bắt Đầu Mơ',      color: '#94A3B8' },
-  { minPoints: 501,   title: 'Bậc Thầy Giải Mã',      color: '#F59E0B' },
-  { minPoints: 2001,  title: 'Kẻ Thao Túng Giấc Mơ',   color: '#06B6D4' },
-  { minPoints: 5001,  title: 'Độc Hành Tinh Không',    color: '#A855F7' },
-  { minPoints: 15001, title: 'Đấng Sáng Tạo Thực Tại', color: '#EF4444' },
+  { id: 'newDreamer', minPoints: 0, backendTitle: 'Nhà Mơ Mộng Mới', color: '#B45309' },
+  { id: 'dreamBeginner', minPoints: 101, backendTitle: 'Người Bắt Đầu Mơ', color: '#94A3B8' },
+  { id: 'interpretationMaster', minPoints: 501, backendTitle: 'Bậc Thầy Giải Mã', color: '#F59E0B' },
+  { id: 'dreamManipulator', minPoints: 2001, backendTitle: 'Kẻ Thao Túng Giấc Mơ', color: '#06B6D4' },
+  { id: 'cosmicWanderer', minPoints: 5001, backendTitle: 'Độc Hành Tinh Không', color: '#A855F7' },
+  { id: 'realityCreator', minPoints: 15001, backendTitle: 'Đấng Sáng Tạo Thực Tại', color: '#EF4444' },
 ]
 
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
+const { t, locale } = useI18n()
 const authStore = useAuthStore()
+const WEEKDAYS = computed(() => ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+  .map(day => t(`achievements.calendar.weekdays.${day}`)))
 
 // ── State ─────────────────────────────────────────────────────────────────
 const loginHistory = ref<string[]>(authStore.user?.loginHistory ?? [])
@@ -296,11 +299,16 @@ function handleOutsideClick(e: MouseEvent) {
 }
 
 const nextRankName = computed(() => {
-  const currentIdx = RANK_TIERS.findIndex(t => t.title === currentRank.value)
+  const currentIdx = RANK_TIERS.findIndex(tier => tier.backendTitle === currentRank.value)
   if (currentIdx !== -1 && currentIdx < RANK_TIERS.length - 1) {
-    return RANK_TIERS[currentIdx + 1].title
+    return t(`achievements.rank.tiers.${RANK_TIERS[currentIdx + 1].id}`)
   }
   return null
+})
+
+const currentRankLabel = computed(() => {
+  const tier = RANK_TIERS.find(item => item.backendTitle === currentRank.value)
+  return tier ? t(`achievements.rank.tiers.${tier.id}`) : currentRank.value
 })
 
 // ── Overhauled 7 achievements calculation ──────────────────────────────────────────
@@ -480,8 +488,9 @@ const achievements = computed(() => {
 
   return [
     {
-      title: 'Tổng lượt thích nhận được',
-      description: 'Tổng số lượt thả tim tích lũy trên tất cả bài chia sẻ giấc mơ của bạn',
+      id: 'likes',
+      title: t('achievements.milestones.items.likes.title'),
+      description: t('achievements.milestones.items.likes.description'),
       value: likesVal,
       target: likesTarget,
       isCompleted: likesIsCompleted,
@@ -490,8 +499,9 @@ const achievements = computed(() => {
       rewardPoints: 20
     },
     {
-      title: 'Tổng bình luận nhận được',
-      description: 'Tổng số lượt phản hồi từ các thành viên khác trên các bài đăng của bạn',
+      id: 'comments',
+      title: t('achievements.milestones.items.comments.title'),
+      description: t('achievements.milestones.items.comments.description'),
       value: commentsVal,
       target: commentsTarget,
       isCompleted: commentsIsCompleted,
@@ -500,8 +510,9 @@ const achievements = computed(() => {
       rewardPoints: 20
     },
     {
-      title: 'Tần suất ghi chép giấc mơ',
-      description: 'Tổng số bài viết chia sẻ giấc mơ cá nhân đã đăng tải lên mạng xã hội',
+      id: 'posts',
+      title: t('achievements.milestones.items.posts.title'),
+      description: t('achievements.milestones.items.posts.description'),
       value: postsVal,
       target: postsTarget,
       isCompleted: postsIsCompleted,
@@ -510,8 +521,9 @@ const achievements = computed(() => {
       rewardPoints: 20
     },
     {
-      title: 'Số lượng người theo dõi',
-      description: 'Tổng số thành viên khác đang ấn theo dõi hồ sơ của bạn',
+      id: 'followers',
+      title: t('achievements.milestones.items.followers.title'),
+      description: t('achievements.milestones.items.followers.description'),
       value: followersVal,
       target: followersTarget,
       isCompleted: followersIsCompleted,
@@ -520,8 +532,9 @@ const achievements = computed(() => {
       rewardPoints: 20
     },
     {
-      title: 'Số lượng người đang theo dõi',
-      description: 'Tổng số thành viên khác mà bạn đang chủ động nhấn theo dõi',
+      id: 'following',
+      title: t('achievements.milestones.items.following.title'),
+      description: t('achievements.milestones.items.following.description'),
       value: followingVal,
       target: followingTarget,
       isCompleted: followingIsCompleted,
@@ -530,28 +543,31 @@ const achievements = computed(() => {
       rewardPoints: 20
     },
     {
-      title: 'Tổng thời gian đồng hành',
-      description: 'Tổng số giờ tích lũy bạn hoạt động trực tuyến trên hệ thống',
+      id: 'onlineTime',
+      title: t('achievements.milestones.items.onlineTime.title'),
+      description: t('achievements.milestones.items.onlineTime.description'),
       value: totalHoursVal,
       target: hoursTarget,
       isCompleted: hoursIsCompleted,
       color: getMilestoneColor(hoursTarget, true),
-      trackerText: `${totalHoursVal} / ${hoursTarget} hours`,
+      trackerText: t('achievements.hoursTracker', { current: totalHoursVal, target: hoursTarget }),
       rewardPoints: 20
     },
     {
-      title: 'Kỷ nguyên gắn kết',
-      description: 'Tổng số ngày đăng nhập liên tục dựa trên múi giờ hệ thống server',
+      id: 'streak',
+      title: t('achievements.milestones.items.streak.title'),
+      description: t('achievements.milestones.items.streak.description'),
       value: streakVal,
       target: streakTarget,
       isCompleted: streakIsCompleted,
       color: getStreakMilestoneColor(streakTarget),
-      trackerText: `${streakVal} / ${streakTarget} days`,
+      trackerText: t('achievements.daysTracker', { current: streakVal, target: streakTarget }),
       rewardPoints: streakPoints
     },
     {
-      title: 'Đóng góp tài liệu học thuật',
-      description: 'Tổng số tài liệu hoặc nguồn học thuật của bạn đã được duyệt vào thư viện DreamScape',
+      id: 'contributions',
+      title: t('achievements.milestones.items.contributions.title'),
+      description: t('achievements.milestones.items.contributions.description'),
       value: contributionVal,
       target: contributionTarget,
       isCompleted: contributionIsCompleted,
@@ -573,7 +589,7 @@ const nextTierPoints = computed(() => {
 })
 
 const activeRankColor = computed(() => {
-  const tier = RANK_TIERS.find(t => t.title === currentRank.value)
+  const tier = RANK_TIERS.find(t => t.backendTitle === currentRank.value)
   return tier ? tier.color : '#B45309'
 })
 
@@ -667,7 +683,7 @@ onUnmounted(() => {
 // ── Computed: month metadata ───────────────────────────────────────────────
 const monthLabel = computed(() => {
   return new Date(viewYear.value, viewMonth.value, 1)
-    .toLocaleString('default', { month: 'long', year: 'numeric' })
+    .toLocaleString(locale.value === 'en' ? 'en-US' : 'vi-VN', { month: 'long', year: 'numeric' })
 })
 
 const daysInMonth = computed(() => {
