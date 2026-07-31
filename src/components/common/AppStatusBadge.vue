@@ -6,6 +6,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = withDefaults(defineProps<{
   status: string
@@ -19,6 +20,8 @@ const props = withDefaults(defineProps<{
   sourceType: 'unspecified',
   fullTextSourceType: ''
 })
+
+const { t } = useI18n({ useScope: 'global' })
 
 const badgeClass = computed(() => {
   const s = (props.status || '').toLowerCase().trim()
@@ -106,94 +109,96 @@ const badgeLabel = computed(() => {
 
   if (resolvedType === 'uploaded_pdf') {
     if (props.kind === 'allowedUse') {
-      if (s === 'open_access_fulltext') return 'Có bản đọc được duyệt'
-      if (s === 'metadata_only') return 'Chỉ Metadata'
+      if (s === 'open_access_fulltext') return t('library.statusBadges.approvedReader')
+      if (s === 'metadata_only') return t('library.statusBadges.metadataOnly')
     }
     if (props.kind === 'copyright') {
       return '' // hidden
     }
     if (props.kind === 'verification') {
-      if (s === 'manual') return 'Đã duyệt thủ công'
+      if (s === 'manual') return t('library.statusBadges.manuallyApproved')
     }
     if (props.kind === 'fullTextStatus') {
-      if (s === 'available' || s === 'imported') return 'PDF đã được quản trị viên duyệt'
-      return 'Chưa có bản đọc'
+      if (s === 'available' || s === 'imported') return t('library.statusBadges.adminApprovedPdf')
+      return t('library.statusBadges.noReader')
     }
   }
 
   if (resolvedType === 'isbn') {
-    if (props.kind === 'verification') return 'Metadata sách'
-    if (props.kind === 'fullTextStatus') return 'Chưa có toàn văn'
-    if (props.kind === 'allowedUse') return 'Không có tài liệu gốc'
+    if (props.kind === 'verification') return t('library.statusBadges.bookMetadata')
+    if (props.kind === 'fullTextStatus') return t('library.statusBadges.noFullText')
+    if (props.kind === 'allowedUse') return t('library.statusBadges.noOriginal')
     if (props.kind === 'copyright') return ''
   }
 
   if (resolvedType === 'web_url') {
-    if (props.kind === 'verification') return 'Nguồn web'
+    if (props.kind === 'verification') return t('library.statusBadges.webSource')
     if (props.kind === 'allowedUse' || props.kind === 'fullTextStatus') {
-      if (props.fullTextSourceType === 'pdf' || s === 'pdf') return 'Bản đọc PDF'
-      if (props.fullTextSourceType === 'html' || s === 'html') return 'Bài viết web / HTML'
+      if (props.fullTextSourceType === 'pdf' || s === 'pdf') return t('library.statusBadges.pdfReader')
+      if (props.fullTextSourceType === 'html' || s === 'html') return t('library.statusBadges.webHtml')
       if (s === 'available' || s === 'imported') {
-        return props.fullTextSourceType === 'pdf' ? 'Bản đọc PDF' : 'Bài viết web'
+        return props.fullTextSourceType === 'pdf'
+          ? t('library.statusBadges.pdfReader')
+          : t('library.statusBadges.webArticle')
       }
-      return 'Chỉ có trích dẫn'
+      return t('library.statusBadges.citationOnly')
     }
     if (props.kind === 'copyright') return ''
   }
 
   if (props.kind === 'moderation') {
     const map: Record<string, string> = {
-      pending: 'Chờ duyệt',
-      approved: 'Đã duyệt',
-      rejected: 'Từ chối',
+      pending: 'library.statusBadges.pendingReview',
+      approved: 'library.statusBadges.approved',
+      rejected: 'library.statusBadges.rejected',
     }
-    return map[s] ?? props.status
+    return map[s] ? t(map[s]) : props.status
   }
   if (props.kind === 'verification') {
     const map: Record<string, string> = {
-      verified_doi: 'DOI Đã xác thực',
-      unverified: 'Chưa xác thực',
-      manual: 'Xác thực thủ công',
+      verified_doi: 'library.statusBadges.verifiedDoi',
+      unverified: 'library.statusBadges.unverified',
+      manual: 'library.statusBadges.manualVerification',
     }
-    return map[s] ?? props.status
+    return map[s] ? t(map[s]) : props.status
   }
   if (props.kind === 'copyright') {
     const map: Record<string, string> = {
-      public_domain: 'Public Domain',
-      copyrighted_with_open_access: 'Open Access',
-      paywalled: 'Paywalled',
+      public_domain: 'library.statusBadges.publicDomain',
+      copyrighted_with_open_access: 'library.statusBadges.openAccess',
+      paywalled: 'library.statusBadges.paywalled',
     }
-    return map[s] ?? props.status
+    return map[s] ? t(map[s]) : props.status
   }
   if (props.kind === 'allowedUse') {
     const map: Record<string, string> = {
-      metadata_only: 'Chỉ Metadata',
-      abstract_only: 'Chỉ Tóm tắt',
-      open_access_fulltext: 'Toàn văn mở',
+      metadata_only: 'library.statusBadges.metadataOnly',
+      abstract_only: 'library.statusBadges.abstractOnly',
+      open_access_fulltext: 'library.statusBadges.openFullText',
     }
-    return map[s] ?? props.status
+    return map[s] ? t(map[s]) : props.status
   }
   if (props.kind === 'fullTextStatus') {
     const map: Record<string, string> = {
-      available: 'Có bản đọc hợp pháp',
-      imported: 'Đã nhập bản đọc',
-      none: 'Chỉ có trích dẫn',
-      blocked: 'Chỉ có trích dẫn',
-      failed: 'Lỗi tải bản đọc',
+      available: 'library.statusBadges.lawfulReader',
+      imported: 'library.statusBadges.readerImported',
+      none: 'library.statusBadges.citationOnly',
+      blocked: 'library.statusBadges.citationOnly',
+      failed: 'library.statusBadges.readerLoadFailed',
     }
-    return map[s] ?? props.status
+    return map[s] ? t(map[s]) : props.status
   }
 
   const genericMap: Record<string, string> = {
-    pending: 'Pending',
-    completed: 'Completed',
-    failed: 'Failed',
-    private: 'Private',
-    public: 'Public',
-    approved: 'Đã duyệt',
-    rejected: 'Từ chối',
+    pending: 'library.statusBadges.pending',
+    completed: 'library.statusBadges.completed',
+    failed: 'library.statusBadges.failed',
+    private: 'library.statusBadges.private',
+    public: 'library.statusBadges.public',
+    approved: 'library.statusBadges.approved',
+    rejected: 'library.statusBadges.rejected',
   }
-  return genericMap[s] ?? props.status
+  return genericMap[s] ? t(genericMap[s]) : props.status
 })
 </script>
 

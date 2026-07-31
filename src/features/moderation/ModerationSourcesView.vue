@@ -582,7 +582,9 @@ async function submitReview() {
           selectedSource.value.title || t('library.local.academicDocument'),
         )
       }
-      let msg = res.message
+      let msg = reviewAction.value === 'approved'
+        ? t('library.moderation.toast.approved')
+        : t('library.moderation.toast.rejected')
       let toastType: 'success' | 'error' = 'success'
       
       if (res.warning) {
@@ -599,8 +601,6 @@ async function submitReview() {
         } else {
           msg = t('library.moderation.toast.warnGeneric')
         }
-      } else if (!msg) {
-        msg = reviewAction.value === 'approved' ? t('library.moderation.toast.approved') : t('library.moderation.toast.rejected')
       }
       
       settingsStore.showToast(msg, toastType)

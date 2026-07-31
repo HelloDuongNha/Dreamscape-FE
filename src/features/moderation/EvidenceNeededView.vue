@@ -207,7 +207,7 @@ import { getOracleEvidenceGaps, type OracleEvidenceGapItem } from '@/api/moderat
 import AppCopyButton from '@/components/common/AppCopyButton.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import { useSettingsStore } from '@/store/useSettingsStore'
-import { getApiErrorMessage, getApiErrorStatus } from '@/utils/apiError'
+import { getApiErrorStatus } from '@/utils/apiError'
 import {
   buildEvidenceResearchPrompt,
   type EvidenceResearchLanguage,
@@ -254,10 +254,8 @@ async function fetchEvidenceGaps(): Promise<void> {
       isUnauthorized.value = true
       return
     }
-    settingsStore.showToast(
-      getApiErrorMessage(error, t('library.moderation.toast.evidenceLoadError')),
-      'error',
-    )
+    console.error('Failed to load evidence needs:', error)
+    settingsStore.showToast(t('library.moderation.toast.evidenceLoadError'), 'error')
   } finally {
     isLoading.value = false
   }

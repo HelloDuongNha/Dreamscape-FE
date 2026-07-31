@@ -50,13 +50,9 @@ export const useSettingsStore = defineStore('settings', () => {
         return true
       }
       return false
-    } catch (err: any) {
-      const msg = err.response?.data?.message
-      if (msg) {
-        showToast(msg, 'error')
-      } else {
-        showToastKey('errors.logoutDeviceFailed', undefined, 'error')
-      }
+    } catch (err) {
+      console.error('Failed to log out device session:', err)
+      showToastKey('errors.logoutDeviceFailed', undefined, 'error')
       return false
     }
   }

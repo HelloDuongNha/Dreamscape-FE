@@ -264,7 +264,13 @@ export const useDreamStore = defineStore('dream', () => {
       `/dreams/${dreamId}/privacy`,
       { privacy }
     )
-    const updatedDream = updateDreamCollections(dreamId, data.data)
+    // The requested privacy is authoritative so every live view updates without a reload.
+    const synchronizedDream = {
+      ...data.data,
+      privacy,
+      is_public: privacy === 'public',
+    }
+    const updatedDream = updateDreamCollections(dreamId, synchronizedDream)
     const { useSettingsStore } = await import('@/store/useSettingsStore')
     useSettingsStore().showToastKey(
       privacy === 'public' ? 'home.madePublicSuccess' : 'home.madePrivateSuccess',

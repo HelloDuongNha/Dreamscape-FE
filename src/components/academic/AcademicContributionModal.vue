@@ -91,7 +91,6 @@ import {
 } from '@/api/sourceApi'
 import {
   getApiErrorDataString,
-  getApiErrorMessage,
   getApiErrorStatus,
 } from '@/utils/apiError'
 import { parseAcademicLookupInput, type AcademicLookupError } from '@/features/library/utils/academicContributionLookup'
@@ -211,7 +210,8 @@ async function loadPreview(
       step.value = 2
     }
   } catch (error: unknown) {
-    const message = getApiErrorMessage(error, t('library.local.noMetadata'))
+    console.error('Failed to preview academic source:', error)
+    const message = t('library.local.noMetadata')
     lookupRequestError.value = message
     settingsStore.showToast(message, 'error')
   } finally {
@@ -240,12 +240,14 @@ async function submitContribution(): Promise<void> {
     }
   } catch (error: unknown) {
     const existingSourceId = getApiErrorDataString(error, 'existingSourceId')
-    if (getApiErrorStatus(error) === 409 && existingSourceId) {
+    const isDuplicate = getApiErrorStatus(error) === 409
+    if (isDuplicate && existingSourceId) {
       duplicateSourceId.value = existingSourceId
-      duplicateSourceError.value = getApiErrorMessage(error, t('library.local.duplicate'))
+      duplicateSourceError.value = t('library.local.duplicate')
     }
+    console.error('Failed to contribute academic source:', error)
     settingsStore.showToast(
-      getApiErrorMessage(error, t('library.local.contributionError')),
+      t(isDuplicate ? 'library.local.duplicateSubmitted' : 'library.local.contributionError'),
       'error',
     )
   } finally {

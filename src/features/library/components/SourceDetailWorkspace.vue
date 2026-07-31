@@ -203,7 +203,7 @@
                   <h3>{{ t('library.reader.articleSource') }}</h3>
                   <div class="web-source-details" style="margin-block: var(--space-3); text-align: left; width: 100%; max-width: 400px; font-size: 0.9rem; display: flex; flex-direction: column; gap: 8px;">
                     <div v-if="source.title"><strong>{{ t('library.labels.title') }}</strong> <span translate="no">{{ source.title }}</span></div>
-                    <div v-if="originalDocState.sourceLabel"><strong>Trang web:</strong> {{ originalDocState.sourceLabel }}</div>
+                    <div v-if="originalDocState.sourceLabel"><strong>{{ t('library.labels.link') }}</strong> {{ originalDocState.sourceLabel }}</div>
                     <div v-if="originalDocState.sourceArticleUrl" style="word-break: break-all;"><strong>{{ t('library.reader.address') }}</strong> <a :href="originalDocState.sourceArticleUrl" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary, #60a5fa);" translate="no">{{ originalDocState.sourceArticleUrl }}</a></div>
                     <div><strong>{{ t('library.reader.readerStatus') }}</strong> {{ source.fullTextStatus === 'imported' ? t('library.reader.imported') : t('library.reader.notImported') }}</div>
                   </div>
@@ -2715,7 +2715,7 @@ async function uploadOriginalPdfFile(file: File) {
       ? await uploadModerationSourcePdf(source.value._id, file)
       : await uploadApprovedSourcePdf(source.value._id, file)
     if (res.success) {
-      settingsStore.showToast(res.message || t('library.readerLocal.uploadSuccess'), 'success')
+      settingsStore.showToast(t('library.readerLocal.uploadSuccess'), 'success')
       const incomingSource = res.source || res.data?.source || res.data?.sourceContribution
       if (incomingSource) {
         // Merge: do not wipe reader state from a partial upload response
@@ -2742,12 +2742,11 @@ async function uploadOriginalPdfFile(file: File) {
         triggerPdfIngestionFlow(false)
       }
     } else {
-      settingsStore.showToast(res.message || t('library.readerLocal.uploadError'), 'error')
+      settingsStore.showToast(t('library.readerLocal.uploadError'), 'error')
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error uploading original PDF:', err)
-    const errMsg = err.response?.data?.message || err.message || t('library.readerLocal.uploadSystemError')
-    settingsStore.showToast(errMsg, 'error')
+    settingsStore.showToast(t('library.readerLocal.uploadSystemError'), 'error')
   } finally {
     isUploadingPdf.value = false
     if (fileInputRef.value) fileInputRef.value.value = ''
@@ -2764,7 +2763,7 @@ async function handleDeleteOriginalPdf() {
       ? await deleteModerationSourceOriginalPdf(source.value._id)
       : await deleteApprovedSourceOriginalPdf(source.value._id)
     if (res.success) {
-      settingsStore.showToast(res.message || t('library.readerLocal.deleteSuccess'), 'success')
+      settingsStore.showToast(t('library.readerLocal.deleteSuccess'), 'success')
       
       // Update source data from response
       const newSource = res.source || res.data?.source || res.data?.sourceContribution
@@ -2830,12 +2829,11 @@ async function handleDeleteOriginalPdf() {
         }
       }
     } else {
-      settingsStore.showToast(res.message || t('library.readerLocal.deleteError'), 'error')
+      settingsStore.showToast(t('library.readerLocal.deleteError'), 'error')
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error deleting original PDF:', err)
-    const errMsg = err.response?.data?.message || err.message || t('library.readerLocal.deleteSystemError')
-    settingsStore.showToast(errMsg, 'error')
+    settingsStore.showToast(t('library.readerLocal.deleteSystemError'), 'error')
   } finally {
     isDeletingOriginalPdf.value = false
     showDeletePdfConfirm.value = false
@@ -2868,7 +2866,7 @@ async function downloadPdf() {
       try {
         const parsed = JSON.parse(text)
         if (parsed && parsed.success === false) {
-          settingsStore.showToast(parsed.message || t('library.readerLocal.loadPdfError'), 'error')
+          settingsStore.showToast(t('library.readerLocal.loadPdfError'), 'error')
           return
         }
       } catch {}
@@ -2911,7 +2909,7 @@ async function openPdfInNewTab() {
         try {
           const parsed = JSON.parse(text)
           if (parsed && parsed.success === false) {
-            settingsStore.showToast(parsed.message || t('library.readerLocal.loadPdfError'), 'error')
+            settingsStore.showToast(t('library.readerLocal.loadPdfError'), 'error')
             return
           }
         } catch {}
@@ -3724,9 +3722,9 @@ async function runPdfIngestion(force = false) {
       targetType,
       force
     )
-  } catch (err: any) {
+  } catch (err) {
     console.error('PDF ingestion failed:', err)
-    settingsStore.showToast(err.message || t('library.readerLocal.processPdfError'), 'error')
+    settingsStore.showToast(t('library.readerLocal.processPdfError'), 'error')
   } finally {
     isCurrentlyProcessingPdf.value = false
     await fetchSource()
@@ -3751,9 +3749,10 @@ async function handleModerationTitleUpdate() {
     source.value.title = response.data?.title || normalizedModerationTitle.value
     moderationTitleDraft.value = source.value.title
     settingsStore.showToast(t('common.titleEditor.success'), 'success')
-  } catch (err: any) {
+  } catch (err) {
+    console.error('Failed to update moderation title:', err)
     settingsStore.showToast(
-      err.response?.data?.message || err.message || t('common.titleEditor.error'),
+      t('common.titleEditor.error'),
       'error',
     )
   } finally {
@@ -3785,11 +3784,11 @@ async function handleModerationApprove() {
       }
       await router.replace(`/library/sources/${approvedSourceId}`)
     } else {
-      settingsStore.showToast(res.message || t('library.readerLocal.approveFailed'), 'error')
+      settingsStore.showToast(t('library.readerLocal.approveFailed'), 'error')
     }
-  } catch (err: any) {
-    const msg = err.response?.data?.message || err.message || t('library.readerLocal.approveError')
-    settingsStore.showToast(msg, 'error')
+  } catch (err) {
+    console.error('Error approving source:', err)
+    settingsStore.showToast(t('library.readerLocal.approveError'), 'error')
   } finally {
     isReviewing.value = false
   }
@@ -3808,11 +3807,11 @@ async function handleModerationReject() {
       settingsStore.showToast(t('library.readerLocal.rejectSuccess'), 'success')
       router.push(props.backUrl)
     } else {
-      settingsStore.showToast(res.message || t('library.readerLocal.rejectFailed'), 'error')
+      settingsStore.showToast(t('library.readerLocal.rejectFailed'), 'error')
     }
-  } catch (err: any) {
-    const msg = err.response?.data?.message || err.message || t('library.readerLocal.rejectError')
-    settingsStore.showToast(msg, 'error')
+  } catch (err) {
+    console.error('Error rejecting source:', err)
+    settingsStore.showToast(t('library.readerLocal.rejectError'), 'error')
   } finally {
     isReviewing.value = false
   }

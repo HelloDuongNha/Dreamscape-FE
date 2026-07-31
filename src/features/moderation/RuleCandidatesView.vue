@@ -433,7 +433,7 @@ import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/common/AppButton.vue'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useSettingsStore } from '@/store/useSettingsStore'
-import { getApiErrorCode, getApiErrorMessage } from '@/utils/apiError'
+import { getApiErrorCode } from '@/utils/apiError'
 import { isAdminUser } from '@/utils/adminAccess'
 import { createHighlightedExcerpt, findLiteralTextRanges } from '@/utils/highlightText'
 import {
@@ -809,7 +809,8 @@ async function confirmBulkAction() {
     bulkAction.value = null
     await fetchCandidates()
   } catch (error: unknown) {
-    settingsStore.showToast(getApiErrorMessage(error, t('rules.toasts.bulkFailed')), 'error')
+    console.error('Rule bulk action failed:', error)
+    settingsStore.showToast(t('rules.toasts.bulkFailed'), 'error')
   } finally {
     isBulkRunning.value = false
   }
@@ -919,7 +920,8 @@ async function confirmApproval() {
     )
     await fetchCandidates()
   } catch (error: unknown) {
-    settingsStore.showToast(getApiErrorMessage(error, t('rules.toasts.approveFailed')), 'error')
+    console.error('Rule approval failed:', error)
+    settingsStore.showToast(t('rules.toasts.approveFailed'), 'error')
   } finally {
     isApproving.value = false
   }
@@ -934,7 +936,8 @@ async function confirmRejection() {
     settingsStore.showToast(t('rules.toasts.rejected'), 'success')
     await fetchCandidates()
   } catch (error: unknown) {
-    settingsStore.showToast(getApiErrorMessage(error, t('rules.toasts.rejectFailed')), 'error')
+    console.error('Rule rejection failed:', error)
+    settingsStore.showToast(t('rules.toasts.rejectFailed'), 'error')
   } finally {
     isRejecting.value = false
   }

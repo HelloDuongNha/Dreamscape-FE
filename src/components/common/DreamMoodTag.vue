@@ -10,7 +10,7 @@
     @keydown.space.prevent="legendOpen = !legendOpen"
   >
     <span class="dream-mood" :style="dreamMoodCssVariables(level)">
-    <span class="dream-mood__label" translate="no">{{ displayLabel }}</span>
+    <span class="dream-mood__label">{{ displayLabel }}</span>
     </span>
     <div v-if="legendOpen" class="dream-mood__legend" role="dialog" @click.stop>
       <div class="dream-mood__legend-title">{{ t('home.moodScale.title') }}</div>
@@ -66,20 +66,9 @@ onUnmounted(() => document.removeEventListener('pointerdown', closeLegendOnOutsi
 
 const level = computed(() => resolveDreamMoodLevel(props.valence, props.toneKey))
 
-const genericLabels = new Set([
-  '',
-  'unclear',
-  'unknown',
-  'neutral',
-  'chưa xác định rõ',
-  'không rõ',
-])
-
+// Mood labels are presentation values; always derive them from the normalized level and active locale.
 const displayLabel = computed(() => {
-  const label = props.label.trim()
-  return genericLabels.has(label.toLocaleLowerCase('vi'))
-    ? t(`home.moodScale.label.${level.value}`)
-    : label
+  return t(`home.moodScale.label.${level.value}`)
 })
 
 </script>

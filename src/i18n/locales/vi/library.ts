@@ -13,6 +13,17 @@ export default {
   academicSource: 'Nguồn học thuật',
   untitled: 'Tài liệu không có tiêu đề',
   unknownAuthor: 'Chưa xác định tác giả',
+  statusBadges: {
+    approvedReader: 'Bản đọc đã duyệt', metadataOnly: 'Chỉ có metadata', manuallyApproved: 'Đã duyệt thủ công',
+    adminApprovedPdf: 'PDF đã được quản trị viên duyệt', noReader: 'Chưa có bản đọc', bookMetadata: 'Metadata sách',
+    noFullText: 'Chưa có toàn văn', noOriginal: 'Không có tài liệu gốc', webSource: 'Nguồn web',
+    pdfReader: 'Bản đọc PDF', webHtml: 'Bài viết web / HTML', webArticle: 'Bài viết web', citationOnly: 'Chỉ có trích dẫn',
+    pendingReview: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối', verifiedDoi: 'DOI đã xác thực',
+    unverified: 'Chưa xác thực', manualVerification: 'Xác thực thủ công', publicDomain: 'Phạm vi công cộng',
+    openAccess: 'Truy cập mở', paywalled: 'Yêu cầu trả phí', abstractOnly: 'Chỉ có tóm tắt', openFullText: 'Toàn văn mở',
+    lawfulReader: 'Có bản đọc hợp pháp', readerImported: 'Đã nhập bản đọc', readerLoadFailed: 'Lỗi tải bản đọc',
+    pending: 'Đang chờ', completed: 'Hoàn thành', failed: 'Thất bại', private: 'Riêng tư', public: 'Công khai',
+  },
   labels: {
     authors: 'Tác giả:', yearShort: 'Năm XB:', year: 'Năm xuất bản:', journal: 'Tạp chí / Nhà XB:',
     identifier: 'Định danh:', link: 'Liên kết:', title: 'Tiêu đề:', fileName: 'Tên tệp:', fileSize: 'Dung lượng:',

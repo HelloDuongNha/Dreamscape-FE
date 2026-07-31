@@ -214,7 +214,6 @@ import AcademicContributionModal from '@/components/academic/AcademicContributio
 import AcademicCategoryBadge from '@/components/academic/AcademicCategoryBadge.vue'
 import { resolveAcademicSourceCategory } from './utils/academicSourceCategory'
 import apiClient from '@/api/client'
-import { getApiErrorMessage } from '@/utils/apiError'
 
 const router = useRouter()
 const { t, n } = useI18n({ useScope: 'global' })
@@ -311,7 +310,8 @@ async function fetchApprovedSources() {
       || (error && typeof error === 'object' && 'code' in error && error.code === 'ERR_CANCELED')
     ) return
     hasErrorSources.value = true
-    settingsStore.showToast(getApiErrorMessage(error, t('library.local.listLoadError')), 'error')
+    console.error('Failed to load the academic library:', error)
+    settingsStore.showToast(t('library.local.listLoadError'), 'error')
   } finally {
     if (requestId === sourceListRequestId) {
       isLoadingSources.value = false
@@ -375,7 +375,8 @@ async function handleDeleteConfirm() {
       await fetchApprovedSources()
     }
   } catch (error) {
-    settingsStore.showToast(getApiErrorMessage(error, t('library.local.deleteError')), 'error')
+    console.error('Failed to delete academic source:', error)
+    settingsStore.showToast(t('library.local.deleteError'), 'error')
   } finally {
     isDeleting.value = false
   }

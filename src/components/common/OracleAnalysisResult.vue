@@ -429,7 +429,6 @@ import type {
   OracleCitationDto,
   OracleRuleScoreUpdateDto,
 } from '@/api/oracleApi'
-import { getApiErrorMessage } from '@/utils/apiError'
 import { useDreamContinuationStore } from '@/store/useDreamContinuationStore'
 import { splitOracleInlineParts } from '@/features/oracle/services/oracleInlineContent.service'
 import {
@@ -804,10 +803,8 @@ async function selectFeedback(hypothesisIdx: number, val: FeedbackChoice | null)
 
     }
   } catch (error: unknown) {
-    settingsStore.showToast(
-      getApiErrorMessage(error, t('oracle.dreamFeedbackSaveFailed')),
-      'error',
-    )
+    console.error('Failed to save dream feedback:', error)
+    settingsStore.showToast(t('oracle.dreamFeedbackSaveFailed'), 'error')
   }
 }
 
