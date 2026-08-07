@@ -36,6 +36,7 @@
               @pointermove="moveImage"
               @pointerup="finishDrag"
               @pointercancel="finishDrag"
+              @lostpointercapture="resetPointerDrag"
             >
               <img
                 ref="imageRef"
@@ -183,6 +184,11 @@ function finishDrag(event: PointerEvent): void {
   dragging.value = false
 }
 
+function resetPointerDrag(): void {
+  activePointerId = null
+  dragging.value = false
+}
+
 async function confirmCrop(): Promise<void> {
   const image = imageRef.value
   if (!image || !imageReady.value || props.loading) return
@@ -292,6 +298,15 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  if (
+    cropAreaRef.value
+    && activePointerId !== null
+    && cropAreaRef.value.hasPointerCapture(activePointerId)
+  ) {
+    cropAreaRef.value.releasePointerCapture(activePointerId)
+  }
+  activePointerId = null
+  dragging.value = false
   if (props.modelValue) previouslyFocusedElement?.focus()
 })
 </script>

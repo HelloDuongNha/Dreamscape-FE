@@ -208,7 +208,10 @@ function selectLinkInput(event: FocusEvent): void {
   ;(event.currentTarget as HTMLInputElement | null)?.select()
 }
 
-onBeforeUnmount(resetCopied)
+onBeforeUnmount(() => {
+  resetCopied()
+  shareStore.close()
+})
 </script>
 
 <style scoped>

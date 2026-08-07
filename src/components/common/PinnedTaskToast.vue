@@ -14,6 +14,7 @@
     @pointermove="moveDrag"
     @pointerup="finishDrag"
     @pointercancel="cancelDrag"
+    @lostpointercapture="clearDragState"
   >
     <div class="pinned-task-toast__panel">
       <button
@@ -80,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = withDefaults(defineProps<{
@@ -208,6 +209,23 @@ function cancelDrag(event: PointerEvent) {
   })
 }
 
+function clearDragState() {
+  if (dragFrame !== null) {
+    window.cancelAnimationFrame(dragFrame)
+    dragFrame = null
+  }
+  if (
+    root.value
+    && dragPointerId !== null
+    && root.value.hasPointerCapture(dragPointerId)
+  ) {
+    root.value.releasePointerCapture(dragPointerId)
+  }
+  dragging.value = false
+  dragPointerId = null
+  dragStartedOnHandle = false
+}
+
 watch(
   () => props.terminal,
   (terminal, previous) => {
@@ -217,6 +235,8 @@ watch(
     }
   },
 )
+
+onBeforeUnmount(clearDragState)
 </script>
 
 <style scoped>

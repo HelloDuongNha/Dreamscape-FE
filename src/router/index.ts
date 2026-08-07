@@ -43,8 +43,6 @@ const router = createRouter({
       component: () => import('@/features/home/PublicSharedPostView.vue'),
       meta: {
         titleKey: 'navigation.titleSharedPost',
-        public: true,
-        allowAuthenticated: true,
       },
     },
 
@@ -166,7 +164,7 @@ router.beforeEach((to) => {
 
   // Not logged in → redirect to login
   if (!to.meta.public && !auth.isLoggedIn) {
-    return { name: 'login' }
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
 
   if (to.meta.adminOnly && auth.user?.role !== 'admin') {

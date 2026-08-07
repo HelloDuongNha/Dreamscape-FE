@@ -1267,6 +1267,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('focus', refreshOpenDream)
   document.removeEventListener('visibilitychange', refreshVisibleDream)
+  document.body.style.overflow = ''
+  postStore.closePost()
 })
 </script>
 
